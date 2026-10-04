@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '2.0.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -64,14 +64,14 @@ const categoryOrder = ['Bücher', 'Apps', 'Privat', 'Sonstiges'];
 
 // Himmel (Kopfbereich + Sperrbildschirm)
 const SKY = {
-  nacht:           { top: '#10152E', mid: '#1B2347', hor: '#2A3160', stars: 1,    moonLit: '#F4EBD3', moonDark: [30, 36, 70, .85],    glow: [241, 228, 195, .22] , earth: 0.1, glowMul: 1 },
-  daemmerung:      { top: '#1E2452', mid: '#4A4580', hor: '#E9A58C', stars: .45,  moonLit: '#F6EAD0', moonDark: [60, 58, 110, .55],   glow: [246, 214, 200, .22] , earth: 0.08, glowMul: 0.8 },
-  morgen:          { top: '#86AFDB', mid: '#C4DAEE', hor: '#FADFC4', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.45 },
-  vormittag:       { top: '#6FA6DE', mid: '#AFD2F0', hor: '#EAF3F8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.4 },
-  mittag:          { top: '#5E9FE2', mid: '#A9D4F4', hor: '#FFF4D8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.4 },
-  nachmittag:      { top: '#8DB4DD', mid: '#DCD5C6', hor: '#F6D49E', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .14], glow: [255, 246, 225, .35] , earth: 0, glowMul: 0.45 },
-  abenddaemmerung: { top: '#33357A', mid: '#7A5788', hor: '#F2A178', stars: .3,   moonLit: '#FBEBD3', moonDark: [70, 58, 110, .55],   glow: [250, 215, 190, .25] , earth: 0.08, glowMul: 0.8 },
-  abend:           { top: '#171A42', mid: '#2A2959', hor: '#4B3A6E', stars: .8,   moonLit: '#F1E4C3', moonDark: [46, 46, 92, .85],    glow: [236, 222, 200, .22] , earth: 0.09, glowMul: 1 }
+  nacht:           { top: '#10152E', mid: '#1B2347', hor: '#2A3160', stars: 1,    moonLit: '#F4EBD3', moonDark: [30, 36, 70, .85],    glow: [241, 228, 195, .22] , earth: 0.1, glowMul: 1 , wash: 0 },
+  daemmerung:      { top: '#1E2452', mid: '#4A4580', hor: '#E9A58C', stars: .45,  moonLit: '#F6EAD0', moonDark: [60, 58, 110, .55],   glow: [246, 214, 200, .22] , earth: 0.08, glowMul: 0.8 , wash: 0.1 },
+  morgen:          { top: '#86AFDB', mid: '#C4DAEE', hor: '#FADFC4', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.45 , wash: 0.38 },
+  vormittag:       { top: '#6FA6DE', mid: '#AFD2F0', hor: '#EAF3F8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.4 , wash: 0.42 },
+  mittag:          { top: '#5E9FE2', mid: '#A9D4F4', hor: '#FFF4D8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.4 , wash: 0.42 },
+  nachmittag:      { top: '#8DB4DD', mid: '#DCD5C6', hor: '#F6D49E', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .14], glow: [255, 246, 225, .35] , earth: 0, glowMul: 0.45 , wash: 0.38 },
+  abenddaemmerung: { top: '#33357A', mid: '#7A5788', hor: '#F2A178', stars: .3,   moonLit: '#FBEBD3', moonDark: [70, 58, 110, .55],   glow: [250, 215, 190, .25] , earth: 0.08, glowMul: 0.8 , wash: 0.1 },
+  abend:           { top: '#171A42', mid: '#2A2959', hor: '#4B3A6E', stars: .8,   moonLit: '#F1E4C3', moonDark: [46, 46, 92, .85],    glow: [236, 222, 200, .22] , earth: 0.09, glowMul: 1 , wash: 0 }
 };
 
 // Fläche (Liste, Thema, Blätter). Zwischen hell und dunkel wird umgeschaltet, sonst gemischt.
@@ -193,13 +193,20 @@ function skyStateAt(date) {
 }
 
 let lastPhase = null;
-function applySky() {
+function applySky(fromWeather = false) {
   const date = nowForSky();
   const { a, b, t, phase } = skyStateAt(date);
   const A = SKY[a], B = SKY[b];
   const root = document.documentElement.style;
 
-  const top = mixHex(A.top, B.top, t), mid = mixHex(A.mid, B.mid, t), hor = mixHex(A.hor, B.hor, t);
+  let top = mixHex(A.top, B.top, t), mid = mixHex(A.mid, B.mid, t), hor = mixHex(A.hor, B.hor, t);
+  // Wetter: Wolken, Regen und Nebel machen den Himmel grauer
+  const wfx = currentFx();
+  const grey = Math.min(.75, wfx.clouds * .45 + wfx.fog * .45 + wfx.rain * .25 + wfx.snow * .25);
+  if (grey > 0.02) {
+    top = desaturate(top, grey); mid = desaturate(mid, grey); hor = desaturate(hor, grey * 1.1);
+    if (wfx.rain > .5 || wfx.storm) { top = mixHex(top, '#2A2F3C', .25); mid = mixHex(mid, '#3A4050', .2); }
+  }
   root.setProperty('--sky-top', top);
   root.setProperty('--sky-mid', mid);
   root.setProperty('--sky-hor', hor);
@@ -208,6 +215,7 @@ function applySky() {
   root.setProperty('--moon-lit-2', mixHex(mixHex(A.moonLit, B.moonLit, t), '#FFFFFF', .55));
   root.setProperty('--moon-dark', rgba(mixArr(A.moonDark, B.moonDark, t)));
   root.setProperty('--moon-glow', rgba(mixArr(A.glow, B.glow, t)));
+  root.setProperty('--moon-wash', (A.wash + (B.wash - A.wash) * t).toFixed(3));
   root.setProperty('--earthshine', (A.earth + (B.earth - A.earth) * t).toFixed(3));
   root.setProperty('--glow-mul', (A.glowMul + (B.glowMul - A.glowMul) * t).toFixed(3));
   root.setProperty('--moon-maria', mixHex(mixHex(A.moonLit, B.moonLit, t), '#7A7468', .45));
@@ -252,6 +260,7 @@ function applySky() {
   document.documentElement.dataset.mode = body.dark ? 'dark' : 'light';
   document.documentElement.dataset.phase = phase;
 
+  placeSun();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', top);
 
@@ -259,7 +268,339 @@ function applySky() {
     lastPhase = phase;
     applySky.renderedDay = date.toDateString();
     renderDailyBits(date, phase);
+    if (!fromWeather) applyWeatherFx();
   }
+}
+
+/* =====================================================================
+   Sonne und Wetter
+   ===================================================================== */
+
+const LS_PLACE = 'rm_place';
+const LS_WEATHER = 'rm_weather';
+const WEATHER_MAX_AGE = 20 * 60 * 1000;
+
+function getPlace() {
+  try { const p = JSON.parse(localStorage.getItem(LS_PLACE) || 'null'); return p && isFinite(p.lat) && isFinite(p.lon) ? p : null; } catch { return null; }
+}
+function setPlace(p) {
+  try {
+    if (p) localStorage.setItem(LS_PLACE, JSON.stringify(p)); else localStorage.removeItem(LS_PLACE);
+    localStorage.removeItem(LS_WEATHER);
+  } catch {}
+  applyPlaceGeo();
+}
+function applyPlaceGeo() {
+  const p = getPlace();
+  GEO.lat = p ? p.lat : 49.5;
+  GEO.lon = p ? p.lon : 10.5;
+}
+
+// WMO-Wettercodes → was wir zeigen
+function describeWeather(code, cloud = 0, temp = 10) {
+  const c = Number(code);
+  const fx = { label: 'Klar', clouds: Math.min(1, (cloud || 0) / 100), rain: 0, snow: 0, fog: 0, ice: 0, storm: 0 };
+  const set = (label, o) => Object.assign(fx, { label }, o);
+  if (c === 0) set('Klar', { clouds: Math.min(fx.clouds, .1) });
+  else if (c === 1) set('Überwiegend klar', { clouds: Math.max(fx.clouds, .2) });
+  else if (c === 2) set('Teilweise bewölkt', { clouds: Math.max(fx.clouds, .5) });
+  else if (c === 3) set('Bedeckt', { clouds: 1 });
+  else if (c === 45) set('Nebel', { clouds: .6, fog: 1 });
+  else if (c === 48) set('Nebel mit Raureif', { clouds: .6, fog: 1, ice: .8 });
+  else if (c === 51 || c === 53 || c === 55) set(c === 51 ? 'Leichter Nieselregen' : c === 53 ? 'Nieselregen' : 'Starker Nieselregen', { clouds: .9, rain: c === 51 ? .25 : c === 53 ? .35 : .5 });
+  else if (c === 56 || c === 57) set('Gefrierender Nieselregen', { clouds: .9, rain: .35, ice: 1 });
+  else if (c === 61 || c === 63 || c === 65) set(c === 61 ? 'Leichter Regen' : c === 63 ? 'Regen' : 'Starker Regen', { clouds: 1, rain: c === 61 ? .45 : c === 63 ? .7 : 1 });
+  else if (c === 66 || c === 67) set('Gefrierender Regen', { clouds: 1, rain: .6, ice: 1 });
+  else if (c === 71 || c === 73 || c === 75) set(c === 71 ? 'Leichter Schneefall' : c === 73 ? 'Schneefall' : 'Starker Schneefall', { clouds: 1, snow: c === 71 ? .4 : c === 73 ? .7 : 1 });
+  else if (c === 77) set('Schneegriesel', { clouds: .9, snow: .4 });
+  else if (c === 80 || c === 81 || c === 82) set(c === 80 ? 'Leichte Regenschauer' : c === 81 ? 'Regenschauer' : 'Heftige Regenschauer', { clouds: .85, rain: c === 80 ? .45 : c === 81 ? .7 : 1 });
+  else if (c === 85 || c === 86) set(c === 85 ? 'Leichte Schneeschauer' : 'Schneeschauer', { clouds: .9, snow: c === 85 ? .45 : .8 });
+  else if (c >= 95) set(c === 95 ? 'Gewitter' : 'Gewitter mit Hagel', { clouds: 1, rain: .9, storm: 1 });
+  if (isFinite(temp) && temp <= 0) fx.ice = Math.max(fx.ice, temp <= -3 ? .9 : .55);   // Frost: vereist
+  return fx;
+}
+
+// Vorschau: ?wetter=regen | schnee | eis | bewoelkt | nebel | gewitter | sonnig
+function previewWeather() {
+  const m = /[?&]wetter=([a-zäöü]+)/i.exec(location.search);
+  if (!m) return null;
+  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, regen: 63, starkregen: 65, schnee: 73, eis: 67, frost: 0, gewitter: 95 };
+  const code = map[m[1].toLowerCase()];
+  if (code === undefined) return null;
+  return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' ? -4 : 12, name: 'Vorschau' };
+}
+
+let weatherNow = null;      // { code, cloud, temp, name, fx }
+function currentFx() { return weatherNow?.fx || describeWeather(0, 0, 10); }
+
+async function refreshWeather(force = false) {
+  const prev = previewWeather();
+  if (prev) { weatherNow = { ...prev, fx: describeWeather(prev.code, prev.cloud, prev.temp) }; applyWeatherFx(); return; }
+  const place = getPlace();
+  if (!place) { weatherNow = null; applyWeatherFx(); return; }
+  try {
+    const cached = JSON.parse(localStorage.getItem(LS_WEATHER) || 'null');
+    if (cached && cached.key === `${place.lat},${place.lon}`) {
+      weatherNow = { ...cached.w, name: place.name, fx: describeWeather(cached.w.code, cached.w.cloud, cached.w.temp) };
+      applyWeatherFx();
+      if (!force && Date.now() - cached.t < WEATHER_MAX_AGE) return;
+    }
+  } catch {}
+  if (!navigator.onLine) return;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat.toFixed(3)}&longitude=${place.lon.toFixed(3)}&current=temperature_2m,weather_code,cloud_cover&timezone=auto`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    const w = { code: data.current.weather_code, cloud: data.current.cloud_cover, temp: data.current.temperature_2m };
+    localStorage.setItem(LS_WEATHER, JSON.stringify({ key: `${place.lat},${place.lon}`, t: Date.now(), w }));
+    weatherNow = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp) };
+    applyWeatherFx();
+  } catch { /* offline oder Dienst nicht erreichbar: alter Stand bleibt */ }
+}
+
+function desaturate(hex, amount) {
+  const [r, g, b] = hexToRgb(hex);
+  const y = 0.3 * r + 0.59 * g + 0.11 * b;
+  return rgbToHex([r + (y - r) * amount, g + (y - g) * amount, b + (y - b) * amount]);
+}
+
+/* ---------- Sonne auf ihrer Bahn ---------- */
+function minutesToClock(m) {
+  const h = Math.floor(m / 60), mi = Math.round(m % 60);
+  return `${String(h).padStart(2, '0')}:${String(mi === 60 ? 59 : mi).padStart(2, '0')}`;
+}
+
+function placeSun() {
+  const hero = document.querySelector('.hero');
+  const svg = $('sunPath');
+  const sun = $('sun');
+  if (!hero || !svg || !sun) return;
+  const now = nowForSky();
+  const { rise, set } = sunTimes(now);
+  $('sunriseLabel').textContent = minutesToClock(rise);
+  $('sunsetLabel').textContent = minutesToClock(set);
+
+  const W = hero.clientWidth, H = hero.clientHeight;
+  if (!W || !H) return;
+  const pad = 22, horizon = H - 46, apex = 54;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const pts = [];
+  for (let i = 0; i <= 40; i++) {
+    const f = i / 40;
+    pts.push(`${(pad + f * (W - 2 * pad)).toFixed(1)},${(horizon - (horizon - apex) * Math.sin(Math.PI * f)).toFixed(1)}`);
+  }
+  $('sunArc').setAttribute('points', pts.join(' '));
+
+  const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  const f = (minutes - rise) / (set - rise);
+  const up = f > -0.03 && f < 1.03;
+  sun.classList.toggle('hidden', !up);
+  if (!up) return;
+  const ff = Math.min(1, Math.max(0, f));
+  const x = pad + ff * (W - 2 * pad);
+  const alt = Math.sin(Math.PI * ff);                 // 0 am Horizont, 1 mittags
+  const y = horizon - (horizon - apex) * alt + (f < 0 || f > 1 ? 10 : 0);
+  sun.style.left = `${x}px`;
+  sun.style.top = `${y}px`;
+  // tief = warm und größer, hoch = weißgelb
+  sun.style.setProperty('--sun-core', mixHex('#FFB866', '#FFFBEA', Math.min(1, alt * 1.6)));
+  sun.style.setProperty('--sun-halo', mixHex('#FF9A4D', '#FFF1C2', Math.min(1, alt * 1.4)));
+  sun.style.setProperty('--sun-size', `${Math.round(150 - alt * 30)}px`);
+  const fx = currentFx();
+  sun.style.setProperty('--sun-veil', (1 - Math.min(.7, fx.clouds * .5 + fx.fog * .4 + fx.rain * .2 + fx.snow * .2)).toFixed(2));
+}
+
+/* ---------- Wetter-Effekte ---------- */
+const precipLayers = [];
+let precipAnim = null;
+let flashTimer = null;
+
+function buildClouds(box, count) {
+  if (box.childElementCount === count) return;
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    const top = 4 + (i * 37) % 70;
+    const scale = 0.7 + ((i * 53) % 60) / 100;
+    const dur = 70 + (i * 29) % 80;
+    const delay = -((i * 47) % dur);
+    html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
+  }
+  box.innerHTML = html;
+}
+
+function applyWeatherFx() {
+  const fx = currentFx();
+  const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
+  document.querySelectorAll('.weather-layer').forEach(layer => {
+    const clouds = layer.querySelector('.clouds');
+    const n = fx.clouds < .08 ? 0 : Math.round(2 + fx.clouds * 7);
+    buildClouds(clouds, n);
+    layer.style.setProperty('--cloud-op', (0.25 + fx.clouds * 0.6).toFixed(2));
+    layer.style.setProperty('--fog', fx.fog.toFixed(2));
+    layer.style.setProperty('--ice', fx.ice.toFixed(2));
+    layer.classList.toggle('night', night);
+    layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || fx.clouds > .9);
+  });
+  precipLayers.forEach(p => p.setup(fx));
+  clearTimeout(flashTimer);
+  if (fx.storm) scheduleFlash();
+  // Text unten im Himmel
+  const label = $('weatherLabel');
+  if (label) {
+    const place = getPlace();
+    if (weatherNow && place) {
+      label.textContent = `${place.name}, ${Math.round(weatherNow.temp)}°, ${weatherNow.fx.label}`;
+      label.classList.remove('link');
+    } else if (weatherNow) {
+      label.textContent = weatherNow.fx.label;
+      label.classList.remove('link');
+    } else {
+      label.textContent = 'Ort für Wetter festlegen';
+      label.classList.add('link');
+    }
+  }
+  applySky(true);
+  startPrecip();
+}
+
+function scheduleFlash() {
+  flashTimer = setTimeout(() => {
+    document.querySelectorAll('.weather-layer .flash').forEach(f => { f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); });
+    scheduleFlash();
+  }, 5000 + Math.random() * 9000);
+}
+
+function makePrecip(canvas) {
+  const ctx = canvas.getContext('2d');
+  let drops = [], kind = 'none', amount = 0;
+  const layer = {
+    canvas,
+    setup(fx) {
+      kind = fx.snow > 0 ? 'snow' : fx.rain > 0 ? 'rain' : 'none';
+      amount = kind === 'snow' ? fx.snow : fx.rain;
+      this.resize();
+      const n = kind === 'none' ? 0 : Math.round((kind === 'snow' ? 70 : 110) * amount + 10);
+      drops = Array.from({ length: n }, () => this.spawn(true));
+    },
+    resize() {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.max(1, Math.round(r.width * dpr));
+      canvas.height = Math.max(1, Math.round(r.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.w = r.width; this.h = r.height;
+    },
+    spawn(anywhere) {
+      return { x: Math.random() * (this.w || 400), y: anywhere ? Math.random() * (this.h || 300) : -10,
+        v: kind === 'snow' ? 0.4 + Math.random() * 0.8 : 7 + Math.random() * 6,
+        r: kind === 'snow' ? 1 + Math.random() * 2.4 : 10 + Math.random() * 10, p: Math.random() * 6.28 };
+    },
+    active() { return kind !== 'none' && canvas.offsetParent !== null; },
+    frame() {
+      const { w, h } = this;
+      ctx.clearRect(0, 0, w, h);
+      if (kind === 'rain') {
+        ctx.strokeStyle = 'rgba(220,230,250,.45)';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        for (const d of drops) {
+          ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.r * .25, d.y + d.r);
+          d.y += d.v; d.x -= d.v * .25;
+          if (d.y > h) Object.assign(d, this.spawn(false));
+          if (d.x < -10) d.x = w + 5;
+        }
+        ctx.stroke();
+      } else if (kind === 'snow') {
+        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        for (const d of drops) {
+          ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.283); ctx.fill();
+          d.y += d.v; d.p += 0.02; d.x += Math.sin(d.p) * 0.5;
+          if (d.y > h + 5) Object.assign(d, this.spawn(false));
+        }
+      }
+    }
+  };
+  return layer;
+}
+
+function startPrecip() {
+  if (precipAnim) return;
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const loop = () => {
+    precipAnim = null;
+    if (document.hidden) return;
+    const live = precipLayers.filter(p => p.active());
+    if (!live.length) { precipLayers.forEach(p => p.canvas.getContext('2d').clearRect(0, 0, p.canvas.width, p.canvas.height)); return; }
+    live.forEach(p => p.frame());
+    if (!reduced) precipAnim = requestAnimationFrame(loop);
+  };
+  precipAnim = requestAnimationFrame(loop);
+}
+
+function initSkyExtras() {
+  document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
+  window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); });
+  applyPlaceGeo();
+  refreshWeather();
+  setInterval(() => { if (!document.hidden) refreshWeather(); }, 10 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshWeather(); startPrecip(); placeSun(); } });
+}
+
+/* ---------- Ort einstellen ---------- */
+function openPlaceSheet() {
+  const p = getPlace();
+  $('placeCurrent').textContent = p ? `Jetzt: ${p.name}` : 'Noch kein Ort festgelegt.';
+  $('placeInput').value = '';
+  $('placeResults').innerHTML = '';
+  $('placeHint').textContent = '';
+  openSheet($('placeSheet'));
+  setTimeout(() => $('placeInput').focus(), 100);
+}
+
+async function searchPlace() {
+  const q = $('placeInput').value.trim();
+  if (q.length < 2) return;
+  $('placeHint').textContent = 'Suche …';
+  $('placeResults').innerHTML = '';
+  try {
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=de&format=json`);
+    const data = await res.json();
+    const list = data.results || [];
+    $('placeHint').textContent = list.length ? '' : 'Nichts gefunden. Versuch einen anderen Namen.';
+    $('placeResults').innerHTML = list.map((r, i) => {
+      const sub = [r.admin1, r.country].filter(Boolean).join(', ');
+      return `<button type="button" class="sheet-item place-item" data-i="${i}"><strong>${escapeHtml(r.name)}</strong><small>${escapeHtml(sub)}</small></button>`;
+    }).join('');
+    $('placeResults').querySelectorAll('.place-item').forEach(btn => btn.addEventListener('click', () => {
+      const r = list[Number(btn.dataset.i)];
+      choosePlace({ name: r.name, lat: r.latitude, lon: r.longitude });
+    }));
+  } catch {
+    $('placeHint').textContent = 'Die Suche braucht Internet. Versuch es gleich nochmal.';
+  }
+}
+
+function useMyLocation() {
+  if (!navigator.geolocation) { $('placeHint').textContent = 'Dein Browser kann den Standort nicht abfragen.'; return; }
+  $('placeHint').textContent = 'Standort wird abgefragt …';
+  suppressLock = true;
+  navigator.geolocation.getCurrentPosition(pos => {
+    suppressLock = false;
+    choosePlace({ name: 'Mein Standort', lat: +pos.coords.latitude.toFixed(3), lon: +pos.coords.longitude.toFixed(3) });
+  }, () => {
+    suppressLock = false;
+    $('placeHint').textContent = 'Der Standort ist nicht erlaubt. Gib stattdessen deine Stadt ein.';
+  }, { timeout: 15000, maximumAge: 3600000 });
+}
+
+function choosePlace(p) {
+  setPlace(p);
+  closeSheet($('placeSheet'));
+  showToast(p ? `Ort: ${p.name}` : 'Wetter ausgeschaltet');
+  weatherNow = null;
+  refreshWeather(true);
+  applySky(true);
 }
 
 /* =====================================================================
@@ -332,7 +673,7 @@ function moonSvg(date) {
     ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
     <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
     <use href="#${id}sf" style="opacity:var(--earthshine)"/>
-    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/>` : ''}
+    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
   </svg>`;
 }
 
@@ -1913,6 +2254,12 @@ function wireEvents() {
     if (hasBiometricConfig()) { disableBiometrics(); }
     else { closeSheet(els.menuSheet); await enableBiometrics(); maybeShowBioCard(); }
   });
+  $('placeMenuBtn').addEventListener('click', openPlaceSheet);
+  $('placeForm').addEventListener('submit', e => { e.preventDefault(); searchPlace(); });
+  $('placeGpsBtn').addEventListener('click', useMyLocation);
+  $('placeOffBtn').addEventListener('click', () => choosePlace(null));
+  $('placeCancelBtn').addEventListener('click', () => closeSheet($('placeSheet')));
+  $('weatherLabel').addEventListener('click', () => { if (!getPlace() && !previewWeather()) openPlaceSheet(); });
   els.nameMenuBtn.addEventListener('click', () => { els.nameInput.value = userName(); openSheet(els.nameSheet); setTimeout(() => els.nameInput.focus(), 80); });
   els.nameForm.addEventListener('submit', async e => {
     e.preventDefault();
@@ -1941,7 +2288,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });
@@ -1976,6 +2323,7 @@ function wireEvents() {
 async function boot() {
   placeStars();
   applySky();
+  initSkyExtras();
   setInterval(applySky, 60000);
   if (!window.crypto?.subtle || !window.indexedDB) {
     els.lockHint.textContent = 'Dieser Browser kann die Notizen nicht sicher speichern.';

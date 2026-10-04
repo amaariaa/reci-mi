@@ -1,9 +1,9 @@
-const CACHE = 'reci-mi-v1.9.0';
+const CACHE = 'reci-mi-v2.0.0';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=1.9.0',
-  './app.js?v=1.9.0',
+  './styles.css?v=2.0.0',
+  './app.js?v=2.0.0',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -31,6 +31,8 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  // Wetter und Ortssuche immer frisch aus dem Netz, nie aus dem Speicher
+  if (new URL(event.request.url).origin !== self.location.origin) return;
 
   if (event.request.mode === 'navigate') {
     event.respondWith(

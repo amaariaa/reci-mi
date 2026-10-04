@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon-192.png" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=1.2.0" />
+  <link rel="stylesheet" href="styles.css?v=1.3.0" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -150,6 +150,15 @@
       </form>
     </dialog>
 
+    <dialog id="topicActionDialog" class="dialog-card topic-action-dialog">
+      <form method="dialog">
+        <h2 id="topicActionTitle">Thema</h2>
+        <p>Was möchtest du mit diesem Thema machen?</p>
+        <button type="button" id="topicActionDeleteBtn" class="danger-btn action-wide">In den Papierkorb</button>
+        <button type="button" id="topicActionCancelBtn" class="secondary-btn action-wide">Abbrechen</button>
+      </form>
+    </dialog>
+
     <dialog id="confirmDialog" class="dialog-card">
       <form method="dialog">
         <h2 id="confirmTitle">Wirklich löschen?</h2>
@@ -164,6 +173,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=1.2.0" defer></script>
+  <script src="app.js?v=1.3.0" defer></script>
 </body>
 </html>

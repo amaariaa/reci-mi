@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -8,7 +8,10 @@ const CONFIG_SALT = 'gr_salt_v1';
 const CONFIG_VERIFIER = 'gr_verifier_v1';
 const BIOMETRIC_CONFIG = 'rm_biometric_v1';
 const BIOMETRIC_KEY = 'biometric-key';
-const BACKGROUND_LOCK_DELAY_MS = 1500;
+const BACKGROUND_LOCK_DELAY_MS = 60000;
+const LONG_PRESS_MS = 650;
+const EXIT_BACK_WINDOW_MS = 1800;
+const APP_HISTORY_URL = `${location.pathname}${location.search}${location.hash}`;
 
 let db;
 let cryptoKey = null;
@@ -26,6 +29,10 @@ let isListening = false;
 let deferredInstallPrompt = null;
 let confirmResolver = null;
 let dialogMode = 'create';
+let topicActionId = null;
+let backGuardReady = false;
+let lastExitBackAt = 0;
+let exitingByBack = false;
 
 const paletteCycle = ['rose', 'sage', 'lavender', 'sand', 'mint'];
 const categoryIcons = {
@@ -47,6 +54,7 @@ const els = {
   exportBtn: $('exportBtn'), importInput: $('importInput'), installBtn: $('installBtn'), biometricMenuBtn: $('biometricMenuBtn'), lockBtn: $('lockBtn'),
   topicDialog: $('topicDialog'), topicForm: $('topicForm'), topicDialogTitle: $('topicDialogTitle'), topicName: $('topicName'), topicCategory: $('topicCategory'), cancelTopicBtn: $('cancelTopicBtn'),
   confirmDialog: $('confirmDialog'), confirmTitle: $('confirmTitle'), confirmText: $('confirmText'), confirmCancelBtn: $('confirmCancelBtn'), confirmOkBtn: $('confirmOkBtn'),
+  topicActionDialog: $('topicActionDialog'), topicActionTitle: $('topicActionTitle'), topicActionDeleteBtn: $('topicActionDeleteBtn'), topicActionCancelBtn: $('topicActionCancelBtn'),
   toast: $('toast')
 };
 
@@ -183,7 +191,7 @@ function initialState() {
   return {
     version: APP_VERSION,
     createdAt: new Date().toISOString(),
-    settings: { lockMode: 'when-backgrounded' },
+    settings: { lockMode: 'when-backgrounded-with-grace' },
     topics: []
   };
 }
@@ -267,7 +275,7 @@ async function loadVaultWithKey(key) {
   state = decrypted;
   if (!Array.isArray(state.topics)) state.topics = [];
   state.version = APP_VERSION;
-  state.settings = { ...(state.settings || {}), lockMode: 'when-backgrounded' };
+  state.settings = { ...(state.settings || {}), lockMode: 'when-backgrounded-with-grace' };
   delete state.settings.autoLockMinutes;
 }
 
@@ -521,6 +529,8 @@ async function restoreAfterUnlock() {
   }
   resumeScreen = 'home';
   resumeTopicId = null;
+  lastExitBackAt = 0;
+  ensureBackGuard();
 }
 
 function lockApp(message = '', preserveResume = true) {
@@ -552,6 +562,77 @@ function scheduleBackgroundLock() {
 function cancelBackgroundLock() {
   clearTimeout(backgroundLockTimer);
   backgroundLockTimer = null;
+}
+
+function ensureBackGuard() {
+  if (!cryptoKey || backGuardReady || exitingByBack) return;
+  try {
+    history.pushState({ reciMiGuard: true }, '', APP_HISTORY_URL);
+    backGuardReady = true;
+  } catch {}
+}
+
+async function handleAppBackNavigation() {
+  backGuardReady = false;
+  if (!cryptoKey || exitingByBack) return;
+
+  if (els.sideMenu.classList.contains('open')) {
+    closeMenu();
+    ensureBackGuard();
+    return;
+  }
+  if (els.topicActionDialog?.open) {
+    els.topicActionDialog.close();
+    topicActionId = null;
+    ensureBackGuard();
+    return;
+  }
+  if (els.topicDialog?.open) {
+    els.topicDialog.close();
+    ensureBackGuard();
+    return;
+  }
+  if (els.confirmDialog?.open) {
+    els.confirmDialog.close();
+    if (confirmResolver) confirmResolver(false);
+    confirmResolver = null;
+    ensureBackGuard();
+    return;
+  }
+
+  if (els.editorScreen.classList.contains('active')) {
+    stopRecognition();
+    stopReading();
+    await persistState(true).catch(() => {});
+    currentTopicId = null;
+    renderTopics();
+    showScreen(els.homeScreen);
+    lastExitBackAt = 0;
+    ensureBackGuard();
+    return;
+  }
+
+  if (els.trashScreen.classList.contains('active')) {
+    renderTopics();
+    showScreen(els.homeScreen);
+    lastExitBackAt = 0;
+    ensureBackGuard();
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastExitBackAt < EXIT_BACK_WINDOW_MS) {
+    exitingByBack = true;
+    await persistState(true).catch(() => {});
+    lockApp('', false);
+    history.back();
+    setTimeout(() => { exitingByBack = false; }, 1200);
+    return;
+  }
+
+  lastExitBackAt = now;
+  ensureBackGuard();
+  showToast('Noch einmal Zurück, um Reci mi zu verlassen', 1800);
 }
 
 function uid() {
@@ -610,7 +691,45 @@ function renderTopics() {
 
   els.topicList.querySelectorAll('.topic-card').forEach(card => {
     const open = () => openTopic(card.dataset.id);
-    card.addEventListener('click', open);
+    let pressTimer = null;
+    let startX = 0;
+    let startY = 0;
+    let suppressClick = false;
+
+    const cancelPress = () => {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+      card.classList.remove('pressing');
+    };
+
+    card.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      startX = e.clientX;
+      startY = e.clientY;
+      card.classList.add('pressing');
+      pressTimer = setTimeout(() => {
+        suppressClick = true;
+        card.classList.remove('pressing');
+        if (navigator.vibrate) navigator.vibrate(25);
+        openTopicAction(card.dataset.id);
+      }, LONG_PRESS_MS);
+    });
+    card.addEventListener('pointermove', e => {
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > 12) cancelPress();
+    });
+    card.addEventListener('pointerup', cancelPress);
+    card.addEventListener('pointercancel', cancelPress);
+    card.addEventListener('pointerleave', cancelPress);
+    card.addEventListener('contextmenu', e => e.preventDefault());
+    card.addEventListener('click', e => {
+      if (suppressClick) {
+        suppressClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      open();
+    });
     card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') open(); });
   });
 }
@@ -693,6 +812,26 @@ async function saveTopicDialog() {
   showToast('Gespeichert');
 }
 
+function openTopicAction(id) {
+  const topic = state?.topics?.find(t => t.id === id && !t.deletedAt);
+  if (!topic) return;
+  topicActionId = id;
+  els.topicActionTitle.textContent = topic.title;
+  els.topicActionDialog.showModal();
+}
+
+async function moveTopicToTrash(id) {
+  const topic = state?.topics?.find(t => t.id === id && !t.deletedAt);
+  if (!topic) return;
+  topic.deletedAt = new Date().toISOString();
+  topic.updatedAt = new Date().toISOString();
+  await persistState(true);
+  if (currentTopicId === id) currentTopicId = null;
+  renderTopics();
+  showScreen(els.homeScreen);
+  showToast('In den Papierkorb verschoben');
+}
+
 function askConfirm(title, text, okLabel = 'Löschen') {
   els.confirmTitle.textContent = title;
   els.confirmText.textContent = text;
@@ -704,15 +843,7 @@ function askConfirm(title, text, okLabel = 'Löschen') {
 async function moveCurrentToTrash() {
   const topic = currentTopic();
   if (!topic) return;
-  const yes = await askConfirm('Thema löschen?', `„${topic.title}“ wird in den Papierkorb verschoben.`, 'In Papierkorb');
-  if (!yes) return;
-  topic.deletedAt = new Date().toISOString();
-  topic.updatedAt = new Date().toISOString();
-  await persistState(true);
-  currentTopicId = null;
-  renderTopics();
-  showScreen(els.homeScreen);
-  showToast('In den Papierkorb verschoben');
+  await moveTopicToTrash(topic.id);
 }
 
 function renderTrash() {
@@ -956,6 +1087,17 @@ function wireEvents() {
   [els.newTopicBtn, els.quickAddBtn, els.emptyAddBtn].forEach(btn => btn.addEventListener('click', () => openTopicDialog('create')));
   els.cancelTopicBtn.addEventListener('click', () => els.topicDialog.close());
   els.topicForm.addEventListener('submit', e => { e.preventDefault(); saveTopicDialog(); });
+  els.topicActionCancelBtn.addEventListener('click', () => {
+    topicActionId = null;
+    els.topicActionDialog.close();
+  });
+  els.topicActionDeleteBtn.addEventListener('click', async () => {
+    const id = topicActionId;
+    topicActionId = null;
+    els.topicActionDialog.close();
+    if (id) await moveTopicToTrash(id);
+  });
+  els.topicActionDialog.addEventListener('cancel', () => { topicActionId = null; });
 
   els.filterRow.addEventListener('click', e => {
     const chip = e.target.closest('.filter-chip');
@@ -1043,6 +1185,8 @@ function wireEvents() {
     deferredInstallPrompt = null;
     els.installBtn.classList.add('hidden');
   });
+
+  window.addEventListener('popstate', handleAppBackNavigation);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {

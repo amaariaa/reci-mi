@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.0';
+const APP_VERSION = '3.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -146,9 +146,10 @@ function sunTimes(date) {
   const cosDec = Math.cos(Math.asin(sinDec));
   const cosW = (Math.sin(-0.833 * rad) - Math.sin(GEO.lat * rad) * sinDec) / (Math.cos(GEO.lat * rad) * cosDec);
   const w = Math.acos(Math.max(-1, Math.min(1, cosW))) / rad;
+  const off = placeOffsetMin(noon);
   const toLocalMinutes = j => {
     const d = new Date((j - 2440587.5) * 86400000);
-    return d.getHours() * 60 + d.getMinutes();
+    return wrapMinutes(d.getUTCHours() * 60 + d.getUTCMinutes() + off);
   };
   return { rise: toLocalMinutes(jTransit - w / 360), set: toLocalMinutes(jTransit + w / 360) };
 }
@@ -184,11 +185,33 @@ function previewMinutes() {
   return m ? Math.min(1439, parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null;
 }
 
+// Zeitzone des gewählten Ortes: Minuten Abstand zu UTC zu einem Zeitpunkt
+function placeOffsetMin(instant) {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem('rm_place') || 'null'); } catch {}
+  if (!p || !isFinite(p.lat) || !isFinite(p.lon)) return -instant.getTimezoneOffset();
+  if (p.tz) {
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: p.tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(instant).map(x => [x.type, +x.value]));
+      return Math.round((Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
+    } catch {}
+  }
+  return Math.round(p.lon / 15) * 60;   // grobe Schätzung, wenn die Zeitzone unbekannt ist
+}
+// „Wanduhr“ des Ortes: ein Date, dessen lokale Felder die Ortszeit zeigen
 function nowForSky() {
-  const now = new Date();
+  const real = new Date();
+  const off = placeOffsetMin(real);
+  const sh = new Date(real.getTime() + off * 60000);
+  const now = new Date(sh.getUTCFullYear(), sh.getUTCMonth(), sh.getUTCDate(), sh.getUTCHours(), sh.getUTCMinutes(), sh.getUTCSeconds());
   const p = previewMinutes();
   if (p !== null) now.setHours(Math.floor(p / 60), p % 60, 0, 0);
   return now;
+}
+// echter Zeitpunkt zu einer Ortszeit-Wanduhr
+function instantOfSky(wall) {
+  const guess = new Date(wall.getTime() - wall.getTimezoneOffset() * 60000 - placeOffsetMin(wall) * 60000);
+  return guess;
 }
 
 function skyStateAt(date) {
@@ -364,6 +387,7 @@ async function refreshWeather(force = false) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
+    if (data.timezone && place.tz !== data.timezone) { try { localStorage.setItem(LS_PLACE, JSON.stringify({ ...place, tz: data.timezone })); } catch {} applySky(); placeSun(); placeMoon(); }
     const w = { code: data.current.weather_code, cloud: data.current.cloud_cover, temp: data.current.temperature_2m };
     localStorage.setItem(LS_WEATHER, JSON.stringify({ key: `${place.lat},${place.lon}`, t: Date.now(), w }));
     weatherNow = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp) };
@@ -650,7 +674,8 @@ function placeMoon() {
   const hero = document.querySelector('.hero');
   const moonOrb = $('moonOrb');
   if (!hero || !moonOrb) return;
-  const now = nowForSky();
+  const wall = nowForSky();
+  const now = instantOfSky(wall);
   const t = now.getTime();
   if (!moonPassCache || moonPassCache.geo !== GEO.lat + ',' + GEO.lon || t < moonPassCache.from || t > moonPassCache.to) {
     const pass = moonPass(now);
@@ -659,7 +684,7 @@ function placeMoon() {
   }
   const { pass } = moonPassCache;
   const st = moonState(now);
-  const clock = d => d ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+  const clock = d => { if (!d) return '--:--'; const m = wrapMinutes(Math.round(d.getTime() / 60000) + placeOffsetMin(d)); return minutesToClock(m); };
   if (els.moonriseLabel) els.moonriseLabel.textContent = clock(pass.rise);
   if (els.moonsetLabel) els.moonsetLabel.textContent = clock(pass.set);
   if (els.moonPhaseLabel) els.moonPhaseLabel.textContent = `${moonPhaseName(st.age)} · ${Math.round(st.illum * 100)} %`;
@@ -834,7 +859,7 @@ async function searchPlace() {
     }).join('');
     $('placeResults').querySelectorAll('.place-item').forEach(btn => btn.addEventListener('click', () => {
       const r = list[Number(btn.dataset.i)];
-      choosePlace({ name: r.name, lat: r.latitude, lon: r.longitude });
+      choosePlace({ name: r.name, lat: r.latitude, lon: r.longitude, tz: r.timezone });
     }));
   } catch {
     $('placeHint').textContent = 'Die Suche braucht Internet. Versuch es gleich nochmal.';
@@ -1100,16 +1125,44 @@ function renderDailyBits(date = nowForSky(), phase = document.documentElement.da
 function placeStars() {
   document.querySelectorAll('.stars').forEach(box => {
     if (box.childElementCount) return;
-    let seed = box.closest('.hero') ? 7 : 3;
+    const hero = Boolean(box.closest('.hero'));
+    let seed = hero ? 7 : 3;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    const count = box.closest('.hero') ? 18 : 34;
+    const count = hero ? 26 : 40;
     let html = '';
     for (let i = 0; i < count; i++) {
-      const size = rnd() < 0.15 ? 3 : 2;
-      html += `<i style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 92).toFixed(1)}%;opacity:${(0.2 + rnd() * 0.6).toFixed(2)};width:${size}px;height:${size}px"></i>`;
+      const big = rnd() < 0.2;
+      const size = big ? 3 : 2;
+      const dur = (2.4 + rnd() * 4.2).toFixed(1);
+      const delay = (-rnd() * 7).toFixed(1);
+      html += `<i class="${big ? 'big' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 92).toFixed(1)}%;--o:${(0.35 + rnd() * 0.55).toFixed(2)};width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
     }
     box.innerHTML = html;
   });
+}
+
+/* Sternschnuppen: ab und zu eine, nur wenn der Himmel dunkel genug ist */
+function shootingStar() {
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const boxes = [...document.querySelectorAll('.stars')].filter(b => b.offsetParent !== null);
+  const visible = boxes[0];
+  const dark = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stars')) > 0.6;
+  if (visible && dark && !reduce && !document.hidden) {
+    const w = visible.clientWidth, h = visible.clientHeight;
+    const star = document.createElement('b');
+    star.className = 'shoot';
+    const fromRight = Math.random() < 0.5;
+    const len = 130 + Math.random() * 90;
+    const dx = (fromRight ? -1 : 1) * len * 1.7, dy = len * 0.6;
+    star.style.left = `${(fromRight ? 0.55 + Math.random() * 0.4 : 0.05 + Math.random() * 0.4) * w}px`;
+    star.style.top = `${(0.03 + Math.random() * 0.3) * h}px`;
+    star.style.setProperty('--dx', `${dx}px`);
+    star.style.setProperty('--dy', `${dy}px`);
+    star.style.setProperty('--rot', `${Math.atan2(dy, dx) * 180 / Math.PI}deg`);
+    visible.appendChild(star);
+    setTimeout(() => star.remove(), 1700);
+  }
+  setTimeout(shootingStar, 9000 + Math.random() * 14000);
 }
 
 /* =====================================================================
@@ -3853,6 +3906,7 @@ function wireEvents() {
 
 async function boot() {
   placeStars();
+  setTimeout(shootingStar, 4000);
   applySky();
   initSkyExtras();
   setInterval(applySky, 60000);

@@ -1,15 +1,16 @@
 {
   "name": "Reci mi",
   "short_name": "Reci mi",
-  "description": "Private, lokale und verschlüsselte Notizen mit Spracheingabe und Vorlesen.",
+  "description": "Private, verschlüsselte Notizen mit Spracheingabe und Vorlesen.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f7efe8",
-  "theme_color": "#f6ede5",
+  "background_color": "#1B2140",
+  "theme_color": "#141A36",
   "orientation": "portrait",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

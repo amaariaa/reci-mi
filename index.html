@@ -1,178 +1,219 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-mode="dark">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#f6ede5" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#141A36" />
   <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon-192.png" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=1.3.0" />
+  <link rel="preload" href="lora.woff" as="font" type="font/woff" crossorigin />
+  <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
+  <link rel="stylesheet" href="styles.css?v=1.4.0" />
   <title>Reci mi</title>
 </head>
 <body>
   <div id="app" class="app-shell">
-    <section id="lockScreen" class="lock-screen screen active" aria-labelledby="lockTitle">
-      <div class="lock-card">
-        <div class="brand-mark" aria-hidden="true">R</div>
-        <h1 id="lockTitle">Reci mi</h1>
-        <p id="lockSubtitle">Deine Gedanken bleiben bei dir.</p>
 
-        <button id="bioUnlockBtn" class="primary-btn biometric-unlock hidden" type="button">
-          <svg class="ui-icon fingerprint-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 20c1.1-2.1 1.8-4.5 1.8-7a2 2 0 0 1 4 0c0 2.4-.5 4.6-1.3 6.6"/><path d="M5.8 18.7C7.1 16.6 8 14.3 8 12a4 4 0 0 1 8 0c0 2.2-.3 4.3-.9 6.2"/><path d="M4 15.5V12a8 8 0 0 1 16 0c0 1.7-.1 3.3-.4 4.8"/><path d="M6 8.2A7 7 0 0 1 18.6 9"/></svg>
-          <span>Mit Fingerabdruck entsperren</span>
+    <!-- Sperrbildschirm -->
+    <section id="lockScreen" class="screen lock-screen sky active" aria-labelledby="lockTitle">
+      <div class="stars" aria-hidden="true"></div>
+      <div class="lock-inner">
+        <button id="moonBtn" class="moon-btn" type="button" aria-label="Mit Fingerabdruck entsperren">
+          <span id="lockMoon" class="moon-art"></span>
+          <span id="fpBadge" class="fp-badge hidden" aria-hidden="true">
+            <svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 20c1.1-2.1 1.8-4.5 1.8-7a2 2 0 0 1 4 0c0 2.4-.5 4.6-1.3 6.6"/><path d="M5.8 18.7C7.1 16.6 8 14.3 8 12a4 4 0 0 1 8 0c0 2.2-.3 4.3-.9 6.2"/><path d="M4 15.5V12a8 8 0 0 1 16 0c0 1.7-.1 3.3-.4 4.8"/><path d="M6 8.2A7 7 0 0 1 18.6 9"/></svg>
+          </span>
         </button>
-        <div id="bioDivider" class="bio-divider hidden"><span>oder PIN</span></div>
+        <h1 id="lockTitle" class="wordmark">Reci mi</h1>
+        <p id="lockSubtitle" class="lock-text">Erzähl mir, was dich bewegt.</p>
 
         <form id="pinForm" class="pin-form" autocomplete="off">
           <label id="pinLabel" for="pinInput">PIN</label>
           <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="4 bis 6 Ziffern" autocomplete="new-password" required />
           <input id="pinConfirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="PIN wiederholen" autocomplete="new-password" />
-          <button id="pinSubmit" class="secondary-btn pin-unlock-btn" type="submit">Mit PIN entsperren</button>
+          <button id="pinSubmit" class="btn btn-main" type="submit">Entsperren</button>
         </form>
-        <p id="lockHint" class="hint"></p>
+        <button id="showPinBtn" class="btn btn-ghost hidden" type="button">Mit PIN entsperren</button>
+        <p id="lockHint" class="hint" role="status"></p>
       </div>
+      <p id="lockPhase" class="lock-phase"></p>
     </section>
 
-    <section id="homeScreen" class="screen">
-      <header class="topbar home-topbar">
-        <button id="menuBtn" class="icon-btn" aria-label="Menü öffnen">☰</button>
-        <div class="brand-copy">
-          <h1>Reci mi</h1>
-          <p>Deine Gedanken an einem Ort.</p>
+    <!-- Startseite -->
+    <section id="homeScreen" class="screen home-screen">
+      <header class="hero sky">
+        <div class="stars" aria-hidden="true"></div>
+        <div class="hero-top">
+          <span class="brand">Reci mi</span>
+          <button id="menuBtn" class="icon-btn hero-btn" type="button" aria-label="Menü öffnen">
+            <svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          </button>
         </div>
-        <button id="searchBtn" class="icon-btn" aria-label="Suchen">⌕</button>
+        <div class="hero-main">
+          <div class="hero-text">
+            <h1 id="greeting" class="greeting">Hallo</h1>
+          </div>
+          <div id="heroMoon" class="hero-moon moon-art" aria-hidden="true"></div>
+        </div>
+        <p id="dailyQuote" class="daily-quote"></p>
+        <p id="moonLine" class="moon-line"></p>
       </header>
 
-      <div id="searchWrap" class="search-wrap hidden">
-        <input id="searchInput" type="search" placeholder="Themen und Texte durchsuchen" />
-      </div>
+      <div class="home-body">
+        <label class="search">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+          <input id="searchInput" type="search" placeholder="Themen und Texte durchsuchen" aria-label="Suchen" />
+        </label>
 
-      <div class="filter-row" id="filterRow">
-        <button class="filter-chip active" data-filter="Alle">Alle</button>
-        <button class="filter-chip" data-filter="Bücher">Bücher</button>
-        <button class="filter-chip" data-filter="Apps">Apps</button>
-        <button class="filter-chip" data-filter="Privat">Privat</button>
-        <button id="quickAddBtn" class="round-add" aria-label="Neues Thema">+</button>
-      </div>
+        <div class="chips" id="filterRow" role="tablist">
+          <button class="chip active" data-filter="Alle" type="button">Alle</button>
+          <button class="chip" data-filter="Bücher" type="button"><span class="dot" data-cat="Bücher"></span>Bücher</button>
+          <button class="chip" data-filter="Apps" type="button"><span class="dot" data-cat="Apps"></span>Apps</button>
+          <button class="chip" data-filter="Privat" type="button"><span class="dot" data-cat="Privat"></span>Privat</button>
+          <button class="chip" data-filter="Sonstiges" type="button"><span class="dot" data-cat="Sonstiges"></span>Sonstiges</button>
+        </div>
 
-      <main class="content-area home-content">
+        <div id="bioCard" class="bio-card hidden">
+          <p><strong>Schneller rein mit Fingerabdruck?</strong> Dann reicht beim Öffnen ein Fingertipp statt der PIN.</p>
+          <div class="bio-card-actions">
+            <button id="bioCardLater" class="btn btn-ghost btn-small" type="button">Nicht jetzt</button>
+            <button id="bioCardSetup" class="btn btn-main btn-small" type="button">Einrichten</button>
+          </div>
+        </div>
+
         <div id="topicList" class="topic-list"></div>
         <div id="emptyState" class="empty-state hidden">
-          <div class="empty-icon">✦</div>
           <h2>Noch kein Thema</h2>
-          <p>Lege dein erstes Thema an und sammle darin fortlaufend deine Gedanken.</p>
-          <button id="emptyAddBtn" class="primary-btn">Neues Thema</button>
+          <p>Tippe unten auf „Neues Thema“ und sammle darin deine Gedanken.</p>
         </div>
-      </main>
+        <p id="noResults" class="empty-state small hidden">Nichts gefunden.</p>
+      </div>
 
-      <button id="newTopicBtn" class="new-topic-btn"><span>＋</span> Neues Thema</button>
+      <button id="newTopicBtn" class="fab" type="button">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Neues Thema
+      </button>
     </section>
 
+    <!-- Thema -->
     <section id="editorScreen" class="screen editor-screen">
-      <header class="topbar editor-topbar">
-        <button id="backBtn" class="icon-btn" aria-label="Zurück">‹</button>
-        <div class="editor-title-wrap">
-          <div id="editorBadge" class="topic-badge">✦</div>
-          <h1 id="editorTitle">Thema</h1>
-        </div>
-        <button id="editorMenuBtn" class="icon-btn" aria-label="Weitere Optionen">⋮</button>
+      <header class="editor-head">
+        <button id="backBtn" class="icon-btn" type="button" aria-label="Zurück">
+          <svg class="ui-icon" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+        </button>
+        <button id="editorMenuBtn" class="icon-btn" type="button" aria-label="Weitere Optionen">
+          <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+        </button>
       </header>
-
-      <main class="editor-main">
-        <div class="date-line" id="dateLine"></div>
-        <textarea id="topicText" spellcheck="true" placeholder="Schreibe hier oder tippe auf das Mikrofon …"></textarea>
+      <div class="editor-title">
+        <h1 id="editorTitle">Thema</h1>
+        <div class="meta"><span id="editorTag" class="tag"></span><span id="dateLine"></span></div>
+      </div>
+      <main class="page">
+        <textarea id="topicText" spellcheck="true" placeholder="Schreib hier oder tippe auf das Mikrofon …"></textarea>
         <div id="saveState" class="save-state">Gespeichert</div>
       </main>
-
-      <button id="micBtn" class="floating-mic" aria-label="Spracheingabe starten" title="Sprechen">
-        <svg class="ui-icon mic-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
-      </button>
-
-      <nav class="bottom-toolbar" aria-label="Textfunktionen">
-        <button id="editBtn" class="toolbar-btn"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></span><span>Bearbeiten</span></button>
-        <button id="copyBtn" class="toolbar-btn"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></span><span>Kopieren</span></button>
-        <button id="readBtn" class="toolbar-btn"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 7 9H4v6h3l4 4V5Z"/><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/></svg></span><span>Vorlesen</span></button>
-        <button id="deleteBtn" class="toolbar-btn danger"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></span><span>Löschen</span></button>
+      <nav class="toolbar" aria-label="Textfunktionen">
+        <button id="editBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg><span>Bearbeiten</span></button>
+        <button id="copyBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg><span>Kopieren</span></button>
+        <span class="mic-slot"><button id="micBtn" class="mic" type="button" aria-label="Spracheingabe starten"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></span>
+        <button id="readBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M11 5 7 9H4v6h3l4 4V5Z"/><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/></svg><span>Vorlesen</span></button>
+        <button id="deleteBtn" class="tb danger" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Löschen</span></button>
       </nav>
     </section>
 
-    <section id="trashScreen" class="screen">
-      <header class="topbar simple-topbar">
-        <button id="trashBackBtn" class="icon-btn" aria-label="Zurück">‹</button>
-        <h1>Papierkorb</h1>
-        <span class="topbar-spacer"></span>
+    <!-- Papierkorb -->
+    <section id="trashScreen" class="screen trash-screen">
+      <header class="editor-head">
+        <button id="trashBackBtn" class="icon-btn" type="button" aria-label="Zurück">
+          <svg class="ui-icon" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+        </button>
       </header>
-      <main class="content-area">
-        <p class="subtle">Gelöschte Themen kannst du hier wiederherstellen oder endgültig entfernen.</p>
-        <div id="trashList" class="topic-list"></div>
-      </main>
+      <div class="editor-title"><h1>Papierkorb</h1>
+        <p class="sub">Gelöschte Themen kannst du hier zurückholen oder endgültig entfernen.</p></div>
+      <div id="trashList" class="topic-list trash-list"></div>
     </section>
 
-    <aside id="sideMenu" class="side-menu" aria-hidden="true">
-      <div class="side-menu-card">
-        <div class="side-menu-header">
-          <div>
-            <h2>Reci mi</h2>
-            <p>Privat auf deinem Gerät</p>
-          </div>
-          <button id="closeMenuBtn" class="icon-btn" aria-label="Menü schließen">×</button>
-        </div>
-        <button id="openTrashBtn" class="menu-item">Papierkorb</button>
-        <button id="exportBtn" class="menu-item">Verschlüsselte Sicherung exportieren</button>
-        <label class="menu-item file-label">Sicherung importieren<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
-        <button id="installBtn" class="menu-item hidden">App installieren</button>
-        <button id="biometricMenuBtn" class="menu-item">Fingerabdruck aktivieren</button>
-        <button id="lockBtn" class="menu-item">Jetzt sperren</button>
-        <p class="menu-note">Deine Notizen werden verschlüsselt auf diesem Gerät gespeichert. Spracheingabe und Vorlesestimmen können je nach Browser oder Geräteeinstellung externe Sprachdienste verwenden.</p>
-      </div>
-    </aside>
-
-    <div id="modalBackdrop" class="modal-backdrop hidden" role="presentation"></div>
-
-    <dialog id="topicDialog" class="dialog-card">
+    <!-- Blatt: Neues Thema / Umbenennen -->
+    <dialog id="topicSheet" class="sheet">
       <form id="topicForm" method="dialog">
-        <h2 id="topicDialogTitle">Neues Thema</h2>
-        <label for="topicName">Name</label>
-        <input id="topicName" maxlength="60" placeholder="z. B. Rahel und Adam" required />
-        <label for="topicCategory">Bereich</label>
-        <select id="topicCategory">
-          <option>Bücher</option>
-          <option>Apps</option>
-          <option>Privat</option>
-          <option>Sonstiges</option>
-        </select>
-        <div class="dialog-actions">
-          <button type="button" id="cancelTopicBtn" class="secondary-btn">Abbrechen</button>
-          <button type="submit" class="primary-btn">Speichern</button>
+        <div class="grab" aria-hidden="true"></div>
+        <h2 id="topicSheetTitle">Neues Thema</h2>
+        <label for="topicName" class="lbl">Name</label>
+        <input id="topicName" maxlength="60" placeholder="Wie soll das Thema heißen?" required autocomplete="off" />
+        <span class="lbl">Bereich</span>
+        <div class="cats" id="catPicker">
+          <button type="button" class="cat" data-cat="Bücher"><span class="dot" data-cat="Bücher"></span>Bücher</button>
+          <button type="button" class="cat" data-cat="Apps"><span class="dot" data-cat="Apps"></span>Apps</button>
+          <button type="button" class="cat" data-cat="Privat"><span class="dot" data-cat="Privat"></span>Privat</button>
+          <button type="button" class="cat" data-cat="Sonstiges"><span class="dot" data-cat="Sonstiges"></span>Sonstiges</button>
+        </div>
+        <div class="actions">
+          <button type="button" id="cancelTopicBtn" class="btn btn-ghost">Abbrechen</button>
+          <button type="submit" id="saveTopicBtn" class="btn btn-main">Thema anlegen</button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="topicActionDialog" class="dialog-card topic-action-dialog">
-      <form method="dialog">
-        <h2 id="topicActionTitle">Thema</h2>
-        <p>Was möchtest du mit diesem Thema machen?</p>
-        <button type="button" id="topicActionDeleteBtn" class="danger-btn action-wide">In den Papierkorb</button>
-        <button type="button" id="topicActionCancelBtn" class="secondary-btn action-wide">Abbrechen</button>
+    <!-- Blatt: Aktionen für ein Thema -->
+    <dialog id="actionSheet" class="sheet">
+      <div class="grab" aria-hidden="true"></div>
+      <h2 id="actionTitle">Thema</h2>
+      <div class="sheet-list">
+        <button type="button" id="actionOpenBtn" class="sheet-item">Öffnen</button>
+        <button type="button" id="actionRenameBtn" class="sheet-item">Umbenennen oder Bereich ändern</button>
+        <button type="button" id="actionTrashBtn" class="sheet-item danger">In den Papierkorb</button>
+      </div>
+      <button type="button" id="actionCancelBtn" class="btn btn-ghost wide">Abbrechen</button>
+    </dialog>
+
+    <!-- Blatt: Menü -->
+    <dialog id="menuSheet" class="sheet">
+      <div class="grab" aria-hidden="true"></div>
+      <h2>Reci mi</h2>
+      <div class="sheet-list">
+        <button type="button" id="biometricMenuBtn" class="sheet-item">Fingerabdruck einrichten</button>
+        <button type="button" id="nameMenuBtn" class="sheet-item">Wie soll ich dich nennen?</button>
+        <button type="button" id="openTrashBtn" class="sheet-item">Papierkorb</button>
+        <button type="button" id="exportBtn" class="sheet-item">Sicherung speichern</button>
+        <label class="sheet-item">Sicherung laden<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
+        <button type="button" id="installBtn" class="sheet-item hidden">App installieren</button>
+        <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
+      </div>
+      <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
+      <p class="sheet-note version">Version 1.4</p>
+    </dialog>
+
+    <!-- Blatt: Name -->
+    <dialog id="nameSheet" class="sheet">
+      <form id="nameForm" method="dialog">
+        <div class="grab" aria-hidden="true"></div>
+        <h2>Wie soll ich dich nennen?</h2>
+        <label for="nameInput" class="lbl">Dein Name für die Begrüßung</label>
+        <input id="nameInput" maxlength="30" autocomplete="off" />
+        <div class="actions">
+          <button type="button" id="nameCancelBtn" class="btn btn-ghost">Abbrechen</button>
+          <button type="submit" class="btn btn-main">Speichern</button>
+        </div>
       </form>
     </dialog>
 
-    <dialog id="confirmDialog" class="dialog-card">
-      <form method="dialog">
-        <h2 id="confirmTitle">Wirklich löschen?</h2>
-        <p id="confirmText"></p>
-        <div class="dialog-actions">
-          <button type="button" id="confirmCancelBtn" class="secondary-btn">Abbrechen</button>
-          <button type="button" id="confirmOkBtn" class="danger-btn">Löschen</button>
-        </div>
-      </form>
+    <!-- Blatt: Bestätigen -->
+    <dialog id="confirmSheet" class="sheet">
+      <div class="grab" aria-hidden="true"></div>
+      <h2 id="confirmTitle">Wirklich löschen?</h2>
+      <p id="confirmText" class="sheet-text"></p>
+      <div class="actions">
+        <button type="button" id="confirmCancelBtn" class="btn btn-ghost">Abbrechen</button>
+        <button type="button" id="confirmOkBtn" class="btn btn-danger">Löschen</button>
+      </div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=1.3.0" defer></script>
+  <script src="app.js?v=1.4.0" defer></script>
 </body>
 </html>

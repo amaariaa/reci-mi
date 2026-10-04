@@ -1,16 +1,23 @@
-const CACHE = 'reci-mi-v1.3.0';
+const CACHE = 'reci-mi-v1.4.0';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=1.3.0',
-  './app.js?v=1.3.0',
+  './styles.css?v=1.4.0',
+  './app.js?v=1.4.0',
   './manifest.webmanifest',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-maskable-512.png',
+  './lora.woff',
+  './lora-italic.woff',
+  './inter-regular.woff',
+  './inter-medium.woff',
+  './inter-semibold.woff'
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
+  // Jede Datei einzeln: fehlt eine, scheitert nicht gleich das ganze Update
+  event.waitUntil(caches.open(CACHE).then(cache => Promise.all(ASSETS.map(url => cache.add(url).catch(() => {})))));
   self.skipWaiting();
 });
 
@@ -39,8 +46,10 @@ self.addEventListener('fetch', event => {
 
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE).then(cache => cache.put(event.request, copy));
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(event.request, copy));
+      }
       return response;
     }))
   );

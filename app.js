@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -316,46 +316,21 @@ function moonSvg(date) {
   const id = `m${++moonUid}`;
   const glow = (0.35 + 0.65 * k).toFixed(2);
 
-  const maria = [
-    [40, 95, 20, 38, 15], [55, 122, 14, 18, 0], [30, 70, 10, 14, 0], [72, 62, 26, 20, -15], [95, 36, 30, 4, -5],
-    [118, 66, 14, 13, 0], [130, 92, 17, 13, 20], [141, 101, 10, 9, 0], [163, 72, 10, 8, 0], [152, 114, 9, 15, 15],
-    [130, 124, 7, 8, 0], [88, 132, 14, 11, 0], [58, 141, 8, 8, 0], [104, 84, 7, 5, 0], [100, 100, 5, 4, 0], [78, 120, 7, 6, 0]
-  ].map(([x, y, a, b, r]) => `<ellipse cx="${x}" cy="${y}" rx="${a}" ry="${b}" transform="rotate(${r} ${x} ${y})"/>`).join('');
-  const rays = [[-60, 40], [-20, 55], [15, 50], [50, 35], [100, 45], [150, 40], [200, 30], [250, 45], [300, 35]]
-    .map(([deg, len]) => {
-      const a = deg * Math.PI / 180;
-      return `<line x1="88" y1="164" x2="${(88 + Math.cos(a) * len).toFixed(1)}" y2="${(164 + Math.sin(a) * len).toFixed(1)}"/>`;
-    }).join('');
-  const craters = [[88, 164, 4.2], [70, 97, 3.6], [48, 95, 2.4], [38, 76, 2.2], [120, 150, 3], [150, 150, 3.2], [140, 46, 2.6], [62, 160, 3], [108, 178, 2.4], [170, 100, 2.2], [32, 120, 2.4], [112, 112, 2]]
-    .map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,.22)"/><circle cx="${x + r * .3}" cy="${y + r * .3}" r="${r * .6}" fill="rgba(60,50,40,.08)"/>`).join('');
-
   return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
     <defs>
       <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
-      <radialGradient id="${id}b" cx="42%" cy="40%" r="65%"><stop offset="0" style="stop-color:var(--moon-lit-2)"/><stop offset="1" style="stop-color:var(--moon-lit)"/></radialGradient>
-      <radialGradient id="${id}l" cx="50%" cy="50%" r="50%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#2A2218" stop-opacity=".38"/></radialGradient>
-      <filter id="${id}n" x="0" y="0" width="100%" height="100%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="4" seed="7"/>
-        <feColorMatrix type="matrix" values="0 0 0 0 0.36  0 0 0 0 0.33  0 0 0 0 0.29  1.0 0 0 0 -0.40"/>
-      </filter>
-      <filter id="${id}s" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="4.2"/></filter>
       <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
       <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
       <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
       <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
       <g id="${id}sf">
-        <circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}b)"/>
-        <g clip-path="url(#${id}c)">
-          <g filter="url(#${id}s)" style="fill:var(--moon-maria)" opacity=".62">${maria}</g>
-          <rect x="0" y="0" width="200" height="200" filter="url(#${id}n)" opacity=".24"/>
-          <g stroke="rgba(255,255,255,.16)" stroke-width="1.4" stroke-linecap="round">${rays}</g>
-          ${craters}
-          <circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}l)"/>
-        </g>
+        <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
+        <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
+        <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
       </g>
     </defs>
     ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
-    <circle cx="${C}" cy="${C}" r="${R - 0.5}" style="fill:var(--moon-dark)"/>
+    <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
     <use href="#${id}sf" style="opacity:var(--earthshine)"/>
     ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/>` : ''}
   </svg>`;

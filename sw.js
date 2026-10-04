@@ -1,13 +1,14 @@
-const CACHE = 'reci-mi-v1.6.0';
+const CACHE = 'reci-mi-v1.7.0';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=1.6.0',
-  './app.js?v=1.6.0',
+  './styles.css?v=1.7.0',
+  './app.js?v=1.7.0',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png',
+  './moon.webp',
   './lora.woff',
   './lora-italic.woff',
   './inter-regular.woff',

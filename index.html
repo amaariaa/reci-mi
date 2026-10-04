@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f6ede5" />
+  <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Reci mi</title>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <section id="lockScreen" class="lock-screen screen active" aria-labelledby="lockTitle">
+      <div class="lock-card">
+        <div class="brand-mark" aria-hidden="true">G</div>
+        <h1 id="lockTitle">Reci mi</h1>
+        <p id="lockSubtitle">Deine Gedanken bleiben bei dir.</p>
+
+        <form id="pinForm" class="pin-form" autocomplete="off">
+          <label id="pinLabel" for="pinInput">PIN</label>
+          <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="4 bis 6 Ziffern" autocomplete="new-password" required />
+          <input id="pinConfirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="PIN wiederholen" autocomplete="new-password" />
+          <button id="pinSubmit" class="primary-btn" type="submit">Entsperren</button>
+        </form>
+        <p id="lockHint" class="hint"></p>
+      </div>
+    </section>
+
+    <section id="homeScreen" class="screen">
+      <header class="topbar home-topbar">
+        <button id="menuBtn" class="icon-btn" aria-label="Menü öffnen">☰</button>
+        <div class="brand-copy">
+          <h1>Reci mi</h1>
+          <p>Deine Gedanken an einem Ort.</p>
+        </div>
+        <button id="searchBtn" class="icon-btn" aria-label="Suchen">⌕</button>
+      </header>
+
+      <div id="searchWrap" class="search-wrap hidden">
+        <input id="searchInput" type="search" placeholder="Themen und Texte durchsuchen" />
+      </div>
+
+      <div class="filter-row" id="filterRow">
+        <button class="filter-chip active" data-filter="Alle">Alle</button>
+        <button class="filter-chip" data-filter="Bücher">Bücher</button>
+        <button class="filter-chip" data-filter="Apps">Apps</button>
+        <button class="filter-chip" data-filter="Privat">Privat</button>
+        <button id="quickAddBtn" class="round-add" aria-label="Neues Thema">+</button>
+      </div>
+
+      <main class="content-area home-content">
+        <div id="topicList" class="topic-list"></div>
+        <div id="emptyState" class="empty-state hidden">
+          <div class="empty-icon">✦</div>
+          <h2>Noch kein Thema</h2>
+          <p>Lege dein erstes Thema an und sammle darin fortlaufend deine Gedanken.</p>
+          <button id="emptyAddBtn" class="primary-btn">Neues Thema</button>
+        </div>
+      </main>
+
+      <button id="newTopicBtn" class="new-topic-btn"><span>＋</span> Neues Thema</button>
+    </section>
+
+    <section id="editorScreen" class="screen editor-screen">
+      <header class="topbar editor-topbar">
+        <button id="backBtn" class="icon-btn" aria-label="Zurück">‹</button>
+        <div class="editor-title-wrap">
+          <div id="editorBadge" class="topic-badge">✦</div>
+          <h1 id="editorTitle">Thema</h1>
+        </div>
+        <button id="editorMenuBtn" class="icon-btn" aria-label="Weitere Optionen">⋮</button>
+      </header>
+
+      <main class="editor-main">
+        <div class="date-line" id="dateLine"></div>
+        <textarea id="topicText" spellcheck="true" placeholder="Schreibe hier oder tippe auf das Mikrofon …"></textarea>
+        <div id="saveState" class="save-state">Gespeichert</div>
+      </main>
+
+      <button id="micBtn" class="floating-mic" aria-label="Spracheingabe starten" title="Sprechen">⌾</button>
+
+      <nav class="bottom-toolbar" aria-label="Textfunktionen">
+        <button id="editBtn" class="toolbar-btn"><span class="toolbar-icon">✎</span><span>Bearbeiten</span></button>
+        <button id="copyBtn" class="toolbar-btn"><span class="toolbar-icon">▣</span><span>Kopieren</span></button>
+        <button id="readBtn" class="toolbar-btn"><span class="toolbar-icon">◖</span><span>Vorlesen</span></button>
+        <button id="deleteBtn" class="toolbar-btn danger"><span class="toolbar-icon">♲</span><span>Löschen</span></button>
+      </nav>
+    </section>
+
+    <section id="trashScreen" class="screen">
+      <header class="topbar simple-topbar">
+        <button id="trashBackBtn" class="icon-btn" aria-label="Zurück">‹</button>
+        <h1>Papierkorb</h1>
+        <span class="topbar-spacer"></span>
+      </header>
+      <main class="content-area">
+        <p class="subtle">Gelöschte Themen kannst du hier wiederherstellen oder endgültig entfernen.</p>
+        <div id="trashList" class="topic-list"></div>
+      </main>
+    </section>
+
+    <aside id="sideMenu" class="side-menu" aria-hidden="true">
+      <div class="side-menu-card">
+        <div class="side-menu-header">
+          <div>
+            <h2>Reci mi</h2>
+            <p>Privat auf deinem Gerät</p>
+          </div>
+          <button id="closeMenuBtn" class="icon-btn" aria-label="Menü schließen">×</button>
+        </div>
+        <button id="openTrashBtn" class="menu-item">Papierkorb</button>
+        <button id="exportBtn" class="menu-item">Verschlüsselte Sicherung exportieren</button>
+        <label class="menu-item file-label">Sicherung importieren<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
+        <button id="installBtn" class="menu-item hidden">App installieren</button>
+        <button id="lockBtn" class="menu-item">Jetzt sperren</button>
+        <p class="menu-note">Deine Notizen werden verschlüsselt auf diesem Gerät gespeichert. Spracheingabe und Vorlesestimmen können je nach Browser oder Geräteeinstellung externe Sprachdienste verwenden.</p>
+      </div>
+    </aside>
+
+    <div id="modalBackdrop" class="modal-backdrop hidden" role="presentation"></div>
+
+    <dialog id="topicDialog" class="dialog-card">
+      <form id="topicForm" method="dialog">
+        <h2 id="topicDialogTitle">Neues Thema</h2>
+        <label for="topicName">Name</label>
+        <input id="topicName" maxlength="60" placeholder="z. B. Rahel und Adam" required />
+        <label for="topicCategory">Bereich</label>
+        <select id="topicCategory">
+          <option>Bücher</option>
+          <option>Apps</option>
+          <option>Privat</option>
+          <option>Sonstiges</option>
+        </select>
+        <div class="dialog-actions">
+          <button type="button" id="cancelTopicBtn" class="secondary-btn">Abbrechen</button>
+          <button type="submit" class="primary-btn">Speichern</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="dialog-card">
+      <form method="dialog">
+        <h2 id="confirmTitle">Wirklich löschen?</h2>
+        <p id="confirmText"></p>
+        <div class="dialog-actions">
+          <button type="button" id="confirmCancelBtn" class="secondary-btn">Abbrechen</button>
+          <button type="button" id="confirmOkBtn" class="danger-btn">Löschen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

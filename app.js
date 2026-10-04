@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.5.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -76,19 +76,25 @@ const SKY = {
 
 // Fläche (Liste, Thema, Blätter). Zwischen hell und dunkel wird umgeschaltet, sonst gemischt.
 const BODY = {
-  nacht:           { dark: true,  bg: '#1B2140', surface: '#232A4D', surface2: '#2D3560', ink: '#ECEAF4', muted: '#9AA1C2', accent: '#F1E4C3', accentInk: '#1B2140', accentText: '#F1E4C3' },
-  daemmerung:      { dark: true,  bg: '#211F42', surface: '#2B2952', surface2: '#363361', ink: '#F1ECF6', muted: '#AAA4C6', accent: '#F4BBA4', accentInk: '#2A1E33', accentText: '#F4BBA4' },
-  morgen:          { dark: false, bg: '#FFEAF1', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3A2533', muted: '#86707D', accent: '#F8B4CB', accentInk: '#3A1424', accentText: '#C2416F' },
-  vormittag:       { dark: false, bg: '#FFEFE3', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3A2A26', muted: '#887670', accent: '#FFCBA6', accentInk: '#3A2112', accentText: '#B85E25' },
-  mittag:          { dark: false, bg: '#EDF7E5', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#2C3624', muted: '#707C66', accent: '#C7E7A8', accentInk: '#22300F', accentText: '#5A8A2E' },
-  nachmittag:      { dark: false, bg: '#F6EAFF', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#34263F', muted: '#7E6F8A', accent: '#E3BDF5', accentInk: '#2E1840', accentText: '#9A4FC2' },
-  abenddaemmerung: { dark: true,  bg: '#251F3F', surface: '#30294F', surface2: '#3B335F', ink: '#F4ECF2', muted: '#B5A8C3', accent: '#F2A983', accentInk: '#2B1B26', accentText: '#F2A983' },
-  abend:           { dark: true,  bg: '#1D1C40', surface: '#28274F', surface2: '#32315E', ink: '#ECE9F6', muted: '#A4A1C7', accent: '#CDB6EE', accentInk: '#1D1C40', accentText: '#CDB6EE' }
+  // Nacht: Moonstone Blue (dunkel, mit bläulichem Mondstein-Leuchten)
+  nacht:           { dark: true,  bg: '#1D2537', surface: '#273147', surface2: '#303B53', ink: '#E9EEF7', muted: '#9DAAC1', accent: '#BFD1EA', accentInk: '#172031', accentText: '#BFD1EA', accentFill: 'linear-gradient(135deg, #D3E1F2 0%, #A5BCDD 45%, #E2EBF7 70%, #B2C6E3 100%)' },
+  // Morgendämmerung und Morgen: Pearl White
+  daemmerung:      { dark: false, bg: '#F5F0EC', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3B3438', muted: '#857A80', accent: '#EFE4E8', accentInk: '#3B3038', accentText: '#9A6F82', accentFill: 'linear-gradient(120deg, #FFFFFF 0%, #F6E9EE 28%, #E8EEF8 52%, #FBF3E6 76%, #FFFFFF 100%)' },
+  morgen:          { dark: false, bg: '#F7F2EE', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3B3438', muted: '#857A80', accent: '#EFE4E8', accentInk: '#3B3038', accentText: '#9A6F82', accentFill: 'linear-gradient(120deg, #FFFFFF 0%, #F6E9EE 28%, #E8EEF8 52%, #FBF3E6 76%, #FFFFFF 100%)' },
+  // Vormittag: Rose Quartz
+  vormittag:       { dark: false, bg: '#FBECEC', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3E2A2E', muted: '#8C7377', accent: '#EFBDC1', accentInk: '#3A1A20', accentText: '#B4525F', accentFill: 'linear-gradient(135deg, #F8D6D8 0%, #EDB3B8 45%, #F7CDD0 70%, #E7A9AF 100%)' },
+  // Mittag: Champagne Gold
+  mittag:          { dark: false, bg: '#FAF4E8', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#352C1E', muted: '#857A66', accent: '#D9BD85', accentInk: '#2E2311', accentText: '#94702F', accentFill: 'linear-gradient(135deg, #BC9658 0%, #EAD39F 32%, #C9A86A 52%, #F4E5BC 74%, #BF9A5E 100%)' },
+  // Nachmittag: Rainbow Prism
+  nachmittag:      { dark: false, bg: '#F1F2F6', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#2D2C3C', muted: '#77768A', accent: '#E3E1F7', accentInk: '#2A2840', accentText: '#6656AE', accentFill: 'linear-gradient(115deg, #FBD3E0 0%, #FDE6C1 22%, #DDF3D2 42%, #CFE7FA 62%, #E2D5F7 82%, #FBD3E0 100%)' },
+  // Abend: Soft Lavender
+  abenddaemmerung: { dark: false, bg: '#F0EAF8', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#302840', muted: '#7C7290', accent: '#CDBBE8', accentInk: '#261A3A', accentText: '#7651B2', accentFill: 'linear-gradient(135deg, #D9CBEE 0%, #BCA6E0 50%, #D7C8EC 100%)' },
+  abend:           { dark: false, bg: '#E9E1F4', surface: '#F8F4FD', surface2: '#F8F4FD', ink: '#2D2540', muted: '#776C8E', accent: '#C6B1E4', accentInk: '#241838', accentText: '#6E48AC', accentFill: 'linear-gradient(135deg, #D9CBEE 0%, #BCA6E0 50%, #D7C8EC 100%)' }
 };
 
 const CAT_COLORS = {
-  dark:  { books: '#E7B776', apps: '#8CC7B4', private: '#C3A8E6', other: '#AEB4CC', quick: '#EBA3B4' },
-  light: { books: '#E8955A', apps: '#6DB04E', private: '#A86DD8', other: '#6F9AD6', quick: '#E5719A' }
+  dark:  { books: '#E8C98E', apps: '#97D3BE', private: '#C9B2EC', other: '#B3C6E6', quick: '#F0B0C2' },
+  light: { books: '#D9A04E', apps: '#5FAE8C', private: '#9B78D6', other: '#7C9DD2', quick: '#E07C98' }
 };
 
 const PHASE_LABEL = {
@@ -234,11 +240,11 @@ function applySky(fromWeather = false) {
   let body;
   if (BA.dark === BB.dark) {
     body = {};
-    const swap = new Set(['accent', 'accentInk', 'accentText']);
+    const swap = new Set(['accent', 'accentInk', 'accentText', 'accentFill']);
     for (const k of Object.keys(BA)) body[k] = k === 'dark' ? BA.dark : swap.has(k) ? (t < 0.5 ? BA[k] : BB[k]) : mixHex(BA[k], BB[k], t);
   } else {
     // Hell/Dunkel wechselt genau dann, wenn der Himmel hell bzw. dunkel genug ist
-    body = skyIsLight ? (BA.dark ? BB : BA) : (BA.dark ? BA : BB);
+    body = t < 0.5 ? BA : BB;
   }
   root.setProperty('--bg', body.bg);
   root.setProperty('--surface', body.surface);
@@ -248,6 +254,7 @@ function applySky(fromWeather = false) {
   root.setProperty('--accent', body.accent);
   root.setProperty('--accent-ink', body.accentInk);
   root.setProperty('--accent-text', body.accentText);
+  root.setProperty('--accent-fill', body.accentFill || body.accent);
   root.setProperty('--line', body.dark ? 'rgba(236, 234, 244, .09)' : 'rgba(40, 40, 70, .10)');
   root.setProperty('--shadow', body.dark ? '0 14px 30px rgba(0, 0, 0, .32)' : '0 12px 26px rgba(60, 50, 40, .16)');
   root.setProperty('--shadow-soft', body.dark ? 'none' : '0 2px 10px rgba(60, 50, 40, .07)');
@@ -1024,6 +1031,7 @@ let dictHiddenTimer = null;
 function onHidden() {
   stopReading();
   versionCheckpoint('pause');
+  closeProtectedOnHide();
   if (dictWanted) {
     // Beim Sprechen legt das Handy oft kurz sein eigenes Sprach-Fenster über die App.
     // Das zählt nicht als „weg“ – Diktat läuft weiter (Sicherheitsstopp nach 5 Minuten).
@@ -1233,7 +1241,8 @@ function configureLockScreen() {
   els.pinConfirm.value = '';
   els.pinConfirm.classList.toggle('hidden', !firstRun);
   els.pinConfirm.required = firstRun;
-  els.pinLabel.textContent = firstRun ? 'Neue PIN festlegen' : 'PIN';
+  els.pinLabel.textContent = firstRun ? 'Neue PIN festlegen (6 Ziffern)' : 'PIN';
+  els.pinInput.placeholder = firstRun ? '6 Ziffern' : 'Deine PIN';
   els.pinSubmit.textContent = firstRun ? 'Reci mi einrichten' : 'Entsperren';
   els.pinForm.classList.toggle('hidden', bio);
   els.showPinBtn.classList.toggle('hidden', !bio);
@@ -1564,6 +1573,7 @@ function openActionSheet(id) {
   $('actionDrawBtn').classList.toggle('hidden', !inEditor);
   $('actionShareBtn').classList.toggle('hidden', topic.locked && !openedProtected.has(id));
   $('actionPinBtn').textContent = topic.pinned ? 'Nicht mehr anheften' : 'Oben anheften';
+  $('actionAttachBtn').classList.toggle('hidden', topic.category !== 'Schnellnotizen');
   openSheet(els.actionSheet);
 }
 
@@ -1870,6 +1880,7 @@ function insertSpokenSegment(raw) {
   const value = ta.value;
   let pos = document.activeElement === ta ? ta.selectionEnd : (dictInsertPos ?? value.length);
   pos = Math.min(Math.max(0, pos), value.length);
+  const undoEntry = { ta, before: value, pos, auto: dictLastAuto };
   let before = value.slice(0, pos);
   const after = value.slice(pos);
 
@@ -1906,6 +1917,8 @@ function insertSpokenSegment(raw) {
   dictLastAuto = null;
   try { ta.setSelectionRange(caret, caret); } catch {}
   ta.dispatchEvent(new Event('input', { bubbles: true }));
+  undoEntry.after = ta.value;
+  rememberDictUndo(undoEntry);
   if (caret >= ta.value.length - 2) ta.scrollTop = ta.scrollHeight;
   scheduleSentenceEnd();
 }
@@ -1931,7 +1944,9 @@ function endSpokenSentence() {
   if (!trimmed || /[.?!,;:]$/.test(trimmed) || /\n\s*$/.test(before)) return;
   const sentence = trimmed.split(/[.?!\n]/).pop();
   const mark = looksLikeQuestion(sentence) ? '?' : '.';
+  const wasUndoable = lastDictUndo && lastDictUndo.ta === ta && lastDictUndo.after === value;
   ta.value = trimmed + mark + value.slice(trimmed.length);
+  if (wasUndoable) lastDictUndo.after = ta.value;
   dictInsertPos = trimmed.length + 1 + (pos - trimmed.length);
   dictLastAuto = { pos: trimmed.length };
   ta.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2425,6 +2440,23 @@ async function deleteSketch() {
   showToast('Zeichnung gelöscht');
 }
 
+function closeProtectedOnHide() {
+  const t = currentTopic();
+  if (!t?.locked || !els.editorScreen.classList.contains('active')) return;
+  // Ausnahmen: Sprach-Fenster beim Diktieren, Fingerabdruck, Teilen/Dateiauswahl
+  if (dictWanted || biometricBusy || suppressLock) return;
+  versionCheckpoint('leave');
+  persistState(true).catch(() => {});
+  openedProtected.delete(t.id);
+  els.topicText.value = '';
+  closeAnySheet(true);
+  if (findOpen) closeFind();
+  currentTopicId = null;
+  history.replaceState({ rm: 'home' }, '');
+  showScreen(els.homeScreen);
+  renderTopics();
+}
+
 function wireQuick() {
   pad.init($('padCanvas'));
   window.addEventListener('resize', () => { if ($('quickScreen').classList.contains('active')) pad.resize(); });
@@ -2835,6 +2867,166 @@ function wireV22() {
 }
 
 /* =====================================================================
+   2.5: Schnellnotiz anhängen, Diktat rückgängig, Notfallkopie, PIN ändern
+   ===================================================================== */
+
+/* ---------- Schnellnotiz an ein bestehendes Thema anhängen ---------- */
+let attachSourceId = null;
+
+function openAttachPicker(sourceId) {
+  const src = state?.topics.find(t => t.id === sourceId);
+  if (!src) return;
+  attachSourceId = sourceId;
+  const targets = activeTopics().filter(t => t.id !== sourceId && t.category !== 'Schnellnotizen')
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.updatedAt) - new Date(a.updatedAt));
+  $('attachList').innerHTML = targets.length
+    ? targets.map(t => `<button type="button" class="sheet-item attach-item" data-id="${escapeHtml(t.id)}"><span class="dot" data-cat="${escapeHtml(catOf(t))}"></span><span>${t.pinned ? PIN_ICON : ''}${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</span></button>`).join('')
+    : '<p class="sheet-text">Es gibt noch kein anderes Thema. Leg zuerst ein Thema an.</p>';
+  $('attachList').querySelectorAll('.attach-item').forEach(b => b.addEventListener('click', () => attachToTopic(b.dataset.id)));
+  openSheet($('attachSheet'));
+}
+
+async function attachToTopic(targetId) {
+  const src = state?.topics.find(t => t.id === attachSourceId);
+  const target = state?.topics.find(t => t.id === targetId);
+  if (!src || !target) return;
+  const add = (src.content || '').trim();
+  const old = target.content || '';
+  pushVersion(target, old, 'Vor dem Anhängen');
+  if (add) target.content = old.replace(/\s+$/, '') + (old.trim() ? '\n\n' : '') + add;
+  if (src.sketches?.length) target.sketches = [...(target.sketches || []), ...src.sketches];
+  target.updatedAt = new Date().toISOString();
+  state.topics = state.topics.filter(t => t.id !== src.id);
+  await persistState(true);
+  closeSheet($('attachSheet'));
+  renderTopics();
+  showToast(`An „${target.title}“ angehängt`);
+  attachSourceId = null;
+}
+
+/* ---------- Diktat: letztes Stück rückgängig ---------- */
+let lastDictUndo = null;
+let dictUndoTimer = null;
+
+function rememberDictUndo(entry) {
+  // Alles seit der letzten Sprechpause zählt als ein Stück
+  const prev = lastDictUndo;
+  if (prev && prev.ta === entry.ta && prev.after === entry.before && Date.now() - prev.t < 2500) {
+    entry.before = prev.before; entry.pos = prev.pos; entry.auto = prev.auto;
+  }
+  entry.t = Date.now();
+  lastDictUndo = entry;
+  const pill = $('dictUndo');
+  pill.classList.remove('hidden');
+  clearTimeout(dictUndoTimer);
+  dictUndoTimer = setTimeout(() => pill.classList.add('hidden'), 7000);
+}
+
+function undoLastDictation() {
+  const u = lastDictUndo;
+  $('dictUndo').classList.add('hidden');
+  if (!u) return;
+  if (u.ta.value !== u.after) { showToast('Der Text wurde inzwischen geändert. Rückgängig geht hier nicht mehr.', 3500); lastDictUndo = null; return; }
+  clearTimeout(dictSentenceTimer);
+  dictSentenceTimer = null;
+  u.ta.value = u.before;
+  dictInsertPos = u.pos;
+  dictLastAuto = u.auto;
+  try { u.ta.setSelectionRange(u.pos, u.pos); } catch {}
+  u.ta.dispatchEvent(new Event('input', { bubbles: true }));
+  lastDictUndo = null;
+  showToast('Letztes Stück entfernt');
+}
+
+/* ---------- Notfallkopie ---------- */
+const EMERGENCY_KEY = 'emergency-copy';
+
+async function makeEmergencyCopy(reason) {
+  try {
+    if (cryptoKey && state) await persistState(true);
+    const copy = {
+      at: new Date().toISOString(), reason,
+      salt: localStorage.getItem(CONFIG_SALT),
+      verifier: localStorage.getItem(CONFIG_VERIFIER),
+      vault: await idbGet(VAULT_KEY)
+    };
+    if (copy.salt && copy.verifier && copy.vault) await idbSet(EMERGENCY_KEY, copy);
+  } catch {}
+}
+
+async function updateEmergencyMenu() {
+  const copy = await idbGet(EMERGENCY_KEY).catch(() => null);
+  const btn = $('emergencyBtn');
+  btn.classList.toggle('hidden', !copy);
+  if (copy) $('emergencyAge').textContent = `${copy.reason}, ${formatLong(copy.at)}`;
+}
+
+async function restoreEmergencyCopy() {
+  const copy = await idbGet(EMERGENCY_KEY).catch(() => null);
+  if (!copy) return;
+  const yes = await askConfirm('Notfallkopie zurückholen?',
+    `Reci mi geht zurück auf den Stand vom ${formatLong(copy.at)} (${copy.reason}). Danach entsperrst du mit der PIN, die damals galt.`, 'Zurückholen');
+  if (!yes) return;
+  clearTimeout(saveTimer); cryptoKey = null; state = null;
+  localStorage.setItem(CONFIG_SALT, copy.salt);
+  localStorage.setItem(CONFIG_VERIFIER, copy.verifier);
+  localStorage.removeItem(BIOMETRIC_CONFIG);
+  await idbDelete(BIOMETRIC_KEY).catch(() => {});
+  await idbSet(VAULT_KEY, copy.vault);
+  lockApp('Notfallkopie zurückgeholt. Bitte mit der damaligen PIN entsperren.');
+}
+
+/* ---------- PIN ändern (neue PINs immer 6 Ziffern) ---------- */
+function openPinChange() {
+  ['pinOld', 'pinNew', 'pinNew2'].forEach(id => { $(id).value = ''; });
+  $('pinChangeHint').textContent = '';
+  openSheet($('pinSheet'));
+  setTimeout(() => $('pinOld').focus(), 100);
+}
+
+async function changePin() {
+  const oldPin = $('pinOld').value.trim();
+  const p1 = $('pinNew').value.trim();
+  const p2 = $('pinNew2').value.trim();
+  const hint = $('pinChangeHint');
+  if (!/^\d{6}$/.test(p1)) { hint.textContent = 'Die neue PIN braucht genau 6 Ziffern.'; return; }
+  if (p1 !== p2) { hint.textContent = 'Die beiden neuen PINs sind nicht gleich.'; return; }
+  const btn = $('pinChangeOk');
+  btn.disabled = true;
+  hint.textContent = '';
+  try {
+    if (!(await verifyPin(oldPin))) { hint.textContent = 'Die jetzige PIN stimmt nicht.'; return; }
+    await makeEmergencyCopy('Vor dem PIN-Wechsel');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await deriveKey(p1, salt);
+    const verifier = await encryptValue({ ok: true, marker: 'reci-mi' }, key);
+    const vault = await encryptValue(state, key);
+    await idbSet(VAULT_KEY, vault);
+    localStorage.setItem(CONFIG_SALT, bytesToBase64(salt));
+    localStorage.setItem(CONFIG_VERIFIER, JSON.stringify(verifier));
+    cryptoKey = key;
+    if (hasBiometricConfig()) await idbSet(BIOMETRIC_KEY, key).catch(() => {});
+    await idbSet(SESSION_KEY, key).catch(() => {});
+    closeSheet($('pinSheet'));
+    showToast('Neue PIN ist gespeichert. Mach am besten gleich eine neue Sicherung.', 4000);
+  } catch {
+    hint.textContent = 'Das hat nicht geklappt. Deine alte PIN gilt weiter.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function wireV25() {
+  $('actionAttachBtn').addEventListener('click', () => openAttachPicker(actionTopicId));
+  $('attachCancelBtn').addEventListener('click', () => closeSheet($('attachSheet')));
+  $('dictUndo').addEventListener('click', undoLastDictation);
+  $('emergencyBtn').addEventListener('click', restoreEmergencyCopy);
+  $('pinMenuBtn').addEventListener('click', openPinChange);
+  $('pinChangeForm').addEventListener('submit', e => { e.preventDefault(); changePin(); });
+  $('pinChangeCancel').addEventListener('click', () => closeSheet($('pinSheet')));
+}
+
+/* =====================================================================
    Sicherung
    ===================================================================== */
 
@@ -2872,12 +3064,15 @@ async function importBackup(file) {
   }
   const yes = await askConfirm('Sicherung laden?', 'Alles, was jetzt auf diesem Gerät ist, wird durch die Sicherung ersetzt. Danach brauchst du die PIN aus der Sicherung.', 'Laden');
   if (!yes) return;
+  await makeEmergencyCopy('Vor dem Laden einer Sicherung');
+  // Wichtig: aktuellen Stand nicht mehr speichern, sonst überschreibt er die geladene Sicherung
+  clearTimeout(saveTimer); cryptoKey = null; state = null;
   localStorage.setItem(CONFIG_SALT, parsed.salt);
   localStorage.setItem(CONFIG_VERIFIER, JSON.stringify(parsed.verifier));
   localStorage.removeItem(BIOMETRIC_CONFIG);
   await idbDelete(BIOMETRIC_KEY).catch(() => {});
   await idbSet(VAULT_KEY, parsed.vault);
-  lockApp('Sicherung geladen. Bitte einmal mit der PIN dieser Sicherung entsperren.');
+  lockApp('Sicherung geladen. Bitte einmal mit der PIN dieser Sicherung entsperren. Dein vorheriger Stand liegt als Notfallkopie im Menü.');
 }
 
 function registerServiceWorker() {
@@ -2894,7 +3089,8 @@ function wireEvents() {
   els.pinForm.addEventListener('submit', async e => {
     e.preventDefault();
     const pin = els.pinInput.value.trim();
-    if (!/^\d{4,6}$/.test(pin)) { els.lockHint.textContent = 'Bitte 4 bis 6 Ziffern eingeben.'; return; }
+    const firstSetup = !hasVaultConfig();
+    if (firstSetup ? !/^\d{6}$/.test(pin) : !/^\d{4,6}$/.test(pin)) { els.lockHint.textContent = firstSetup ? 'Die neue PIN braucht genau 6 Ziffern.' : 'Bitte deine PIN eingeben (4 bis 6 Ziffern).'; return; }
     els.pinSubmit.disabled = true;
     els.lockHint.textContent = '';
     try {
@@ -2980,6 +3176,7 @@ function wireEvents() {
   els.micBtn.addEventListener('click', () => { dictTarget = null; dictMicBtn = null; toggleRecognition(); });
   wireQuick();
   wireV22();
+  wireV25();
   els.editorMenuBtn.addEventListener('click', () => openActionSheet(currentTopicId));
 
   els.topicText.addEventListener('input', () => {
@@ -2993,7 +3190,7 @@ function wireEvents() {
     persistState();
   });
 
-  els.menuBtn.addEventListener('click', () => { updateBiometricUi(); $('backupAge').textContent = backupAgeText(); openSheet(els.menuSheet); });
+  els.menuBtn.addEventListener('click', () => { updateBiometricUi(); $('backupAge').textContent = backupAgeText(); updateEmergencyMenu(); openSheet(els.menuSheet); });
   els.openTrashBtn.addEventListener('click', () => { closeSheetAndReplace(els.menuSheet, { rm: 'trash' }); openTrash({ push: false }); });
   els.biometricMenuBtn.addEventListener('click', async () => {
     if (hasBiometricConfig()) { disableBiometrics(); }
@@ -3033,7 +3230,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });

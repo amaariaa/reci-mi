@@ -11,7 +11,7 @@
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.woff" as="font" type="font/woff" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=2.3.0" />
+  <link rel="stylesheet" href="styles.css?v=2.5.0" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -33,7 +33,7 @@
 
         <form id="pinForm" class="pin-form" autocomplete="off">
           <label id="pinLabel" for="pinInput">PIN</label>
-          <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="4 bis 6 Ziffern" autocomplete="new-password" required />
+          <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="Deine PIN" autocomplete="new-password" required />
           <input id="pinConfirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="PIN wiederholen" autocomplete="new-password" />
           <button id="pinSubmit" class="btn btn-main" type="submit">Entsperren</button>
         </form>
@@ -227,6 +227,7 @@
       <h2 id="actionTitle">Thema</h2>
       <div class="sheet-list">
         <button type="button" id="actionOpenBtn" class="sheet-item">Öffnen</button>
+        <button type="button" id="actionAttachBtn" class="sheet-item">Zu Thema hinzufügen</button>
         <button type="button" id="actionFindBtn" class="sheet-item">Im Text suchen</button>
         <button type="button" id="actionShareBtn" class="sheet-item">Teilen</button>
         <button type="button" id="actionVersionsBtn" class="sheet-item">Frühere Versionen</button>
@@ -251,10 +252,12 @@
         <button type="button" id="exportBtn" class="sheet-item">Sicherung speichern<small id="backupAge" class="item-sub"></small></button>
         <label class="sheet-item">Sicherung laden<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
         <button type="button" id="installBtn" class="sheet-item hidden">App installieren</button>
+        <button type="button" id="pinMenuBtn" class="sheet-item">PIN ändern</button>
+        <button type="button" id="emergencyBtn" class="sheet-item hidden">Notfallkopie zurückholen<small id="emergencyAge" class="item-sub"></small></button>
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 2.3</p>
+      <p class="sheet-note version">Version 2.5</p>
     </dialog>
 
     <!-- Blatt: Name -->
@@ -375,9 +378,41 @@
       </div>
     </dialog>
 
+    <button id="dictUndo" class="dict-undo hidden" type="button">
+      <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+      Letztes rückgängig
+    </button>
+
+    <dialog id="attachSheet" class="sheet">
+      <div class="grab" aria-hidden="true"></div>
+      <h2>Zu welchem Thema?</h2>
+      <p class="sheet-text">Die Schnellnotiz wird unten an das Thema angehängt und verschwindet dann aus den Schnellnotizen.</p>
+      <div id="attachList" class="sheet-list attach-list"></div>
+      <button type="button" id="attachCancelBtn" class="btn btn-ghost wide">Abbrechen</button>
+    </dialog>
+
+    <dialog id="pinSheet" class="sheet">
+      <form id="pinChangeForm" method="dialog" autocomplete="off">
+        <div class="grab" aria-hidden="true"></div>
+        <h2>PIN ändern</h2>
+        <p class="sheet-text">Die neue PIN hat 6 Ziffern. Im Alltag reicht weiter dein Fingerabdruck.</p>
+        <label class="lbl" for="pinOld">Jetzige PIN</label>
+        <input id="pinOld" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
+        <label class="lbl" for="pinNew">Neue PIN (6 Ziffern)</label>
+        <input id="pinNew" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
+        <label class="lbl" for="pinNew2">Neue PIN wiederholen</label>
+        <input id="pinNew2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
+        <p id="pinChangeHint" class="sheet-hint" role="status"></p>
+        <div class="actions">
+          <button type="button" id="pinChangeCancel" class="btn btn-ghost">Abbrechen</button>
+          <button type="submit" id="pinChangeOk" class="btn btn-main">PIN speichern</button>
+        </div>
+      </form>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=2.3.0" defer></script>
+  <script src="app.js?v=2.5.0" defer></script>
 </body>
 </html>

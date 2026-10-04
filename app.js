@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -78,17 +78,17 @@ const SKY = {
 const BODY = {
   nacht:           { dark: true,  bg: '#1B2140', surface: '#232A4D', surface2: '#2D3560', ink: '#ECEAF4', muted: '#9AA1C2', accent: '#F1E4C3', accentInk: '#1B2140', accentText: '#F1E4C3' },
   daemmerung:      { dark: true,  bg: '#211F42', surface: '#2B2952', surface2: '#363361', ink: '#F1ECF6', muted: '#AAA4C6', accent: '#F4BBA4', accentInk: '#2A1E33', accentText: '#F4BBA4' },
-  morgen:          { dark: false, bg: '#F8F3EC', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#2A2B45', muted: '#6E6D86', accent: '#F2B48F', accentInk: '#2E1D16', accentText: '#B4562E' },
-  vormittag:       { dark: false, bg: '#F2F6F9', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#22304A', muted: '#66738C', accent: '#9CCBEE', accentInk: '#14243A', accentText: '#2F6FA6' },
-  mittag:          { dark: false, bg: '#FBF8F0', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#2B2B3A', muted: '#73726C', accent: '#F3CD69', accentInk: '#2B2410', accentText: '#94680C' },
-  nachmittag:      { dark: false, bg: '#F8F0E4', surface: '#FFFDF9', surface2: '#FFFDF9', ink: '#33293A', muted: '#7A6C66', accent: '#ECB47E', accentInk: '#2E1F14', accentText: '#A45A1E' },
+  morgen:          { dark: false, bg: '#FFEAF1', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3A2533', muted: '#86707D', accent: '#F8B4CB', accentInk: '#3A1424', accentText: '#C2416F' },
+  vormittag:       { dark: false, bg: '#FFEFE3', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#3A2A26', muted: '#887670', accent: '#FFCBA6', accentInk: '#3A2112', accentText: '#B85E25' },
+  mittag:          { dark: false, bg: '#EDF7E5', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#2C3624', muted: '#707C66', accent: '#C7E7A8', accentInk: '#22300F', accentText: '#5A8A2E' },
+  nachmittag:      { dark: false, bg: '#F6EAFF', surface: '#FFFFFF', surface2: '#FFFFFF', ink: '#34263F', muted: '#7E6F8A', accent: '#E3BDF5', accentInk: '#2E1840', accentText: '#9A4FC2' },
   abenddaemmerung: { dark: true,  bg: '#251F3F', surface: '#30294F', surface2: '#3B335F', ink: '#F4ECF2', muted: '#B5A8C3', accent: '#F2A983', accentInk: '#2B1B26', accentText: '#F2A983' },
   abend:           { dark: true,  bg: '#1D1C40', surface: '#28274F', surface2: '#32315E', ink: '#ECE9F6', muted: '#A4A1C7', accent: '#CDB6EE', accentInk: '#1D1C40', accentText: '#CDB6EE' }
 };
 
 const CAT_COLORS = {
   dark:  { books: '#E7B776', apps: '#8CC7B4', private: '#C3A8E6', other: '#AEB4CC', quick: '#EBA3B4' },
-  light: { books: '#C4862C', apps: '#3A967C', private: '#9270CC', other: '#878DA6', quick: '#C25A74' }
+  light: { books: '#E8955A', apps: '#6DB04E', private: '#A86DD8', other: '#6F9AD6', quick: '#E5719A' }
 };
 
 const PHASE_LABEL = {

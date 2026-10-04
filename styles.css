@@ -104,13 +104,17 @@ button { -webkit-tap-highlight-color: transparent; }
 #topicText { flex: 1; width: 100%; resize: none; border: 0; border-radius: 24px; outline: none; padding: 22px 20px 28px; background: rgba(255,252,248,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.55), var(--shadow-soft); color: #30271f; font: 21px/1.55 Georgia, "Times New Roman", serif; caret-color: var(--sage-dark); overflow-y: auto; }
 #topicText[readonly] { background: rgba(255,252,248,.60); }
 .save-state { height: 20px; margin-top: 6px; color: var(--muted); font-size: 12px; text-align: right; padding-right: 6px; }
+.ui-icon { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.mic-icon { width: 31px; height: 31px; stroke-width: 1.8; }
+
 .floating-mic { position: fixed; right: max(24px, calc((100vw - 720px)/2 + 24px)); bottom: calc(114px + var(--safe-bottom)); z-index: 14; width: 64px; height: 64px; border: 0; border-radius: 50%; background: linear-gradient(145deg, #52684c, #354b35); color: #fff; font-size: 34px; box-shadow: 0 13px 26px rgba(54,74,52,.32); cursor: pointer; }
 .floating-mic.listening { animation: pulse 1.2s infinite; background: #8f4c46; }
 @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(143,76,70,.35),0 13px 26px rgba(54,74,52,.25)} 50%{box-shadow:0 0 0 12px rgba(143,76,70,0),0 13px 26px rgba(54,74,52,.25)} }
 .bottom-toolbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + var(--safe-bottom)); width: min(calc(100% - 32px), 688px); z-index: 13; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 8px 5px; border-radius: 24px; background: rgba(255,252,248,.92); border: 1px solid rgba(255,255,255,.82); box-shadow: 0 14px 30px rgba(77,58,45,.14); backdrop-filter: blur(16px); }
 .toolbar-btn { border: 0; background: transparent; color: var(--ink); display: grid; gap: 2px; place-items: center; min-height: 58px; border-radius: 17px; font-size: 11px; cursor: pointer; }
 .toolbar-btn:active { background: rgba(95,114,87,.08); }
-.toolbar-icon { font-size: 23px; line-height: 1; }
+.toolbar-icon { width: 25px; height: 25px; display: grid; place-items: center; font-size: 23px; line-height: 1; }
+.toolbar-icon .ui-icon { width: 24px; height: 24px; }
 .toolbar-btn.danger { color: var(--danger); }
 .toolbar-btn.active { color: #fff; background: var(--sage-dark); }
 
@@ -151,3 +155,33 @@ button { -webkit-tap-highlight-color: transparent; }
   #topicText { font-size: 19px; padding: 19px 17px 24px; }
   .toolbar-btn { font-size: 10px; }
 }
+
+/* Reci mi V1.2 – biometrische Entsperrung */
+.biometric-unlock {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 2px 0 14px;
+  min-height: 52px;
+  font-weight: 650;
+}
+.biometric-unlock .fingerprint-icon { width: 26px; height: 26px; stroke-width: 1.7; }
+.biometric-unlock:disabled { opacity: .62; cursor: wait; }
+.bio-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+.bio-divider::before,
+.bio-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+.pin-unlock-btn { width: 100%; }

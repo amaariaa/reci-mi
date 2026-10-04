@@ -6,24 +6,30 @@
   <meta name="theme-color" content="#f6ede5" />
   <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css?v=1.2.0" />
   <title>Reci mi</title>
 </head>
 <body>
   <div id="app" class="app-shell">
     <section id="lockScreen" class="lock-screen screen active" aria-labelledby="lockTitle">
       <div class="lock-card">
-        <div class="brand-mark" aria-hidden="true">G</div>
+        <div class="brand-mark" aria-hidden="true">R</div>
         <h1 id="lockTitle">Reci mi</h1>
         <p id="lockSubtitle">Deine Gedanken bleiben bei dir.</p>
+
+        <button id="bioUnlockBtn" class="primary-btn biometric-unlock hidden" type="button">
+          <svg class="ui-icon fingerprint-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 20c1.1-2.1 1.8-4.5 1.8-7a2 2 0 0 1 4 0c0 2.4-.5 4.6-1.3 6.6"/><path d="M5.8 18.7C7.1 16.6 8 14.3 8 12a4 4 0 0 1 8 0c0 2.2-.3 4.3-.9 6.2"/><path d="M4 15.5V12a8 8 0 0 1 16 0c0 1.7-.1 3.3-.4 4.8"/><path d="M6 8.2A7 7 0 0 1 18.6 9"/></svg>
+          <span>Mit Fingerabdruck entsperren</span>
+        </button>
+        <div id="bioDivider" class="bio-divider hidden"><span>oder PIN</span></div>
 
         <form id="pinForm" class="pin-form" autocomplete="off">
           <label id="pinLabel" for="pinInput">PIN</label>
           <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="4 bis 6 Ziffern" autocomplete="new-password" required />
           <input id="pinConfirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="PIN wiederholen" autocomplete="new-password" />
-          <button id="pinSubmit" class="primary-btn" type="submit">Entsperren</button>
+          <button id="pinSubmit" class="secondary-btn pin-unlock-btn" type="submit">Mit PIN entsperren</button>
         </form>
         <p id="lockHint" class="hint"></p>
       </div>
@@ -80,13 +86,15 @@
         <div id="saveState" class="save-state">Gespeichert</div>
       </main>
 
-      <button id="micBtn" class="floating-mic" aria-label="Spracheingabe starten" title="Sprechen">⌾</button>
+      <button id="micBtn" class="floating-mic" aria-label="Spracheingabe starten" title="Sprechen">
+        <svg class="ui-icon mic-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
+      </button>
 
       <nav class="bottom-toolbar" aria-label="Textfunktionen">
-        <button id="editBtn" class="toolbar-btn"><span class="toolbar-icon">✎</span><span>Bearbeiten</span></button>
-        <button id="copyBtn" class="toolbar-btn"><span class="toolbar-icon">▣</span><span>Kopieren</span></button>
-        <button id="readBtn" class="toolbar-btn"><span class="toolbar-icon">◖</span><span>Vorlesen</span></button>
-        <button id="deleteBtn" class="toolbar-btn danger"><span class="toolbar-icon">♲</span><span>Löschen</span></button>
+        <button id="editBtn" class="toolbar-btn"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></span><span>Bearbeiten</span></button>
+        <button id="copyBtn" class="toolbar-btn"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></span><span>Kopieren</span></button>
+        <button id="readBtn" class="toolbar-btn"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 7 9H4v6h3l4 4V5Z"/><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/></svg></span><span>Vorlesen</span></button>
+        <button id="deleteBtn" class="toolbar-btn danger"><span class="toolbar-icon"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></span><span>Löschen</span></button>
       </nav>
     </section>
 
@@ -115,6 +123,7 @@
         <button id="exportBtn" class="menu-item">Verschlüsselte Sicherung exportieren</button>
         <label class="menu-item file-label">Sicherung importieren<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
         <button id="installBtn" class="menu-item hidden">App installieren</button>
+        <button id="biometricMenuBtn" class="menu-item">Fingerabdruck aktivieren</button>
         <button id="lockBtn" class="menu-item">Jetzt sperren</button>
         <p class="menu-note">Deine Notizen werden verschlüsselt auf diesem Gerät gespeichert. Spracheingabe und Vorlesestimmen können je nach Browser oder Geräteeinstellung externe Sprachdienste verwenden.</p>
       </div>
@@ -155,6 +164,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js" defer></script>
+  <script src="app.js?v=1.2.0" defer></script>
 </body>
 </html>

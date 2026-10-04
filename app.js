@@ -1,12 +1,14 @@
 'use strict';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
 const CONFIG_SALT = 'gr_salt_v1';
 const CONFIG_VERIFIER = 'gr_verifier_v1';
-const AUTO_LOCK_MS = 5 * 60 * 1000;
+const BIOMETRIC_CONFIG = 'rm_biometric_v1';
+const BIOMETRIC_KEY = 'biometric-key';
+const BACKGROUND_LOCK_DELAY_MS = 1500;
 
 let db;
 let cryptoKey = null;
@@ -14,7 +16,11 @@ let state = null;
 let currentTopicId = null;
 let currentFilter = 'Alle';
 let saveTimer = null;
-let lockTimer = null;
+let backgroundLockTimer = null;
+let resumeScreen = 'home';
+let resumeTopicId = null;
+let biometricBusy = false;
+let suppressBackgroundLock = false;
 let recognition = null;
 let isListening = false;
 let deferredInstallPrompt = null;
@@ -32,13 +38,13 @@ const categoryIcons = {
 const $ = id => document.getElementById(id);
 const els = {
   lockScreen: $('lockScreen'), homeScreen: $('homeScreen'), editorScreen: $('editorScreen'), trashScreen: $('trashScreen'),
-  pinForm: $('pinForm'), pinInput: $('pinInput'), pinConfirm: $('pinConfirm'), pinSubmit: $('pinSubmit'), pinLabel: $('pinLabel'), lockSubtitle: $('lockSubtitle'), lockHint: $('lockHint'),
+  pinForm: $('pinForm'), pinInput: $('pinInput'), pinConfirm: $('pinConfirm'), pinSubmit: $('pinSubmit'), pinLabel: $('pinLabel'), lockSubtitle: $('lockSubtitle'), lockHint: $('lockHint'), bioUnlockBtn: $('bioUnlockBtn'), bioDivider: $('bioDivider'),
   menuBtn: $('menuBtn'), closeMenuBtn: $('closeMenuBtn'), sideMenu: $('sideMenu'), searchBtn: $('searchBtn'), searchWrap: $('searchWrap'), searchInput: $('searchInput'), filterRow: $('filterRow'),
   topicList: $('topicList'), emptyState: $('emptyState'), newTopicBtn: $('newTopicBtn'), quickAddBtn: $('quickAddBtn'), emptyAddBtn: $('emptyAddBtn'),
   backBtn: $('backBtn'), editorMenuBtn: $('editorMenuBtn'), editorTitle: $('editorTitle'), editorBadge: $('editorBadge'), dateLine: $('dateLine'), topicText: $('topicText'), saveState: $('saveState'), micBtn: $('micBtn'),
   editBtn: $('editBtn'), copyBtn: $('copyBtn'), readBtn: $('readBtn'), deleteBtn: $('deleteBtn'),
   trashBackBtn: $('trashBackBtn'), trashList: $('trashList'), openTrashBtn: $('openTrashBtn'),
-  exportBtn: $('exportBtn'), importInput: $('importInput'), installBtn: $('installBtn'), lockBtn: $('lockBtn'),
+  exportBtn: $('exportBtn'), importInput: $('importInput'), installBtn: $('installBtn'), biometricMenuBtn: $('biometricMenuBtn'), lockBtn: $('lockBtn'),
   topicDialog: $('topicDialog'), topicForm: $('topicForm'), topicDialogTitle: $('topicDialogTitle'), topicName: $('topicName'), topicCategory: $('topicCategory'), cancelTopicBtn: $('cancelTopicBtn'),
   confirmDialog: $('confirmDialog'), confirmTitle: $('confirmTitle'), confirmText: $('confirmText'), confirmCancelBtn: $('confirmCancelBtn'), confirmOkBtn: $('confirmOkBtn'),
   toast: $('toast')
@@ -74,6 +80,15 @@ function idbSet(key, value) {
   });
 }
 
+function idbDelete(key) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 function bytesToBase64(bytes) {
   let binary = '';
   const chunk = 0x8000;
@@ -88,6 +103,53 @@ function base64ToBytes(str) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function bytesToBase64Url(bytes) {
+  return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function sameBytes(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+function concatBytes(...parts) {
+  const length = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+function derEcdsaToRaw(signature, size = 32) {
+  const bytes = signature instanceof Uint8Array ? signature : new Uint8Array(signature);
+  let offset = 0;
+  if (bytes[offset++] !== 0x30) throw new Error('Ungültige Signatur');
+  let seqLen = bytes[offset++];
+  if (seqLen & 0x80) {
+    const count = seqLen & 0x7f;
+    seqLen = 0;
+    for (let i = 0; i < count; i++) seqLen = (seqLen << 8) | bytes[offset++];
+  }
+  if (bytes[offset++] !== 0x02) throw new Error('Ungültige Signatur');
+  let rLen = bytes[offset++];
+  let r = bytes.slice(offset, offset + rLen);
+  offset += rLen;
+  if (bytes[offset++] !== 0x02) throw new Error('Ungültige Signatur');
+  let sLen = bytes[offset++];
+  let sigS = bytes.slice(offset, offset + sLen);
+  while (r.length > size && r[0] === 0) r = r.slice(1);
+  while (sigS.length > size && sigS[0] === 0) sigS = sigS.slice(1);
+  const out = new Uint8Array(size * 2);
+  out.set(r, size - r.length);
+  out.set(sigS, size * 2 - sigS.length);
+  return out;
 }
 
 async function deriveKey(pin, saltBytes) {
@@ -121,13 +183,43 @@ function initialState() {
   return {
     version: APP_VERSION,
     createdAt: new Date().toISOString(),
-    settings: { autoLockMinutes: 5 },
+    settings: { lockMode: 'when-backgrounded' },
     topics: []
   };
 }
 
 function hasVaultConfig() {
   return Boolean(localStorage.getItem(CONFIG_SALT) && localStorage.getItem(CONFIG_VERIFIER));
+}
+
+function getBiometricConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(BIOMETRIC_CONFIG) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function hasBiometricConfig() {
+  const cfg = getBiometricConfig();
+  return Boolean(cfg?.credentialId && cfg?.publicKey && cfg?.alg);
+}
+
+async function platformBiometricsAvailable() {
+  if (!window.PublicKeyCredential || !navigator.credentials) return false;
+  if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return true;
+  try {
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch {
+    return false;
+  }
+}
+
+function updateBiometricUi() {
+  const enabled = hasBiometricConfig();
+  els.bioUnlockBtn.classList.toggle('hidden', !enabled);
+  els.bioDivider.classList.toggle('hidden', !enabled);
+  els.biometricMenuBtn.textContent = enabled ? 'Fingerabdruck deaktivieren' : 'Fingerabdruck aktivieren';
 }
 
 function configureLockScreen() {
@@ -137,12 +229,16 @@ function configureLockScreen() {
   els.pinConfirm.classList.toggle('hidden', !firstRun);
   els.pinConfirm.required = firstRun;
   els.pinLabel.textContent = firstRun ? 'Neue PIN festlegen' : 'PIN';
-  els.pinSubmit.textContent = firstRun ? 'Reci mi einrichten' : 'Entsperren';
-  els.lockSubtitle.textContent = firstRun ? 'Richte deine private App einmalig ein.' : 'Deine Gedanken bleiben bei dir.';
+  els.pinSubmit.textContent = firstRun ? 'Reci mi einrichten' : 'Mit PIN entsperren';
+  updateBiometricUi();
+  const biometric = !firstRun && hasBiometricConfig();
+  els.lockSubtitle.textContent = firstRun
+    ? 'Richte deine private App einmalig ein.'
+    : (biometric ? 'Entsperre Reci mi mit deinem Fingerabdruck.' : 'Deine Gedanken bleiben bei dir.');
   els.lockHint.textContent = firstRun
-    ? 'Wichtig: Wenn du deine PIN vergisst, können die verschlüsselten Notizen nicht wiederhergestellt werden.'
-    : 'Die PIN wird nicht als Klartext gespeichert.';
-  setTimeout(() => els.pinInput.focus(), 80);
+    ? 'Wichtig: Die PIN bleibt dein Notfallzugang. Wenn du sie vergisst, können die verschlüsselten Notizen nicht wiederhergestellt werden.'
+    : (biometric ? 'Die PIN bleibt als Notfallzugang verfügbar.' : 'Die PIN wird nicht als Klartext gespeichert.');
+  if (!biometric) setTimeout(() => els.pinInput.focus(), 80);
 }
 
 async function setupVault(pin) {
@@ -153,23 +249,228 @@ async function setupVault(pin) {
   const encryptedVault = await encryptValue(fresh, key);
   localStorage.setItem(CONFIG_SALT, bytesToBase64(salt));
   localStorage.setItem(CONFIG_VERIFIER, JSON.stringify(verifier));
+  localStorage.removeItem(BIOMETRIC_CONFIG);
+  await idbDelete(BIOMETRIC_KEY).catch(() => {});
   await idbSet(VAULT_KEY, encryptedVault);
   cryptoKey = key;
   state = fresh;
 }
 
-async function unlockVault(pin) {
-  const salt = base64ToBytes(localStorage.getItem(CONFIG_SALT));
-  const key = await deriveKey(pin, salt);
+async function loadVaultWithKey(key) {
   const verifier = JSON.parse(localStorage.getItem(CONFIG_VERIFIER));
   const check = await decryptValue(verifier, key);
-  if (!check || check.marker !== 'reci-mi') throw new Error('Falsche PIN');
+  if (!check || check.marker !== 'reci-mi') throw new Error('Entsperren nicht möglich');
   const encryptedVault = await idbGet(VAULT_KEY);
   if (!encryptedVault) throw new Error('Keine verschlüsselten Daten gefunden');
   const decrypted = await decryptValue(encryptedVault, key);
   cryptoKey = key;
   state = decrypted;
   if (!Array.isArray(state.topics)) state.topics = [];
+  state.version = APP_VERSION;
+  state.settings = { ...(state.settings || {}), lockMode: 'when-backgrounded' };
+  delete state.settings.autoLockMinutes;
+}
+
+async function unlockVault(pin) {
+  const salt = base64ToBytes(localStorage.getItem(CONFIG_SALT));
+  const key = await deriveKey(pin, salt);
+  try {
+    await loadVaultWithKey(key);
+  } catch {
+    throw new Error('Falsche PIN');
+  }
+}
+
+async function importBiometricPublicKey(cfg) {
+  const spki = base64ToBytes(cfg.publicKey);
+  if (cfg.alg === -7) {
+    return crypto.subtle.importKey(
+      'spki',
+      spki,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify']
+    );
+  }
+  if (cfg.alg === -257) {
+    return crypto.subtle.importKey(
+      'spki',
+      spki,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+  }
+  throw new Error('Dieses Fingerabdruck-Verfahren wird nicht unterstützt');
+}
+
+async function verifyBiometricAssertion(assertion, cfg, challenge) {
+  const expectedId = base64ToBytes(cfg.credentialId);
+  const actualId = new Uint8Array(assertion.rawId);
+  if (!sameBytes(expectedId, actualId)) throw new Error('Fingerabdruck konnte nicht bestätigt werden');
+
+  const clientDataBytes = new Uint8Array(assertion.response.clientDataJSON);
+  const clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+  if (clientData.type !== 'webauthn.get') throw new Error('Fingerabdruck konnte nicht bestätigt werden');
+  if (clientData.challenge !== bytesToBase64Url(challenge)) throw new Error('Fingerabdruck konnte nicht bestätigt werden');
+  if (clientData.origin !== location.origin) throw new Error('Fingerabdruck konnte nicht bestätigt werden');
+
+  const clientHash = new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataBytes));
+  const authData = new Uint8Array(assertion.response.authenticatorData);
+  const signedData = concatBytes(authData, clientHash);
+  const publicKey = await importBiometricPublicKey(cfg);
+
+  let signature = new Uint8Array(assertion.response.signature);
+  let valid = false;
+  if (cfg.alg === -7) {
+    try {
+      valid = await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        publicKey,
+        derEcdsaToRaw(signature, 32),
+        signedData
+      );
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      try {
+        valid = await crypto.subtle.verify(
+          { name: 'ECDSA', hash: 'SHA-256' },
+          publicKey,
+          signature,
+          signedData
+        );
+      } catch {
+        valid = false;
+      }
+    }
+  } else {
+    valid = await crypto.subtle.verify(
+      { name: 'RSASSA-PKCS1-v1_5' },
+      publicKey,
+      signature,
+      signedData
+    );
+  }
+  if (!valid) throw new Error('Fingerabdruck konnte nicht bestätigt werden');
+}
+
+async function enableBiometrics() {
+  if (!cryptoKey || !state) {
+    showToast('Bitte zuerst mit deiner PIN entsperren');
+    return;
+  }
+  if (!(await platformBiometricsAvailable())) {
+    showToast('Fingerabdruck wird von diesem Browser nicht unterstützt', 4200);
+    return;
+  }
+
+  biometricBusy = true;
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const userId = crypto.getRandomValues(new Uint8Array(16));
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: 'Reci mi', id: location.hostname },
+        user: {
+          id: userId,
+          name: 'reci-mi-local',
+          displayName: 'Reci mi'
+        },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },
+          { type: 'public-key', alg: -257 }
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          residentKey: 'discouraged',
+          userVerification: 'required'
+        },
+        timeout: 60000,
+        attestation: 'none'
+      }
+    });
+
+    const publicKey = credential.response.getPublicKey?.();
+    const alg = credential.response.getPublicKeyAlgorithm?.();
+    if (!publicKey || ![-7, -257].includes(alg)) {
+      throw new Error('Dieser Browser kann den Fingerabdruck nicht sicher speichern');
+    }
+
+    await idbSet(BIOMETRIC_KEY, cryptoKey);
+    localStorage.setItem(BIOMETRIC_CONFIG, JSON.stringify({
+      credentialId: bytesToBase64(new Uint8Array(credential.rawId)),
+      publicKey: bytesToBase64(new Uint8Array(publicKey)),
+      alg,
+      createdAt: new Date().toISOString()
+    }));
+    updateBiometricUi();
+    closeMenu();
+    showToast('Fingerabdruck ist aktiviert');
+  } catch (err) {
+    if (err?.name !== 'NotAllowedError') {
+      showToast(err?.message || 'Fingerabdruck konnte nicht eingerichtet werden', 4500);
+    }
+  } finally {
+    biometricBusy = false;
+  }
+}
+
+async function disableBiometrics() {
+  const yes = await askConfirm(
+    'Fingerabdruck deaktivieren?',
+    'Danach entsperrst du Reci mi wieder mit deiner PIN.',
+    'Deaktivieren'
+  );
+  if (!yes) return;
+  localStorage.removeItem(BIOMETRIC_CONFIG);
+  await idbDelete(BIOMETRIC_KEY).catch(() => {});
+  updateBiometricUi();
+  closeMenu();
+  showToast('Fingerabdruck deaktiviert');
+}
+
+async function unlockWithBiometrics() {
+  const cfg = getBiometricConfig();
+  if (!cfg) return;
+  if (!(await platformBiometricsAvailable())) {
+    showToast('Fingerabdruck ist in diesem Browser nicht verfügbar', 4200);
+    return;
+  }
+
+  biometricBusy = true;
+  els.bioUnlockBtn.disabled = true;
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge,
+        rpId: location.hostname,
+        allowCredentials: [{
+          type: 'public-key',
+          id: base64ToBytes(cfg.credentialId),
+          transports: ['internal']
+        }],
+        userVerification: 'required',
+        timeout: 60000
+      }
+    });
+
+    await verifyBiometricAssertion(assertion, cfg, challenge);
+    const storedKey = await idbGet(BIOMETRIC_KEY);
+    if (!storedKey) throw new Error('Fingerabdruck-Zugang muss neu eingerichtet werden');
+    await loadVaultWithKey(storedKey);
+    await restoreAfterUnlock();
+  } catch (err) {
+    if (err?.name !== 'NotAllowedError') {
+      els.lockHint.textContent = err?.message || 'Fingerabdruck konnte nicht verwendet werden. Nutze deine PIN.';
+    }
+  } finally {
+    els.bioUnlockBtn.disabled = false;
+    biometricBusy = false;
+  }
 }
 
 async function persistState(immediate = false) {
@@ -188,19 +489,46 @@ async function persistState(immediate = false) {
 function showScreen(screen) {
   [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen].forEach(el => el.classList.remove('active'));
   screen.classList.add('active');
-  resetLockTimer();
 }
 
-function resetLockTimer() {
-  clearTimeout(lockTimer);
-  if (!cryptoKey) return;
-  lockTimer = setTimeout(() => lockApp('Automatisch gesperrt.'), AUTO_LOCK_MS);
+function captureResumeContext() {
+  if (els.editorScreen.classList.contains('active')) {
+    resumeScreen = 'editor';
+    resumeTopicId = currentTopicId;
+  } else if (els.trashScreen.classList.contains('active')) {
+    resumeScreen = 'trash';
+    resumeTopicId = null;
+  } else {
+    resumeScreen = 'home';
+    resumeTopicId = null;
+  }
 }
 
-function lockApp(message = '') {
+async function restoreAfterUnlock() {
+  renderTopics();
+  if (resumeScreen === 'editor' && resumeTopicId) {
+    const exists = state?.topics?.some(t => t.id === resumeTopicId && !t.deletedAt);
+    if (exists) {
+      openTopic(resumeTopicId);
+    } else {
+      showScreen(els.homeScreen);
+    }
+  } else if (resumeScreen === 'trash') {
+    renderTrash();
+    showScreen(els.trashScreen);
+  } else {
+    showScreen(els.homeScreen);
+  }
+  resumeScreen = 'home';
+  resumeTopicId = null;
+}
+
+function lockApp(message = '', preserveResume = true) {
   stopRecognition();
   stopReading();
   clearTimeout(saveTimer);
+  if (preserveResume) captureResumeContext();
+  else { resumeScreen = 'home'; resumeTopicId = null; }
   if (cryptoKey && state) persistState(true).catch(() => {});
   cryptoKey = null;
   state = null;
@@ -209,6 +537,21 @@ function lockApp(message = '') {
   showScreen(els.lockScreen);
   configureLockScreen();
   if (message) els.lockHint.textContent = message;
+}
+
+function scheduleBackgroundLock() {
+  clearTimeout(backgroundLockTimer);
+  if (suppressBackgroundLock || biometricBusy || !cryptoKey) return;
+  backgroundLockTimer = setTimeout(() => {
+    if (document.hidden && !suppressBackgroundLock && !biometricBusy && cryptoKey) {
+      lockApp('Reci mi wurde beim Verlassen gesperrt.');
+    }
+  }, BACKGROUND_LOCK_DELAY_MS);
+}
+
+function cancelBackgroundLock() {
+  clearTimeout(backgroundLockTimer);
+  backgroundLockTimer = null;
 }
 
 function uid() {
@@ -414,11 +757,11 @@ function renderTrash() {
 function openMenu() { els.sideMenu.classList.add('open'); els.sideMenu.setAttribute('aria-hidden', 'false'); }
 function closeMenu() { els.sideMenu.classList.remove('open'); els.sideMenu.setAttribute('aria-hidden', 'true'); }
 
-function showToast(message) {
+function showToast(message, duration = 1800) {
   els.toast.textContent = message;
   els.toast.classList.add('show');
   clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => els.toast.classList.remove('show'), 1800);
+  showToast.timer = setTimeout(() => els.toast.classList.remove('show'), duration);
 }
 
 async function copyAll() {
@@ -485,11 +828,18 @@ function appendTranscript(transcript) {
   els.topicText.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function openKeyboardDictationFallback() {
+  toggleEdit(true);
+  const end = els.topicText.value.length;
+  els.topicText.focus({ preventScroll: false });
+  try { els.topicText.setSelectionRange(end, end); } catch {}
+  showToast('Direkte Spracheingabe wird in diesem Browser nicht unterstützt. Die Tastatur ist geöffnet: Tippe dort auf das Mikrofon.', 5200);
+}
+
 function toggleRecognition() {
   const Ctor = speechRecognitionCtor();
   if (!Ctor) {
-    showToast('Direkte Spracheingabe wird hier nicht unterstützt. Nutze das Mikrofon deiner Samsung-Tastatur.');
-    toggleEdit(true);
+    openKeyboardDictationFallback();
     return;
   }
   if (isListening) return stopRecognition();
@@ -509,8 +859,13 @@ function toggleRecognition() {
     }
   };
   recognition.onerror = event => {
-    if (event.error === 'not-allowed') showToast('Mikrofonzugriff wurde nicht erlaubt');
-    else if (event.error !== 'aborted') showToast('Spracheingabe wurde beendet');
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      showToast('Mikrofonzugriff wurde nicht erlaubt. Prüfe die Browser-Berechtigung.', 4200);
+    } else if (event.error === 'network' || event.error === 'language-not-supported') {
+      openKeyboardDictationFallback();
+    } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
+      showToast('Direkte Spracheingabe ist hier nicht verfügbar. Nutze das Mikrofon der Tastatur.', 4200);
+    }
   };
   recognition.onend = () => {
     isListening = false;
@@ -554,9 +909,12 @@ async function importBackup(file) {
   if (!yes) return;
   localStorage.setItem(CONFIG_SALT, parsed.salt);
   localStorage.setItem(CONFIG_VERIFIER, JSON.stringify(parsed.verifier));
+  localStorage.removeItem(BIOMETRIC_CONFIG);
+  await idbDelete(BIOMETRIC_KEY).catch(() => {});
   await idbSet(VAULT_KEY, parsed.vault);
+  updateBiometricUi();
   closeMenu();
-  lockApp('Sicherung importiert. Bitte mit der PIN dieser Sicherung entsperren.');
+  lockApp('Sicherung importiert. Bitte einmal mit der PIN dieser Sicherung entsperren.', false);
 }
 
 function registerServiceWorker() {
@@ -583,8 +941,7 @@ function wireEvents() {
       }
       els.pinInput.value = '';
       els.pinConfirm.value = '';
-      renderTopics();
-      showScreen(els.homeScreen);
+      await restoreAfterUnlock();
     } catch (err) {
       els.lockHint.textContent = err.message === 'Falsche PIN' ? 'Die PIN ist nicht richtig.' : (err.message || 'Entsperren nicht möglich.');
       cryptoKey = null;
@@ -593,6 +950,8 @@ function wireEvents() {
       els.pinSubmit.disabled = false;
     }
   });
+
+  els.bioUnlockBtn.addEventListener('click', unlockWithBiometrics);
 
   [els.newTopicBtn, els.quickAddBtn, els.emptyAddBtn].forEach(btn => btn.addEventListener('click', () => openTopicDialog('create')));
   els.cancelTopicBtn.addEventListener('click', () => els.topicDialog.close());
@@ -639,8 +998,21 @@ function wireEvents() {
   els.openTrashBtn.addEventListener('click', () => { closeMenu(); renderTrash(); showScreen(els.trashScreen); });
   els.trashBackBtn.addEventListener('click', () => { renderTopics(); showScreen(els.homeScreen); });
   els.exportBtn.addEventListener('click', exportBackup);
-  els.importInput.addEventListener('change', e => { const file = e.target.files?.[0]; if (file) importBackup(file); e.target.value = ''; });
-  els.lockBtn.addEventListener('click', () => lockApp());
+  els.importInput.addEventListener('click', () => {
+    suppressBackgroundLock = true;
+    setTimeout(() => { suppressBackgroundLock = false; }, 120000);
+  });
+  els.importInput.addEventListener('change', e => {
+    suppressBackgroundLock = false;
+    const file = e.target.files?.[0];
+    if (file) importBackup(file);
+    e.target.value = '';
+  });
+  els.biometricMenuBtn.addEventListener('click', () => {
+    if (hasBiometricConfig()) disableBiometrics();
+    else enableBiometrics();
+  });
+  els.lockBtn.addEventListener('click', () => lockApp('Reci mi ist gesperrt.'));
 
   els.confirmCancelBtn.addEventListener('click', () => {
     els.confirmDialog.close();
@@ -672,11 +1044,18 @@ function wireEvents() {
     els.installBtn.classList.add('hidden');
   });
 
-  ['pointerdown', 'keydown', 'touchstart'].forEach(evt => document.addEventListener(evt, resetLockTimer, { passive: true }));
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       stopReading();
       persistState(true).catch(() => {});
+      scheduleBackgroundLock();
+    } else {
+      cancelBackgroundLock();
+    }
+  });
+  window.addEventListener('focus', () => {
+    if (suppressBackgroundLock) {
+      setTimeout(() => { suppressBackgroundLock = false; }, 500);
     }
   });
   window.addEventListener('pagehide', () => { persistState(true).catch(() => {}); });
@@ -689,6 +1068,7 @@ async function boot() {
     return;
   }
   await initDb();
+  updateBiometricUi();
   configureLockScreen();
   wireEvents();
   registerServiceWorker();

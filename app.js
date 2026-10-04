@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.8.1';
+const APP_VERSION = '2.9';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -46,17 +46,20 @@ const els = {};
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
  'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonPath', 'moonArc', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
- 'backBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
+ 'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
- 'trashBackBtn', 'trashList',
+ 'trashBackBtn', 'trashHomeBtn', 'trashList',
  'topicSheet', 'topicForm', 'topicSheetTitle', 'topicName', 'catPicker', 'cancelTopicBtn', 'saveTopicBtn',
  'actionSheet', 'actionTitle', 'actionOpenBtn', 'actionRenameBtn', 'actionTrashBtn', 'actionCancelBtn',
- 'menuSheet', 'biometricMenuBtn', 'nameMenuBtn', 'openTrashBtn', 'exportBtn', 'importInput', 'checkBackupInput', 'installBtn', 'lockBtn',
+ 'menuSheet', 'biometricMenuBtn', 'nameMenuBtn', 'manageCategoriesBtn', 'categorySheet', 'categoryForm', 'categoryName', 'categorySaveBtn', 'categoryManageList', 'categoryCloseBtn', 'openTrashBtn', 'exportBtn', 'importInput', 'checkBackupInput', 'installBtn', 'lockBtn',
  'nameSheet', 'nameForm', 'nameInput', 'nameCancelBtn',
  'confirmSheet', 'confirmTitle', 'confirmText', 'confirmCancelBtn', 'confirmOkBtn',
  'toast'].forEach(id => { els[id] = $(id); });
 
-const categoryOrder = ['Bücher', 'Apps', 'Privat', 'Sonstiges', 'Schnellnotizen'];
+const BASE_CATEGORIES = ['Bücher', 'Apps', 'Privat', 'Sonstiges'];
+const QUICK_CATEGORY = 'Schnellnotizen';
+const CUSTOM_CATEGORY_COLORS = ['#69B8A4', '#D7A95C', '#9C83D6', '#D98291', '#6F9ED6', '#B58A68', '#78A968', '#C27EB1'];
+let editingCategoryName = null;
 
 /* =====================================================================
    Tageszeit-Himmel: Farben wandern fließend durch den Tag
@@ -1004,7 +1007,7 @@ async function decryptValue(payload, key = cryptoKey) {
 }
 
 function initialState() {
-  return { version: APP_VERSION, createdAt: new Date().toISOString(), settings: { name: DEFAULT_NAME }, topics: [] };
+  return { version: APP_VERSION, createdAt: new Date().toISOString(), settings: { name: DEFAULT_NAME, customCategories: [] }, topics: [] };
 }
 function hasVaultConfig() {
   return Boolean(localStorage.getItem(CONFIG_SALT) && localStorage.getItem(CONFIG_VERIFIER));
@@ -1040,6 +1043,7 @@ async function loadVaultWithKey(key) {
   delete state.settings.autoLockMinutes;
   delete state.settings.lockMode;
   if (!state.settings.name) state.settings.name = DEFAULT_NAME;
+  if (!Array.isArray(state.settings.customCategories)) state.settings.customCategories = [];
 }
 
 async function unlockVault(pin) {
@@ -1326,7 +1330,7 @@ async function maybeShowBioCard() {
    ===================================================================== */
 
 function showScreen(screen) {
-  if (screen === els.homeScreen) requestAnimationFrame(() => placeSun());
+  if (screen === els.homeScreen) requestAnimationFrame(() => { placeSun(); placeMoon(); });
   [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen')].forEach(el => el.classList.toggle('active', el === screen));
   window.scrollTo(0, 0);
 }
@@ -1357,6 +1361,7 @@ function showUnlocked(resume = { screen: 'home' }) {
     if (n) { renderTopics(); showToast(n === 1 ? 'Eine Schnellnotiz wurde einsortiert' : `${n} Schnellnotizen wurden einsortiert`, 3000); }
   }).catch(() => {});
   renderDailyBits();
+  renderCategoryControls();
   renderTopics();
   maybeShowBioCard();
   maybeShowBackupCard();
@@ -1375,6 +1380,12 @@ function goHomeFromScreen() {
   // Für die Zurück-Pfeile in der App: wie die Zurück-Taste des Handys
   if (history.state && (history.state.rm === 'editor' || history.state.rm === 'trash')) history.back();
   else showHome();
+}
+
+async function jumpHome() {
+  if (openSheetEl) { sheetSilentClose = true; openSheetEl.close(); sheetSilentClose = false; openSheetEl = null; }
+  history.replaceState({ rm: 'home' }, '');
+  await showHome();
 }
 
 async function showHome() {
@@ -1503,7 +1514,72 @@ function excerpt(text, max = 160) {
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
 }
-function catOf(t) { return categoryOrder.includes(t.category) ? t.category : 'Sonstiges'; }
+function customCategories() {
+  if (!state) return [];
+  state.settings = { ...(state.settings || {}) };
+  if (!Array.isArray(state.settings.customCategories)) state.settings.customCategories = [];
+  return state.settings.customCategories.filter(c => c && typeof c.name === 'string' && c.name.trim()).map(c => ({ name: c.name.trim(), color: c.color || '#8FA3B8' }));
+}
+function categoryNames() { return [...BASE_CATEGORIES, ...customCategories().map(c => c.name), QUICK_CATEGORY]; }
+function categoryColor(cat) {
+  const base = { 'Bücher': 'var(--c-books)', 'Apps': 'var(--c-apps)', 'Privat': 'var(--c-private)', 'Sonstiges': 'var(--c-other)', 'Schnellnotizen': 'var(--c-quick)' };
+  if (base[cat]) return base[cat];
+  return customCategories().find(c => c.name === cat)?.color || 'var(--c-other)';
+}
+function dotHtml(cat) { return `<span class="dot" data-cat="${escapeHtml(cat)}" style="--cat-c:${escapeHtml(categoryColor(cat))}"></span>`; }
+function catOf(t) { return categoryNames().includes(t.category) ? t.category : 'Sonstiges'; }
+
+function renderCategoryControls() {
+  const cats = categoryNames();
+  if (!cats.includes(currentFilter) && currentFilter !== 'Alle') currentFilter = 'Alle';
+  els.filterRow.innerHTML = `<button class="chip${currentFilter === 'Alle' ? ' active' : ''}" data-filter="Alle" type="button">Alle</button>` + cats.map(cat => `<button class="chip${currentFilter === cat ? ' active' : ''}" data-filter="${escapeHtml(cat)}" type="button">${dotHtml(cat)}${escapeHtml(cat)}</button>`).join('');
+  els.catPicker.innerHTML = cats.map(cat => `<button type="button" class="cat${cat === QUICK_CATEGORY ? ' cat-wide' : ''}${selectedCategory === cat ? ' selected' : ''}" data-cat="${escapeHtml(cat)}">${dotHtml(cat)}${escapeHtml(cat)}</button>`).join('');
+}
+
+function renderCategoryManager() {
+  const list = customCategories();
+  els.categoryManageList.innerHTML = list.length ? list.map(c => `<div class="category-manage-row" data-name="${escapeHtml(c.name)}"><div class="category-manage-name">${dotHtml(c.name)}<span>${escapeHtml(c.name)}</span></div><button class="category-mini category-edit" type="button" aria-label="${escapeHtml(c.name)} umbenennen"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></button><button class="category-mini category-delete danger" type="button" aria-label="${escapeHtml(c.name)} löschen"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></div>`).join('') : '<p class="sheet-text">Noch keine eigenen Bereiche.</p>';
+}
+function openCategoryManager() {
+  editingCategoryName = null;
+  els.categoryName.value = '';
+  els.categorySaveBtn.textContent = 'Hinzufügen';
+  renderCategoryManager();
+  openSheet(els.categorySheet);
+}
+async function saveCategoryManager() {
+  const name = els.categoryName.value.trim().replace(/\s+/g, ' ');
+  if (!name) return;
+  const reserved = [...BASE_CATEGORIES, QUICK_CATEGORY];
+  const custom = customCategories();
+  const collision = [...reserved, ...custom.map(c => c.name)].some(n => n.toLocaleLowerCase('de') === name.toLocaleLowerCase('de') && n !== editingCategoryName);
+  if (collision) { showToast('Diesen Bereich gibt es schon'); return; }
+  if (editingCategoryName) {
+    const item = state.settings.customCategories.find(c => c.name === editingCategoryName);
+    if (item) item.name = name;
+    state.topics.forEach(t => { if (t.category === editingCategoryName) t.category = name; });
+    if (currentFilter === editingCategoryName) currentFilter = name;
+    if (selectedCategory === editingCategoryName) selectedCategory = name;
+  } else {
+    const color = CUSTOM_CATEGORY_COLORS[custom.length % CUSTOM_CATEGORY_COLORS.length];
+    state.settings.customCategories.push({ name, color });
+  }
+  editingCategoryName = null;
+  els.categoryName.value = '';
+  els.categorySaveBtn.textContent = 'Hinzufügen';
+  await persistState(true);
+  renderCategoryControls(); renderCategoryManager(); renderTopics();
+}
+async function deleteCustomCategory(name) {
+  state.settings.customCategories = customCategories().filter(c => c.name !== name);
+  state.topics.forEach(t => { if (t.category === name) t.category = 'Sonstiges'; });
+  if (currentFilter === name) currentFilter = 'Alle';
+  if (selectedCategory === name) selectedCategory = 'Sonstiges';
+  if (editingCategoryName === name) { editingCategoryName = null; els.categoryName.value = ''; els.categorySaveBtn.textContent = 'Hinzufügen'; }
+  await persistState(true);
+  renderCategoryControls(); renderCategoryManager(); renderTopics();
+  showToast('Bereich gelöscht. Themen sind jetzt unter Sonstiges.');
+}
 
 const LOCK_ICON = '<svg class="ui-icon lock-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const PIN_ICON = '<svg class="ui-icon pin-icon" viewBox="0 0 24 24" aria-label="angeheftet"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6Z"/><path d="M12 13v7"/></svg>';
@@ -1520,7 +1596,7 @@ function renderTopics() {
   topics.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.updatedAt) - new Date(a.updatedAt));
 
   els.topicList.innerHTML = topics.map(t => `
-    <article class="row${t.locked ? ' is-locked' : ''}" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" tabindex="0">
+    <article class="row${t.locked ? ' is-locked' : ''}" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" style="--row-cat-color:${escapeHtml(categoryColor(catOf(t)))}" tabindex="0">
       <div class="row-top"><h2>${t.pinned ? PIN_ICON : ''}${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
       <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : (!(t.content || '').trim() && t.sketches?.length ? 'Zeichnung' : escapeHtml(excerpt(t.content)))}</p>
     </article>`).join('');
@@ -1689,9 +1765,8 @@ function goEditorEnd() {
 
 function setEditorTag(topic) {
   const cat = catOf(topic);
-  const varName = { 'Bücher': '--c-books', 'Apps': '--c-apps', 'Privat': '--c-private', 'Sonstiges': '--c-other', 'Schnellnotizen': '--c-quick' }[cat];
-  els.editorTag.innerHTML = `<span class="dot" data-cat="${escapeHtml(cat)}"></span>${escapeHtml(cat)}`;
-  els.editorTag.style.setProperty('--tag-c', `var(${varName})`);
+  els.editorTag.innerHTML = `${dotHtml(cat)}${escapeHtml(cat)}`;
+  els.editorTag.style.setProperty('--tag-c', categoryColor(cat));
 }
 
 function openTopic(id, { push = true, verified = false } = {}) {
@@ -1742,6 +1817,7 @@ function setEditing(on, focus = false) {
 }
 
 function openTopicSheet(mode = 'create', id = null) {
+  renderCategoryControls();
   topicSheetMode = mode;
   topicSheetId = id;
   if (mode === 'edit') {
@@ -1765,6 +1841,7 @@ function openTopicSheet(mode = 'create', id = null) {
 }
 
 function selectCategory(cat) {
+  if (!categoryNames().includes(cat)) cat = 'Sonstiges';
   selectedCategory = cat;
   els.catPicker.querySelectorAll('.cat').forEach(b => b.classList.toggle('selected', b.dataset.cat === cat));
 }
@@ -3121,7 +3198,7 @@ function openAttachPicker(sourceId) {
   const targets = activeTopics().filter(t => t.id !== sourceId && t.category !== 'Schnellnotizen')
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.updatedAt) - new Date(a.updatedAt));
   $('attachList').innerHTML = targets.length
-    ? targets.map(t => `<button type="button" class="sheet-item attach-item" data-id="${escapeHtml(t.id)}"><span class="dot" data-cat="${escapeHtml(catOf(t))}"></span><span>${t.pinned ? PIN_ICON : ''}${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</span></button>`).join('')
+    ? targets.map(t => `<button type="button" class="sheet-item attach-item" data-id="${escapeHtml(t.id)}">${dotHtml(catOf(t))}<span>${t.pinned ? PIN_ICON : ''}${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</span></button>`).join('')
     : '<p class="sheet-text">Es gibt noch kein anderes Thema. Leg zuerst ein Thema an.</p>';
   $('attachList').querySelectorAll('.attach-item').forEach(b => b.addEventListener('click', () => attachToTopic(b.dataset.id)));
   openSheet($('attachSheet'));
@@ -3423,6 +3500,15 @@ function wireEvents() {
   });
 
   els.newTopicBtn.addEventListener('click', () => openTopicSheet('create'));
+  els.manageCategoriesBtn.addEventListener('click', openCategoryManager);
+  els.categoryForm.addEventListener('submit', e => { e.preventDefault(); saveCategoryManager(); });
+  els.categoryCloseBtn.addEventListener('click', () => closeSheet(els.categorySheet));
+  els.categoryManageList.addEventListener('click', e => {
+    const row = e.target.closest('.category-manage-row'); if (!row) return;
+    const name = row.dataset.name;
+    if (e.target.closest('.category-edit')) { editingCategoryName = name; els.categoryName.value = name; els.categorySaveBtn.textContent = 'Speichern'; els.categoryName.focus(); }
+    if (e.target.closest('.category-delete')) deleteCustomCategory(name);
+  });
   els.catPicker.addEventListener('click', e => { const b = e.target.closest('.cat'); if (b) selectCategory(b.dataset.cat); });
   els.topicForm.addEventListener('submit', e => { e.preventDefault(); saveTopicSheet(); });
   els.cancelTopicBtn.addEventListener('click', () => closeSheet(els.topicSheet));
@@ -3466,7 +3552,9 @@ function wireEvents() {
   els.bioCardSetup.addEventListener('click', async () => { await enableBiometrics(); maybeShowBioCard(); });
 
   els.backBtn.addEventListener('click', goHomeFromScreen);
+  els.editorHomeBtn.addEventListener('click', jumpHome);
   els.trashBackBtn.addEventListener('click', goHomeFromScreen);
+  els.trashHomeBtn.addEventListener('click', jumpHome);
   els.editBtn.addEventListener('click', () => setEditing(els.topicText.readOnly, true));
   els.copyBtn.addEventListener('click', copyAll);
   els.readBtn.addEventListener('click', readText);

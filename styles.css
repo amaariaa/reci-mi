@@ -2,8 +2,8 @@
    Farben werden von app.js je nach Tageszeit gesetzt (fließende Übergänge).
    Die Werte hier sind nur der Start (Nacht). */
 
-@font-face { font-family: "Lora"; src: url("lora.woff") format("woff"); font-weight: 400 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Lora"; src: url("lora-italic.woff") format("woff"); font-weight: 400 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Lora"; src: url("lora.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Lora"; src: url("lora-italic.ttf") format("truetype"); font-weight: 400 700; font-style: italic; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("inter-regular.woff") format("woff"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("inter-medium.woff") format("woff"); font-weight: 500; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("inter-semibold.woff") format("woff"); font-weight: 600; font-display: swap; }
@@ -88,11 +88,12 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 /* ---------- Startseite ---------- */
 .hero { padding: calc(var(--safe-top) + 14px) 22px 64px; background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) calc(100% - 64px), var(--sky-hor) calc(100% - 20px), var(--bg) 100%); }
 .hero-top { position: relative; display: flex; justify-content: space-between; align-items: center; }
-.brand { font: italic 500 22px var(--serif); color: var(--hero-ink); }
+.brand { font: italic 500 27px var(--serif); color: var(--hero-ink); }
 .hero-btn { background: color-mix(in srgb, var(--hero-ink) 12%, transparent); color: var(--hero-ink); }
-.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 26px; }
-.greeting { margin: 0; font: 500 32px/1.15 var(--serif); color: var(--hero-ink); text-wrap: balance; }
-.hero-moon { width: 80px; height: 80px; flex: 0 0 auto; margin-right: 4px; }
+.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 30px; }
+.greeting { margin: 0; font: 500 24px/1.2 var(--serif); color: var(--hero-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-text { flex: 1; min-width: 0; }
+.hero-moon { width: 72px; height: 72px; flex: 0 0 auto; margin-right: 4px; }
 .daily-quote { position: relative; margin: 16px 0 0; font: italic 400 17px/1.5 var(--serif); color: var(--hero-ink); opacity: .92; max-width: 34em; text-wrap: pretty; }
 .moon-line { position: relative; margin: 14px 0 0; font-size: 13px; color: var(--hero-muted); }
 
@@ -197,7 +198,6 @@ dialog.sheet::backdrop { background: rgba(10, 12, 28, .55); }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (max-width: 370px) {
-  .greeting { font-size: 28px; }
   .hero-moon { width: 64px; height: 64px; }
   .tb span { font-size: 10px; }
 }

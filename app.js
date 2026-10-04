@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.6.1';
+const APP_VERSION = '2.6.3';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -548,7 +548,8 @@ function startPrecip() {
 
 function initSkyExtras() {
   const hero = document.querySelector('.hero');
-  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => placeSun()).observe(hero);
+  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); fitGreeting(); }).observe(hero);
+  if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
   window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); });
   applyPlaceGeo();
@@ -808,11 +809,21 @@ function userName() {
   return (typeof n === 'string' && n.trim()) ? n.trim() : DEFAULT_NAME;
 }
 
+// Begrüßung immer in einer Zeile: notfalls etwas kleiner
+function fitGreeting() {
+  const el = els.greeting;
+  if (!el || !el.clientWidth) return;
+  let size = 24;
+  el.style.fontSize = size + 'px';
+  while (el.scrollWidth > el.clientWidth && size > 17) { size -= 0.5; el.style.fontSize = size + 'px'; }
+}
+
 function renderDailyBits(date = nowForSky(), phase = document.documentElement.dataset.phase || 'nacht') {
   const moon = moonSvg(new Date());
   els.lockMoon.innerHTML = moon;
   els.heroMoon.innerHTML = moonSvg(new Date());
   els.greeting.textContent = `${GREETING[phase] || 'Hallo'}, ${userName()}`;
+  requestAnimationFrame(fitGreeting);
   els.dailyQuote.textContent = quoteOfDay(new Date());
   const line = moonLineText(new Date());
   els.moonLine.textContent = line;

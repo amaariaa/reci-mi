@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.7';
+const APP_VERSION = '2.8';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -44,7 +44,7 @@ const $ = id => document.getElementById(id);
 const els = {};
 ['lockScreen', 'homeScreen', 'editorScreen', 'trashScreen',
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
- 'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
+ 'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonPath', 'moonArc', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
  'backBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
@@ -269,6 +269,7 @@ function applySky(fromWeather = false) {
   document.documentElement.dataset.phase = phase;
 
   placeSun();
+  placeMoon();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', top);
 
@@ -375,8 +376,14 @@ function desaturate(hex, amount) {
 
 /* ---------- Sonne auf ihrer Bahn ---------- */
 function minutesToClock(m) {
-  const h = Math.floor(m / 60), mi = Math.round(m % 60);
+  const safe = ((m % 1440) + 1440) % 1440;
+  const h = Math.floor(safe / 60), mi = Math.round(safe % 60);
   return `${String(h).padStart(2, '0')}:${String(mi === 60 ? 59 : mi).padStart(2, '0')}`;
+}
+function wrapMinutes(m) { return ((m % 1440) + 1440) % 1440; }
+function isBetweenWrapped(value, start, end) {
+  value = wrapMinutes(value); start = wrapMinutes(start); end = wrapMinutes(end);
+  return start <= end ? (value >= start && value <= end) : (value >= start || value <= end);
 }
 
 function placeSun() {
@@ -435,6 +442,61 @@ function buildClouds(box, count) {
     html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
   }
   box.innerHTML = html;
+}
+
+
+function moonIllumination(age) {
+  return (1 - Math.cos(2 * Math.PI * (age / SYNODIC))) / 2;
+}
+
+function moonTimes(date) {
+  const age = moonAge(date);
+  const phase = age / SYNODIC;
+  const sun = sunTimes(date);
+  const rise = wrapMinutes(sun.rise + phase * 24 * 60);
+  const set = wrapMinutes(rise + 12 * 60 + 25);
+  return { rise, set, age, phase, illum: moonIllumination(age) };
+}
+
+function placeMoon() {
+  const hero = document.querySelector('.hero');
+  const svg = $('moonPath');
+  const moonOrb = $('moonOrb');
+  if (!hero || !svg || !moonOrb) return;
+  const now = nowForSky();
+  const info = moonTimes(now);
+  if (els.moonriseLabel) els.moonriseLabel.textContent = minutesToClock(info.rise);
+  if (els.moonsetLabel) els.moonsetLabel.textContent = minutesToClock(info.set);
+  if (els.moonPhaseLabel) {
+    els.moonPhaseLabel.textContent = `${moonPhaseName(info.age)} · ${Math.round(info.illum * 100)} %`;
+  }
+
+  const W = hero.clientWidth, H = hero.clientHeight;
+  if (!W || !H) return;
+  const pad = 28, horizon = H - 66, apex = 112;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const pts = [];
+  for (let i = 0; i <= 40; i++) {
+    const f = i / 40;
+    pts.push(`${(pad + f * (W - 2 * pad)).toFixed(1)},${(horizon - (horizon - apex) * Math.sin(Math.PI * f)).toFixed(1)}`);
+  }
+  $('moonArc').setAttribute('points', pts.join(' '));
+
+  const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  const cycle = info.set >= info.rise ? (info.set - info.rise) : (1440 - info.rise + info.set);
+  const progressed = info.set >= info.rise ? (minutes - info.rise) : (minutes >= info.rise ? minutes - info.rise : 1440 - info.rise + minutes);
+  const f = progressed / cycle;
+  const up = isBetweenWrapped(minutes, info.rise, info.set);
+  moonOrb.classList.toggle('hidden', !up);
+  if (!up) return;
+  const ff = Math.min(1, Math.max(0, f));
+  const x = pad + ff * (W - 2 * pad);
+  const alt = Math.sin(Math.PI * ff);
+  const y = horizon - (horizon - apex) * alt;
+  moonOrb.style.left = `${x}px`;
+  moonOrb.style.top = `${y}px`;
+  moonOrb.style.setProperty('--moon-size', `${Math.round(74 - alt * 10)}px`);
+  moonOrb.innerHTML = moonSvg(now);
 }
 
 function applyWeatherFx() {
@@ -548,14 +610,14 @@ function startPrecip() {
 
 function initSkyExtras() {
   const hero = document.querySelector('.hero');
-  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); fitGreeting(); }).observe(hero);
+  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); fitGreeting(); }).observe(hero);
   if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
-  window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); });
+  window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); placeMoon(); });
   applyPlaceGeo();
   refreshWeather();
   setInterval(() => { if (!document.hidden) refreshWeather(); }, 10 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshWeather(); startPrecip(); placeSun(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshWeather(); startPrecip(); placeSun(); placeMoon(); } });
 }
 
 /* ---------- Ort einstellen ---------- */
@@ -655,10 +717,10 @@ function moonSvg(date) {
   const age = moonAge(date);
   const f = age / SYNODIC;
   const c = Math.cos(2 * Math.PI * f);
-  const k = (1 - c) / 2;              // beleuchteter Anteil (0 = Neumond, 1 = Vollmond)
+  const k = moonIllumination(age);
   const R = 96, C = 100;
-  const rx = Math.abs(c) * R;
-  const waxing = f < 0.5;             // Nordhalbkugel: zunehmend rechts hell
+  const rx = Math.max(2.5, Math.abs(c) * R);
+  const waxing = f < 0.5;
   const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
   let d;
   if (k < 0.015) d = '';
@@ -666,25 +728,43 @@ function moonSvg(date) {
   else if (waxing) d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
   else d = `M${top} A${R} ${R} 0 0 0 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 1 : 0} ${top}Z`;
   const id = `m${++moonUid}`;
-  const glow = (0.35 + 0.65 * k).toFixed(2);
+  const glow = (0.42 + 0.58 * k).toFixed(2);
+  const maria = `
+    <ellipse cx="78" cy="84" rx="21" ry="17" fill="var(--moon-maria)" opacity=".30"/>
+    <ellipse cx="122" cy="74" rx="16" ry="13" fill="var(--moon-maria)" opacity=".24"/>
+    <ellipse cx="130" cy="118" rx="18" ry="15" fill="var(--moon-maria)" opacity=".20"/>
+    <ellipse cx="88" cy="126" rx="14" ry="11" fill="var(--moon-maria)" opacity=".18"/>
+    <circle cx="63" cy="62" r="5.5" fill="var(--moon-crater)" opacity=".22"/>
+    <circle cx="110" cy="98" r="4.8" fill="var(--moon-crater)" opacity=".20"/>
+    <circle cx="140" cy="56" r="6" fill="var(--moon-crater)" opacity=".18"/>
+    <circle cx="146" cy="138" r="5" fill="var(--moon-crater)" opacity=".18"/>
+  `;
 
   return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
     <defs>
       <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
-      <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
-      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
-      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
-      <g id="${id}sf">
-        <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
-        <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
-        <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
-      </g>
+      <filter id="${id}g" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="10"/></filter>
+      <filter id="${id}h" x="-140%" y="-140%" width="380%" height="380%"><feGaussianBlur stdDeviation="24"/></filter>
+      <filter id="${id}s" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2"/></filter>
+      <radialGradient id="${id}lit" cx="35%" cy="30%" r="72%">
+        <stop offset="0%" stop-color="#FFFFFF"/>
+        <stop offset="28%" stop-color="var(--moon-lit-2)"/>
+        <stop offset="78%" stop-color="var(--moon-lit)"/>
+        <stop offset="100%" stop-color="var(--moon-maria)"/>
+      </radialGradient>
+      <radialGradient id="${id}base" cx="34%" cy="28%" r="80%">
+        <stop offset="0%" stop-color="color-mix(in srgb, var(--moon-dark) 70%, white)" stop-opacity=".55"/>
+        <stop offset="55%" stop-color="var(--moon-dark)"/>
+        <stop offset="100%" stop-color="color-mix(in srgb, var(--moon-dark) 88%, black)"/>
+      </radialGradient>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}s)"/></mask>
     </defs>
-    ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
-    <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
-    <use href="#${id}sf" style="opacity:var(--earthshine)"/>
-    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
+    ${d ? `<path class="moon-glow wide" d="${d}" fill="var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" fill="var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
+    <circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}base)"/>
+    <circle cx="${C}" cy="${C}" r="${R - 1.5}" fill="var(--moon-lit)" opacity="calc(var(--earthshine) * .85)"/>
+    ${d ? `<path d="${d}" fill="url(#${id}lit)"/>` : ''}
+    <g clip-path="url(#${id}c)" ${d ? `mask="url(#${id}m)"` : ''}>${maria}</g>
+    <circle cx="${C}" cy="${C}" r="${R - 1.5}" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/>
   </svg>`;
 }
 

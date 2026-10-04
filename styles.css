@@ -244,12 +244,15 @@ dialog.sheet input.switch { width: 50px; height: 30px; padding: 0; border: 0; bo
 dialog.sheet input.switch:checked { background: var(--accent-text); }
 
 /* ---------- Sonne und Wetter ---------- */
-.hero > .hero-top, .hero > .hero-main, .hero > .daily-quote, .hero > .moon-line, .hero > .sun-row { position: relative; z-index: 2; }
+.hero > .hero-top, .hero > .hero-main, .hero > .daily-quote, .hero > .moon-line, .hero > .sun-row, .hero > .moon-row { position: relative; z-index: 2; }
 .lock-inner, .lock-phase { z-index: 2; }
-.sun-path { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }
+.sun-path, .moon-path { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }
 .sun-path polyline { display: none; }  /* Bahnlinie ausgeblendet, die Sonne wandert trotzdem */
+.moon-path polyline { fill: none; stroke: color-mix(in srgb, var(--hero-ink) 20%, transparent); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 5 8; opacity: .55; }
 
 .sun { position: absolute; z-index: 1; width: var(--sun-size, 140px); height: var(--sun-size, 140px); transform: translate(-50%, -50%); pointer-events: none; opacity: var(--sun-veil, 1); transition: left 2s ease, top 2s ease, opacity 2s ease; }
+.moon-orb { position: absolute; z-index: 1; width: var(--moon-size, 82px); height: var(--moon-size, 82px); transform: translate(-50%, -50%); pointer-events: none; transition: left 2s ease, top 2s ease, opacity 2s ease; filter: drop-shadow(0 10px 22px color-mix(in srgb, var(--moon-glow) 65%, transparent)); }
+.moon-orb .moon-art { display: block; width: 100%; height: 100%; }
 .sun-core { position: absolute; inset: 0; border-radius: 50%;
   background: radial-gradient(circle, #FFFFFF 0 3.5%, var(--sun-core, #FFF6D8) 6%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 70%, transparent) 11%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 28%, transparent) 24%, transparent 58%);
   animation: sunBreathe 6s ease-in-out infinite; }
@@ -263,9 +266,12 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 @keyframes sunTurn { to { transform: rotate(360deg); } }
 @keyframes sunBreathe { 50% { transform: scale(1.06); opacity: .92; } }
 
-.sun-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; font-size: 13px; color: var(--hero-muted); }
-.sun-time { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sun-time .ui-icon { width: 17px; height: 17px; }
+.sun-row, .moon-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--hero-muted); }
+.sun-row { margin-top: 16px; }
+.moon-row { margin-top: 10px; }
+.sun-time, .moon-time { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sun-time .ui-icon, .moon-time .ui-icon { width: 17px; height: 17px; }
+.moon-phase-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--hero-ink) 12%, transparent); color: var(--hero-ink); font-size: 12px; line-height: 1.2; text-align: center; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .weather-label { border: 0; background: none; padding: 4px 6px; color: inherit; font: inherit; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weather-label.link { text-decoration: underline; text-underline-offset: 3px; color: var(--hero-ink); }

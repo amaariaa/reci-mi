@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -713,6 +713,7 @@ function onVisible() {
 }
 
 function lockApp(message = '') {
+  openedProtected.clear();
   stopRecognition();
   stopReading();
   saveResume();
@@ -797,6 +798,37 @@ async function disableBiometrics() {
   showToast('Fingerabdruck ausgeschaltet');
 }
 
+// Fragt den Fingerabdruck ab. Wirft einen Fehler, wenn es nicht klappt.
+async function biometricAssert() {
+  const cfg = getBiometricConfig();
+  if (!cfg?.credentialId) throw new Error('Kein Fingerabdruck eingerichtet');
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      rpId: location.hostname,
+      allowCredentials: [{ type: 'public-key', id: base64ToBytes(cfg.credentialId) }],
+      userVerification: 'required',
+      timeout: 60000
+    }
+  });
+  if (!assertion) throw new Error('Kein Fingerabdruck erkannt');
+  if (!sameBytes(base64ToBytes(cfg.credentialId), new Uint8Array(assertion.rawId))) throw new Error('Unbekannter Fingerabdruck-Zugang');
+  const clientData = JSON.parse(new TextDecoder().decode(assertion.response.clientDataJSON));
+  if (clientData.type !== 'webauthn.get' || clientData.challenge !== bytesToBase64Url(challenge)) throw new Error('Bestätigung passt nicht');
+  const authData = new Uint8Array(assertion.response.authenticatorData);
+  if (!(authData[32] & 0x04)) throw new Error('Der Fingerabdruck wurde nicht geprüft');
+}
+
+async function verifyPin(pin) {
+  if (!/^\d{4,6}$/.test(pin)) return false;
+  try {
+    const key = await deriveKey(pin, base64ToBytes(localStorage.getItem(CONFIG_SALT)));
+    const check = await decryptValue(JSON.parse(localStorage.getItem(CONFIG_VERIFIER)), key);
+    return check?.marker === 'reci-mi';
+  } catch { return false; }
+}
+
 async function unlockWithBiometrics({ silent = false } = {}) {
   const cfg = getBiometricConfig();
   if (!cfg?.credentialId || biometricBusy) return;
@@ -804,23 +836,7 @@ async function unlockWithBiometrics({ silent = false } = {}) {
   els.moonBtn.classList.add('busy');
   if (!silent) els.lockHint.textContent = '';
   try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge,
-        rpId: location.hostname,
-        allowCredentials: [{ type: 'public-key', id: base64ToBytes(cfg.credentialId) }],
-        userVerification: 'required',
-        timeout: 60000
-      }
-    });
-    if (!assertion) throw new Error('Kein Fingerabdruck erkannt');
-    if (!sameBytes(base64ToBytes(cfg.credentialId), new Uint8Array(assertion.rawId))) throw new Error('Unbekannter Fingerabdruck-Zugang');
-    const clientData = JSON.parse(new TextDecoder().decode(assertion.response.clientDataJSON));
-    if (clientData.type !== 'webauthn.get' || clientData.challenge !== bytesToBase64Url(challenge)) throw new Error('Bestätigung passt nicht');
-    const authData = new Uint8Array(assertion.response.authenticatorData);
-    if (!(authData[32] & 0x04)) throw new Error('Der Fingerabdruck wurde nicht geprüft');
-
+    await biometricAssert();
     const storedKey = await idbGet(BIOMETRIC_KEY);
     if (!storedKey) throw new Error('Fingerabdruck bitte im Menü neu einrichten');
     await loadVaultWithKey(storedKey);
@@ -893,7 +909,7 @@ function showUnlocked(resume = { screen: 'home' }) {
   // Verlauf neu aufbauen: Startseite ist die Basis
   history.replaceState({ rm: 'home' }, '');
   if (resume.screen === 'editor' && state.topics.some(t => t.id === resume.id && !t.deletedAt)) {
-    openTopic(resume.id);
+    openTopic(resume.id, { verified: true });
   } else if (resume.screen === 'trash') {
     openTrash();
   } else {
@@ -908,6 +924,7 @@ function goHomeFromScreen() {
 }
 
 async function showHome() {
+  openedProtected.clear();   // geschützte Themen beim Verlassen sofort wieder zu
   stopRecognition();
   stopReading();
   if (cryptoKey) await persistState(true).catch(() => {});
@@ -928,7 +945,11 @@ function onPopState(e) {
   }
   const s = e.state || { rm: 'home' };
   if (s.rm === 'editor') {
-    if (!(els.editorScreen.classList.contains('active') && currentTopicId === s.id)) openTopic(s.id, { push: false });
+    const t = state?.topics.find(x => x.id === s.id);
+    if (t?.locked && !openedProtected.has(s.id)) {
+      history.replaceState({ rm: 'home' }, '');
+      if (!els.homeScreen.classList.contains('active')) showHome();
+    } else if (!(els.editorScreen.classList.contains('active') && currentTopicId === s.id)) openTopic(s.id, { push: false });
   } else if (s.rm === 'trash') {
     if (!els.trashScreen.classList.contains('active')) openTrash({ push: false });
   } else if (s.rm !== 'sheet') {
@@ -1018,19 +1039,23 @@ function escapeHtml(value) {
 }
 function catOf(t) { return categoryOrder.includes(t.category) ? t.category : 'Sonstiges'; }
 
+const LOCK_ICON = '<svg class="ui-icon lock-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const openedProtected = new Set();
+let protectRequest = null;   // { id, purpose }
+
 function renderTopics() {
   if (!state) return;
   const q = els.searchInput.value.trim().toLowerCase();
   const all = activeTopics();
   let topics = all;
   if (currentFilter !== 'Alle') topics = topics.filter(t => catOf(t) === currentFilter);
-  if (q) topics = topics.filter(t => `${t.title} ${t.content}`.toLowerCase().includes(q));
+  if (q) topics = topics.filter(t => (t.locked ? t.title : `${t.title} ${t.content}`).toLowerCase().includes(q));
   topics.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
   els.topicList.innerHTML = topics.map(t => `
-    <article class="row" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" tabindex="0">
-      <div class="row-top"><h2>${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
-      <p>${escapeHtml(excerpt(t.content))}</p>
+    <article class="row${t.locked ? ' is-locked' : ''}" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" tabindex="0">
+      <div class="row-top"><h2>${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
+      <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : escapeHtml(excerpt(t.content))}</p>
     </article>`).join('');
 
   els.emptyState.classList.toggle('hidden', all.length !== 0);
@@ -1071,9 +1096,14 @@ function setEditorTag(topic) {
   els.editorTag.style.setProperty('--tag-c', `var(${varName})`);
 }
 
-function openTopic(id, { push = true } = {}) {
+function openTopic(id, { push = true, verified = false } = {}) {
   const topic = state?.topics.find(t => t.id === id && !t.deletedAt);
   if (!topic) return;
+  if (topic.locked && !verified && !openedProtected.has(id)) {
+    requestProtectedAccess(id, 'open');
+    return;
+  }
+  if (topic.locked) openedProtected.add(id);
   currentTopicId = id;
   els.editorTitle.textContent = topic.title;
   setEditorTag(topic);
@@ -1111,7 +1141,10 @@ function openTopicSheet(mode = 'create', id = null) {
     els.saveTopicBtn.textContent = 'Speichern';
     els.topicName.value = topic.title;
     selectCategory(catOf(topic));
+    $('protectRow').classList.add('hidden');
   } else {
+    $('protectRow').classList.remove('hidden');
+    $('protectToggle').checked = false;
     els.topicSheetTitle.textContent = 'Neues Thema';
     els.saveTopicBtn.textContent = 'Thema anlegen';
     els.topicName.value = '';
@@ -1147,6 +1180,7 @@ async function saveTopicSheet() {
     showToast('Gespeichert');
   } else {
     const topic = { id: uid(), title, category: selectedCategory, content: '', createdAt: now, updatedAt: now, deletedAt: null };
+    if ($('protectToggle').checked) { topic.locked = true; openedProtected.add(topic.id); }
     state.topics.push(topic);
     await persistState(true);
     renderTopics();
@@ -1162,7 +1196,110 @@ function openActionSheet(id) {
   actionTopicId = id;
   els.actionTitle.textContent = topic.title;
   els.actionOpenBtn.classList.toggle('hidden', currentTopicId === id && els.editorScreen.classList.contains('active'));
+  $('actionProtectBtn').textContent = topic.locked ? 'Schutz aufheben' : 'Extra schützen (Fingerabdruck oder PIN)';
   openSheet(els.actionSheet);
+}
+
+function requestProtectedAccess(id, purpose) {
+  const topic = state?.topics.find(t => t.id === id);
+  if (!topic) return;
+  protectRequest = { id, purpose };
+  const bio = hasBiometricConfig();
+  const how = bio ? 'deinem Fingerabdruck oder deiner PIN' : 'deiner PIN';
+  const texts = {
+    open: `Dieses Thema ist geschützt. Öffne es mit ${how}.`,
+    unprotect: `Bestätige mit ${how}, um den Schutz aufzuheben.`,
+    trash: `Bestätige mit ${how}, um das Thema in den Papierkorb zu legen.`,
+    purge: `Bestätige mit ${how}, um das Thema endgültig zu löschen.`
+  };
+  $('protectTitle').textContent = topic.title;
+  $('protectText').textContent = texts[purpose] || texts.open;
+  $('protectOkBtn').textContent = purpose === 'open' ? 'Mit PIN öffnen' : 'Bestätigen';
+  $('protectBioBtn').lastChild.textContent = purpose === 'open' ? ' Mit Fingerabdruck öffnen' : ' Mit Fingerabdruck bestätigen';
+  $('protectBioBtn').classList.toggle('hidden', !bio);
+  $('protectOr').classList.toggle('hidden', !bio);
+  $('protectPin').value = '';
+  $('protectHint').textContent = '';
+  openSheet($('protectSheet'));
+  if (bio) protectWithFingerprint();
+  else setTimeout(() => $('protectPin').focus(), 120);
+}
+
+async function protectWithFingerprint() {
+  if (biometricBusy) return;
+  biometricBusy = true;
+  $('protectHint').textContent = '';
+  try {
+    await biometricAssert();
+    biometricBusy = false;
+    grantProtectedAccess();
+  } catch (err) {
+    if (err?.name !== 'NotAllowedError') $('protectHint').textContent = biometricErrorText(err, 'Öffnen');
+    else $('protectHint').textContent = 'Kein Fingerabdruck? Dann gib deine PIN ein.';
+  } finally {
+    biometricBusy = false;
+    markAlive();
+  }
+}
+
+async function protectWithPin() {
+  const btn = $('protectOkBtn');
+  btn.disabled = true;
+  const ok = await verifyPin($('protectPin').value.trim());
+  btn.disabled = false;
+  if (ok) grantProtectedAccess();
+  else { $('protectHint').textContent = 'Die PIN stimmt nicht.'; $('protectPin').value = ''; $('protectPin').focus(); }
+}
+
+async function grantProtectedAccess() {
+  const req = protectRequest;
+  protectRequest = null;
+  if (!req) return;
+  const sheet = $('protectSheet');
+  const topic = state?.topics.find(t => t.id === req.id);
+  if (!topic) return closeSheet(sheet);
+  if (req.purpose === 'open') {
+    closeSheetAndReplace(sheet, { rm: 'editor', id: req.id });
+    openTopic(req.id, { push: false, verified: true });
+  } else if (req.purpose === 'unprotect') {
+    closeSheet(sheet);
+    topic.locked = false;
+    await persistState(true);
+    renderTopics();
+    showToast('Schutz aufgehoben');
+  } else if (req.purpose === 'trash') {
+    closeSheet(sheet);
+    moveTopicToTrash(req.id);
+  } else if (req.purpose === 'purge') {
+    const yes = await askConfirm('Endgültig löschen?', `„${topic.title}“ lässt sich danach nicht mehr zurückholen.`, 'Endgültig löschen');
+    if (!yes) return;
+    state.topics = state.topics.filter(x => x.id !== topic.id);
+    await persistState(true);
+    renderTrash();
+    showToast('Endgültig gelöscht');
+  }
+}
+
+async function toggleProtection(id) {
+  const topic = state?.topics.find(t => t.id === id);
+  if (!topic) return;
+  const openNow = els.editorScreen.classList.contains('active') && currentTopicId === id;
+  if (!topic.locked) {
+    closeSheet(els.actionSheet);
+    topic.locked = true;
+    if (openNow) openedProtected.add(id);
+    await persistState(true);
+    renderTopics();
+    showToast('Dieses Thema ist jetzt extra geschützt');
+  } else if (openNow) {
+    closeSheet(els.actionSheet);
+    topic.locked = false;
+    await persistState(true);
+    renderTopics();
+    showToast('Schutz aufgehoben');
+  } else {
+    requestProtectedAccess(id, 'unprotect');
+  }
 }
 
 async function moveTopicToTrash(id) {
@@ -1210,7 +1347,7 @@ function renderTrash() {
   els.trashList.innerHTML = topics.map(t => `
     <article class="row trash" data-cat="${escapeHtml(catOf(t))}">
       <div class="row-top"><h2>${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.deletedAt))}</time></div>
-      <p>${escapeHtml(excerpt(t.content))}</p>
+      <p>${t.locked ? 'Geschützt.' : escapeHtml(excerpt(t.content))}</p>
       <div class="trash-actions">
         <button class="btn btn-main btn-small restore-btn" data-id="${escapeHtml(t.id)}" type="button">Zurückholen</button>
         <button class="btn btn-ghost btn-small purge-btn" data-id="${escapeHtml(t.id)}" type="button">Endgültig löschen</button>
@@ -1229,6 +1366,7 @@ function renderTrash() {
   els.trashList.querySelectorAll('.purge-btn').forEach(btn => btn.addEventListener('click', async () => {
     const t = state.topics.find(x => x.id === btn.dataset.id);
     if (!t) return;
+    if (t.locked) return requestProtectedAccess(t.id, 'purge');
     const yes = await askConfirm('Endgültig löschen?', `„${t.title}“ lässt sich danach nicht mehr zurückholen.`, 'Endgültig löschen');
     if (!yes) return;
     state.topics = state.topics.filter(x => x.id !== t.id);
@@ -1715,12 +1853,20 @@ function wireEvents() {
 
   els.actionOpenBtn.addEventListener('click', () => {
     const id = actionTopicId;
+    const t = state?.topics.find(x => x.id === id);
+    if (t?.locked && !openedProtected.has(id)) return requestProtectedAccess(id, 'open');
     closeSheetAndReplace(els.actionSheet, { rm: 'editor', id });
     openTopic(id, { push: false });
   });
   els.actionRenameBtn.addEventListener('click', () => openTopicSheet('edit', actionTopicId));
+  $('actionProtectBtn').addEventListener('click', () => toggleProtection(actionTopicId));
+  $('protectForm').addEventListener('submit', e => { e.preventDefault(); protectWithPin(); });
+  $('protectBioBtn').addEventListener('click', protectWithFingerprint);
+  $('protectCancelBtn').addEventListener('click', () => { protectRequest = null; closeSheet($('protectSheet')); });
   els.actionTrashBtn.addEventListener('click', () => {
     const id = actionTopicId;
+    const t = state?.topics.find(x => x.id === id);
+    if (t?.locked && !openedProtected.has(id)) return requestProtectedAccess(id, 'trash');
     if (els.editorScreen.classList.contains('active') && currentTopicId === id) {
       // Blatt-Eintrag durch nichts ersetzen, dann zurück zur Startseite
       closeSheetAndReplace(els.actionSheet, { rm: 'editor', id });
@@ -1795,7 +1941,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });

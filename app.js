@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -64,14 +64,14 @@ const categoryOrder = ['Bücher', 'Apps', 'Privat', 'Sonstiges'];
 
 // Himmel (Kopfbereich + Sperrbildschirm)
 const SKY = {
-  nacht:           { top: '#10152E', mid: '#1B2347', hor: '#2A3160', stars: 1,    moonLit: '#F1E4C3', moonDark: [42, 49, 88, .9],    glow: [241, 228, 195, .22] },
-  daemmerung:      { top: '#1E2452', mid: '#4A4580', hor: '#E9A58C', stars: .45,  moonLit: '#F6EAD0', moonDark: [60, 58, 110, .55],   glow: [246, 214, 200, .22] },
-  morgen:          { top: '#86AFDB', mid: '#C4DAEE', hor: '#FADFC4', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] },
-  vormittag:       { top: '#6FA6DE', mid: '#AFD2F0', hor: '#EAF3F8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] },
-  mittag:          { top: '#5E9FE2', mid: '#A9D4F4', hor: '#FFF4D8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] },
-  nachmittag:      { top: '#8DB4DD', mid: '#DCD5C6', hor: '#F6D49E', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .14], glow: [255, 246, 225, .35] },
-  abenddaemmerung: { top: '#33357A', mid: '#7A5788', hor: '#F2A178', stars: .3,   moonLit: '#FBEBD3', moonDark: [70, 58, 110, .55],   glow: [250, 215, 190, .25] },
-  abend:           { top: '#171A42', mid: '#2A2959', hor: '#4B3A6E', stars: .8,   moonLit: '#F1E4C3', moonDark: [46, 46, 92, .85],    glow: [236, 222, 200, .22] }
+  nacht:           { top: '#10152E', mid: '#1B2347', hor: '#2A3160', stars: 1,    moonLit: '#F4EBD3', moonDark: [30, 36, 70, .85],    glow: [241, 228, 195, .22] , earth: 0.1, glowMul: 1 },
+  daemmerung:      { top: '#1E2452', mid: '#4A4580', hor: '#E9A58C', stars: .45,  moonLit: '#F6EAD0', moonDark: [60, 58, 110, .55],   glow: [246, 214, 200, .22] , earth: 0.08, glowMul: 0.8 },
+  morgen:          { top: '#86AFDB', mid: '#C4DAEE', hor: '#FADFC4', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.45 },
+  vormittag:       { top: '#6FA6DE', mid: '#AFD2F0', hor: '#EAF3F8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.4 },
+  mittag:          { top: '#5E9FE2', mid: '#A9D4F4', hor: '#FFF4D8', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .12], glow: [255, 255, 255, .35] , earth: 0, glowMul: 0.4 },
+  nachmittag:      { top: '#8DB4DD', mid: '#DCD5C6', hor: '#F6D49E', stars: 0,    moonLit: '#FFFFFF', moonDark: [255, 255, 255, .14], glow: [255, 246, 225, .35] , earth: 0, glowMul: 0.45 },
+  abenddaemmerung: { top: '#33357A', mid: '#7A5788', hor: '#F2A178', stars: .3,   moonLit: '#FBEBD3', moonDark: [70, 58, 110, .55],   glow: [250, 215, 190, .25] , earth: 0.08, glowMul: 0.8 },
+  abend:           { top: '#171A42', mid: '#2A2959', hor: '#4B3A6E', stars: .8,   moonLit: '#F1E4C3', moonDark: [46, 46, 92, .85],    glow: [236, 222, 200, .22] , earth: 0.09, glowMul: 1 }
 };
 
 // Fläche (Liste, Thema, Blätter). Zwischen hell und dunkel wird umgeschaltet, sonst gemischt.
@@ -208,6 +208,9 @@ function applySky() {
   root.setProperty('--moon-lit-2', mixHex(mixHex(A.moonLit, B.moonLit, t), '#FFFFFF', .55));
   root.setProperty('--moon-dark', rgba(mixArr(A.moonDark, B.moonDark, t)));
   root.setProperty('--moon-glow', rgba(mixArr(A.glow, B.glow, t)));
+  root.setProperty('--earthshine', (A.earth + (B.earth - A.earth) * t).toFixed(3));
+  root.setProperty('--glow-mul', (A.glowMul + (B.glowMul - A.glowMul) * t).toFixed(3));
+  root.setProperty('--moon-maria', mixHex(mixHex(A.moonLit, B.moonLit, t), '#7A7468', .45));
   root.setProperty('--moon-crater', mixHex(mixHex(A.moonLit, B.moonLit, t), '#8F8268', .45));
 
   // Schrift im Himmel: hell oder dunkel, je nachdem was besser lesbar ist
@@ -294,30 +297,67 @@ function moonLineText(date) {
 }
 
 let moonUid = 0;
+// Realistischer Mond: Oberfläche mit Meeren (Maria), Kratern, Randabdunklung,
+// weichem Schattenrand, Erdschein auf der dunklen Seite und Leuchten der hellen Seite.
 function moonSvg(date) {
   const age = moonAge(date);
   const f = age / SYNODIC;
   const c = Math.cos(2 * Math.PI * f);
-  const k = (1 - c) / 2;              // beleuchteter Anteil
-  const rx = Math.abs(c) * 100;
+  const k = (1 - c) / 2;              // beleuchteter Anteil (0 = Neumond, 1 = Vollmond)
+  const R = 96, C = 100;
+  const rx = Math.abs(c) * R;
   const waxing = f < 0.5;             // Nordhalbkugel: zunehmend rechts hell
+  const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
   let d;
-  if (k < 0.02) d = '';
-  else if (k > 0.98) d = 'M100 0 A100 100 0 1 1 100 200 A100 100 0 1 1 100 0Z';
-  else if (waxing) d = `M100 0 A100 100 0 0 1 100 200 A${rx.toFixed(2)} 100 0 0 ${k < 0.5 ? 0 : 1} 100 0Z`;
-  else d = `M100 0 A100 100 0 0 0 100 200 A${rx.toFixed(2)} 100 0 0 ${k < 0.5 ? 1 : 0} 100 0Z`;
+  if (k < 0.015) d = '';
+  else if (k > 0.985) d = `M${top} A${R} ${R} 0 1 1 ${bottom} A${R} ${R} 0 1 1 ${top}Z`;
+  else if (waxing) d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
+  else d = `M${top} A${R} ${R} 0 0 0 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 1 : 0} ${top}Z`;
   const id = `m${++moonUid}`;
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}">
+  const glow = (0.35 + 0.65 * k).toFixed(2);
+
+  const maria = [
+    [40, 95, 20, 38, 15], [55, 122, 14, 18, 0], [30, 70, 10, 14, 0], [72, 62, 26, 20, -15], [95, 36, 30, 4, -5],
+    [118, 66, 14, 13, 0], [130, 92, 17, 13, 20], [141, 101, 10, 9, 0], [163, 72, 10, 8, 0], [152, 114, 9, 15, 15],
+    [130, 124, 7, 8, 0], [88, 132, 14, 11, 0], [58, 141, 8, 8, 0], [104, 84, 7, 5, 0], [100, 100, 5, 4, 0], [78, 120, 7, 6, 0]
+  ].map(([x, y, a, b, r]) => `<ellipse cx="${x}" cy="${y}" rx="${a}" ry="${b}" transform="rotate(${r} ${x} ${y})"/>`).join('');
+  const rays = [[-60, 40], [-20, 55], [15, 50], [50, 35], [100, 45], [150, 40], [200, 30], [250, 45], [300, 35]]
+    .map(([deg, len]) => {
+      const a = deg * Math.PI / 180;
+      return `<line x1="88" y1="164" x2="${(88 + Math.cos(a) * len).toFixed(1)}" y2="${(164 + Math.sin(a) * len).toFixed(1)}"/>`;
+    }).join('');
+  const craters = [[88, 164, 4.2], [70, 97, 3.6], [48, 95, 2.4], [38, 76, 2.2], [120, 150, 3], [150, 150, 3.2], [140, 46, 2.6], [62, 160, 3], [108, 178, 2.4], [170, 100, 2.2], [32, 120, 2.4], [112, 112, 2]]
+    .map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,.22)"/><circle cx="${x + r * .3}" cy="${y + r * .3}" r="${r * .6}" fill="rgba(60,50,40,.08)"/>`).join('');
+
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
     <defs>
-      <radialGradient id="${id}g" cx="40%" cy="36%" r="72%"><stop offset="0" style="stop-color:var(--moon-lit-2)"/><stop offset="1" style="stop-color:var(--moon-lit)"/></radialGradient>
-      <clipPath id="${id}c"><path d="${d || 'M0 0'}"/></clipPath>
+      <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
+      <radialGradient id="${id}b" cx="42%" cy="40%" r="65%"><stop offset="0" style="stop-color:var(--moon-lit-2)"/><stop offset="1" style="stop-color:var(--moon-lit)"/></radialGradient>
+      <radialGradient id="${id}l" cx="50%" cy="50%" r="50%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#2A2218" stop-opacity=".38"/></radialGradient>
+      <filter id="${id}n" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="4" seed="7"/>
+        <feColorMatrix type="matrix" values="0 0 0 0 0.36  0 0 0 0 0.33  0 0 0 0 0.29  1.0 0 0 0 -0.40"/>
+      </filter>
+      <filter id="${id}s" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="4.2"/></filter>
+      <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
+      <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
+      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
+      <g id="${id}sf">
+        <circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}b)"/>
+        <g clip-path="url(#${id}c)">
+          <g filter="url(#${id}s)" style="fill:var(--moon-maria)" opacity=".62">${maria}</g>
+          <rect x="0" y="0" width="200" height="200" filter="url(#${id}n)" opacity=".24"/>
+          <g stroke="rgba(255,255,255,.16)" stroke-width="1.4" stroke-linecap="round">${rays}</g>
+          ${craters}
+          <circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}l)"/>
+        </g>
+      </g>
     </defs>
-    <circle cx="100" cy="100" r="99" style="fill:var(--moon-dark)"/>
-    ${d ? `<path d="${d}" fill="url(#${id}g)"/>
-    <g clip-path="url(#${id}c)" style="fill:var(--moon-crater);opacity:.45">
-      <circle cx="62" cy="64" r="15"/><circle cx="44" cy="126" r="9"/><circle cx="82" cy="150" r="12"/>
-      <circle cx="132" cy="58" r="10"/><circle cx="146" cy="120" r="14"/><circle cx="112" cy="104" r="6"/>
-    </g>` : ''}
+    ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
+    <circle cx="${C}" cy="${C}" r="${R - 0.5}" style="fill:var(--moon-dark)"/>
+    <use href="#${id}sf" style="opacity:var(--earthshine)"/>
+    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/>` : ''}
   </svg>`;
 }
 
@@ -663,18 +703,25 @@ async function tryResumeSession() {
   }
 }
 
+let dictHiddenTimer = null;
 function onHidden() {
   stopReading();
-  stopRecognition();
+  if (dictWanted) {
+    // Beim Sprechen legt das Handy oft kurz sein eigenes Sprach-Fenster über die App.
+    // Das zählt nicht als „weg“ – Diktat läuft weiter (Sicherheitsstopp nach 5 Minuten).
+    clearTimeout(dictHiddenTimer);
+    dictHiddenTimer = setTimeout(() => { if (document.hidden) stopRecognition(); }, 5 * 60 * 1000);
+  }
   if (!cryptoKey) return;
   saveResume();
-  if (!suppressLock && !biometricBusy) {
+  if (!suppressLock && !biometricBusy && !dictWanted) {
     try { localStorage.setItem(LS_LEFT_AT, String(Date.now())); } catch {}
   }
   persistState(true).catch(() => {});
 }
 
 function onVisible() {
+  clearTimeout(dictHiddenTimer);
   applySky();
   if (!cryptoKey) {
     if (els.lockScreen.classList.contains('active')) autoBiometric();
@@ -1381,20 +1428,47 @@ async function holdScreenOn(on) {
   } catch { wakeLock = null; }
 }
 
+let dictGotResult = false;
+let dictNoResultEnds = 0;
+let dictStartFails = 0;
+let dictWatchdog = null;
+
+function dictMode() {
+  try { return localStorage.getItem('rm_dict_mode') || 'live'; } catch { return 'live'; }
+}
+function setDictMode(m) { try { localStorage.setItem('rm_dict_mode', m); } catch {} }
+function setDictStatus(text) { const h = $('dictHead'); if (h) h.textContent = text; }
+
 function startRecognizer() {
   const Ctor = speechRecognitionCtor();
   if (!Ctor || !dictWanted) return;
+  const mode = dictMode();
   const rec = new Ctor();
   recognition = rec;
   rec.lang = 'de-DE';
-  rec.continuous = true;
-  rec.interimResults = true;
+  // „live“: zeigt Text schon während du sprichst. „einfach“: wie früher, falls das Handy live nicht kann.
+  rec.continuous = mode === 'live';
+  rec.interimResults = mode === 'live';
   rec.maxAlternatives = 1;
   dictSessionStart = Date.now();
   dictSessionFinal = '';
   dictProcessed = new Set();
+  let started = false;
+
+  const markStarted = () => {
+    if (started) return;
+    started = true;
+    clearTimeout(dictWatchdog);
+    setDictStatus('Ich höre zu. Tippe auf das Mikrofon zum Beenden.');
+  };
+  rec.onstart = markStarted;
+  rec.onaudiostart = markStarted;
+  rec.onspeechstart = markStarted;
 
   rec.onresult = event => {
+    markStarted();
+    dictGotResult = true;
+    dictNoResultEnds = 0;
     let interim = '';
     for (let i = 0; i < event.results.length; i++) {
       const res = event.results[i];
@@ -1419,7 +1493,7 @@ function startRecognizer() {
     if (e === 'no-speech' || e === 'aborted') return;   // einfach weiter zuhören
     if (e === 'not-allowed' || e === 'service-not-allowed') {
       dictWanted = false;
-      showToast('Das Mikrofon ist nicht erlaubt. Erlaube es in den Einstellungen des Browsers für diese Seite.', 5000);
+      showToast('Das Mikrofon ist nicht erlaubt. Erlaube es in den Einstellungen des Browsers für diese Seite.', 6000);
     } else if (e === 'audio-capture') {
       dictWanted = false;
       showToast('Das Mikrofon wird gerade von einer anderen App benutzt.', 4500);
@@ -1429,22 +1503,51 @@ function startRecognizer() {
     } else if (e === 'language-not-supported') {
       dictWanted = false;
       keyboardDictationFallback();
+    } else if (mode === 'live') {
+      setDictMode('simple');
+    } else {
+      setDictStatus(`Problem mit dem Mikrofon (${e}). Ich versuche es weiter …`);
     }
   };
   rec.onend = () => {
     if (recognition !== rec) return;
+    clearTimeout(dictWatchdog);
     const short = Date.now() - dictSessionStart < 1200;
     dictQuickFails = short ? dictQuickFails + 1 : 0;
-    if (dictWanted && dictQuickFails < 8 && !document.hidden && els.editorScreen.classList.contains('active')) {
-      // Pause erkannt: sofort wieder zuhören
-      setTimeout(() => { if (dictWanted) { try { startRecognizer(); } catch { finishDictationUi(); } } }, 120);
+    if (!dictGotResult && mode === 'live') {
+      dictNoResultEnds++;
+      // Live-Modus liefert auf diesem Handy nichts → auf einfachen Modus umschalten
+      if (dictNoResultEnds >= 2) { setDictMode('simple'); dictNoResultEnds = 0; }
+    }
+    if (dictWanted && dictQuickFails < 8 && els.editorScreen.classList.contains('active')) {
+      setTimeout(() => { if (dictWanted) startRecognizer(); }, 150);
     } else {
       if (dictWanted && dictQuickFails >= 8) showToast('Die Spracheingabe hat aufgehört. Tippe nochmal auf das Mikrofon.', 4000);
       dictWanted = false;
       finishDictationUi();
     }
   };
-  try { rec.start(); } catch { setTimeout(() => { if (dictWanted) startRecognizer(); }, 400); }
+
+  // Falls das Handy gar nicht reagiert, sag es mir
+  clearTimeout(dictWatchdog);
+  dictWatchdog = setTimeout(() => {
+    if (!started && dictWanted) setDictStatus('Das Mikrofon startet nicht. Prüfe, ob der Browser das Mikrofon benutzen darf.');
+  }, 5000);
+
+  try {
+    rec.start();
+    dictStartFails = 0;
+  } catch (err) {
+    dictStartFails++;
+    if (mode === 'live') setDictMode('simple');
+    if (dictStartFails >= 4) {
+      dictWanted = false;
+      finishDictationUi();
+      showToast(`Spracheingabe konnte nicht starten (${err?.name || err?.message || 'Fehler'}).`, 6000);
+      return;
+    }
+    setTimeout(() => { if (dictWanted) startRecognizer(); }, 400);
+  }
 }
 
 function finishDictationUi() {
@@ -1461,6 +1564,10 @@ function startDictation() {
   dictWanted = true;
   isListening = true;
   dictQuickFails = 0;
+  dictGotResult = false;
+  dictNoResultEnds = 0;
+  dictStartFails = 0;
+  setDictStatus('Mikrofon startet …');
   const ta = els.topicText;
   dictInsertPos = document.activeElement === ta ? ta.selectionEnd : ta.value.length;
   dictLastAuto = null;
@@ -1468,8 +1575,8 @@ function startDictation() {
   els.micBtn.classList.add('listening');
   els.micBtn.setAttribute('aria-label', 'Spracheingabe beenden');
   showDictation(true);
-  holdScreenOn(true);
   startRecognizer();
+  holdScreenOn(true);
 }
 
 function stopRecognition() {
@@ -1688,6 +1795,12 @@ function wireEvents() {
     deferredInstallPrompt = null;
     els.installBtn.classList.add('hidden');
   });
+
+  // Zoomen mit zwei Fingern verhindern (rein und raus)
+  document.addEventListener('touchmove', e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('gesturechange', e => e.preventDefault());
+  document.addEventListener('dblclick', e => { if (!e.target.closest('textarea, input')) e.preventDefault(); });
 
   window.addEventListener('popstate', onPopState);
   document.addEventListener('visibilitychange', () => { if (document.hidden) onHidden(); else onVisible(); });

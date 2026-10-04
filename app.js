@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -223,7 +223,8 @@ function applySky() {
   let body;
   if (BA.dark === BB.dark) {
     body = {};
-    for (const k of Object.keys(BA)) body[k] = k === 'dark' ? BA.dark : mixHex(BA[k], BB[k], t);
+    const swap = new Set(['accent', 'accentInk', 'accentText']);
+    for (const k of Object.keys(BA)) body[k] = k === 'dark' ? BA.dark : swap.has(k) ? (t < 0.5 ? BA[k] : BB[k]) : mixHex(BA[k], BB[k], t);
   } else {
     // Hell/Dunkel wechselt genau dann, wenn der Himmel hell bzw. dunkel genug ist
     body = skyIsLight ? (BA.dark ? BB : BA) : (BA.dark ? BA : BB);
@@ -664,6 +665,7 @@ async function tryResumeSession() {
 
 function onHidden() {
   stopReading();
+  stopRecognition();
   if (!cryptoKey) return;
   saveResume();
   if (!suppressLock && !biometricBusy) {
@@ -1258,51 +1260,234 @@ function readText() {
   speechSynthesis.speak(u);
 }
 
+/* ---------- Spracheingabe ----------
+   Hört so lange zu, bis du das Mikrofon wieder antippst – auch wenn du zwischendurch
+   nachdenkst. Satzzeichen werden nach Pausen und typischen Bindewörtern ergänzt. */
+
+let dictWanted = false;
+let dictInsertPos = null;
+let dictLastAuto = null;      // { pos } – Stelle eines automatisch gesetzten Punkts/Fragezeichens
+let dictQuickFails = 0;
+let dictSessionStart = 0;
+let dictSessionFinal = '';
+let dictProcessed = new Set();
+let wakeLock = null;
+
+const FILLERS = /^(ä+h+m*|ö+h+m*|e+h+m+|h+m+|m+h+m+)[,.]?$/i;
+const COMMA_BEFORE = new Set(['dass', 'weil', 'obwohl', 'sondern', 'sodass', 'nachdem', 'bevor', 'wobei', 'falls', 'sobald', 'ob', 'wenn', 'aber', 'denn']);
+const COMMA_ONLY_MID = new Set(['dass', 'weil', 'obwohl', 'sondern', 'sodass', 'nachdem', 'bevor', 'wobei', 'falls', 'sobald', 'ob', 'wenn']);
+const NO_COMMA_AFTER = new Set(['und', 'oder', 'auch', 'nur', 'selbst', 'außer', 'als', 'wie', 'so', 'ohne', 'statt', 'anstatt', 'bis', 'aber', 'denn']);
+const JOIN_PLAIN = new Set(['und', 'oder', 'bzw', 'sowie', 'beziehungsweise']);
+const W_QUESTION = new Set(['wer', 'wen', 'wem', 'wessen', 'was', 'wann', 'wo', 'woher', 'wohin', 'warum', 'wieso', 'weshalb', 'wie', 'welche', 'welcher', 'welches', 'welchen', 'welchem', 'wozu', 'womit', 'wofür', 'worüber', 'wovon']);
+const VERB_FIRST = new Set(['kann', 'kannst', 'könnte', 'könntest', 'können', 'hast', 'hat', 'habe', 'haben', 'hattest', 'bist', 'ist', 'sind', 'seid', 'war', 'warst', 'soll', 'sollte', 'sollen', 'darf', 'dürfen', 'willst', 'will', 'wollen', 'gibt', 'weißt', 'magst', 'muss', 'musst', 'müssen', 'wirst', 'wird', 'werden', 'würdest', 'würde', 'glaubst', 'meinst', 'findest', 'denkst', 'kennst', 'gehst', 'kommst', 'machst']);
+const PRONOUNS = new Set(['du', 'ihr', 'sie', 'er', 'es', 'wir', 'man', 'das', 'ich', 'der', 'die', 'dies', 'dieser', 'diese']);
+
+function capitalize(s) { return s.replace(/^(\s*)(\p{Ll})/u, (m, sp, ch) => sp + ch.toUpperCase()); }
+function lowerFirstWord(s) { return s.replace(/^(\s*)(\p{Lu})(\p{Ll}*)/u, (m, sp, a, b) => sp + a.toLowerCase() + b); }
+function bare(word) { return (word || '').toLowerCase().replace(/[^\p{L}]/gu, ''); }
+
+// Gesprochene Befehle, Füllwörter, Kommas vor Bindewörtern
+function cleanSpoken(raw) {
+  let t = ' ' + raw.trim() + ' ';
+  t = t.replace(/\s+neuer\s+absatz\s+/gi, '\n\n').replace(/\s+neue\s+zeile\s+/gi, '\n')
+       .replace(/\s+komma\s+/gi, ', ').replace(/\s+fragezeichen\s*/gi, '? ')
+       .replace(/\s+ausrufezeichen\s*/gi, '! ').replace(/\s+doppelpunkt\s+/gi, ': ');
+  const lines = t.split('\n').map(line => {
+    const words = line.split(/\s+/).filter(Boolean).filter(w => !FILLERS.test(w));
+    for (let i = 1; i < words.length; i++) {
+      const w = bare(words[i]);
+      if (!COMMA_BEFORE.has(w) || !COMMA_ONLY_MID.has(w)) continue;
+      const prev = words[i - 1];
+      if (/[,.;:!?]$/.test(prev)) continue;
+      const p = bare(prev);
+      if (NO_COMMA_AFTER.has(p)) {
+        // „so dass“, „als ob“, „auch wenn“ → Komma vor das erste Wort
+        if (['so', 'als', 'ohne', 'statt', 'anstatt', 'auch', 'nur', 'selbst', 'bis'].includes(p) && i >= 2 && !/[,.;:!?]$/.test(words[i - 2]) && !['und', 'oder'].includes(bare(words[i - 2]))) {
+          words[i - 2] += ',';
+        }
+        continue;
+      }
+      words[i - 1] = prev + ',';
+    }
+    return words.join(' ');
+  });
+  return lines.join('\n').replace(/[ \t]+([,.;:!?])/g, '$1').replace(/ *\n */g, '\n').replace(/^[ \t]+|[ \t]+$/g, '');
+}
+
+function looksLikeQuestion(sentence) {
+  const words = sentence.trim().split(/\s+/).map(bare);
+  if (!words[0]) return false;
+  if (W_QUESTION.has(words[0])) return true;
+  return VERB_FIRST.has(words[0]) && PRONOUNS.has(words[1]);
+}
+
+function insertSpokenSegment(raw) {
+  let seg = cleanSpoken(raw);
+  if (!seg) return;
+  setEditing(true);
+  const ta = els.topicText;
+  const value = ta.value;
+  let pos = document.activeElement === ta ? ta.selectionEnd : (dictInsertPos ?? value.length);
+  pos = Math.min(Math.max(0, pos), value.length);
+  let before = value.slice(0, pos);
+  const after = value.slice(pos);
+
+  const firstWord = bare(seg.split(/\s+/)[0]);
+  const continuing = dictLastAuto && dictLastAuto.pos === before.length - 1 && /[.?!]$/.test(before);
+  if (continuing && /^[,;:.!?]/.test(seg)) {
+    // gesagtes Satzzeichen ersetzt den automatischen Punkt
+    before = before.slice(0, -1);
+    seg = seg.replace(/^([,;:.!?])\s*/, '$1 ');
+  } else if (continuing && (JOIN_PLAIN.has(firstWord) || COMMA_BEFORE.has(firstWord))) {
+    // Pause war mitten im Satz: automatischen Punkt wieder wegnehmen
+    before = before.slice(0, -1) + (JOIN_PLAIN.has(firstWord) ? '' : ',');
+    seg = lowerFirstWord(seg);
+  } else {
+    const trimmed = before.replace(/\s+$/, '');
+    if (!trimmed || /[.?!]$/.test(trimmed) || /\n\s*$/.test(before)) seg = capitalize(seg);
+  }
+
+  // Satzende ergänzen
+  if (!/[.?!,:;]$/.test(seg) && !/\n$/.test(seg)) {
+    const fullBefore = (before + ' ' + seg);
+    const lastSentence = fullBefore.split(/[.?!\n]/).pop();
+    seg += looksLikeQuestion(lastSentence) ? '?' : '.';
+  }
+
+  const needsSpace = before.length && !/[\s\n]$/.test(before) && !/^[,.;:!?\n]/.test(seg);
+  const inserted = (needsSpace ? ' ' : '') + seg;
+  const afterNeedsSpace = after.length && !/^[\s\n,.;:!?]/.test(after);
+  ta.value = before + inserted + (afterNeedsSpace ? ' ' : '') + after;
+  const caret = before.length + inserted.length;
+  dictInsertPos = caret;
+  dictLastAuto = /[.?]$/.test(seg) ? { pos: caret - 1 } : null;
+  try { ta.setSelectionRange(caret, caret); } catch {}
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  // Mitscrollen, damit du siehst, was geschrieben wird
+  if (caret >= ta.value.length - 2) ta.scrollTop = ta.scrollHeight;
+}
+
 function speechRecognitionCtor() { return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
-function stopRecognition() {
-  if (recognition && isListening) { try { recognition.stop(); } catch {} }
+
+function showDictation(on) {
+  $('dictation').classList.toggle('hidden', !on);
+  if (!on) $('dictText').textContent = '';
+}
+
+async function holdScreenOn(on) {
+  try {
+    if (on && 'wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch { wakeLock = null; }
+}
+
+function startRecognizer() {
+  const Ctor = speechRecognitionCtor();
+  if (!Ctor || !dictWanted) return;
+  const rec = new Ctor();
+  recognition = rec;
+  rec.lang = 'de-DE';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  dictSessionStart = Date.now();
+  dictSessionFinal = '';
+  dictProcessed = new Set();
+
+  rec.onresult = event => {
+    let interim = '';
+    for (let i = 0; i < event.results.length; i++) {
+      const res = event.results[i];
+      const text = res[0].transcript;
+      if (res.isFinal) {
+        if (dictProcessed.has(i)) continue;
+        dictProcessed.add(i);
+        let piece = text;
+        // manche Android-Versionen liefern den bisherigen Text noch einmal mit
+        if (dictSessionFinal && piece.toLowerCase().startsWith(dictSessionFinal.toLowerCase())) piece = piece.slice(dictSessionFinal.length);
+        dictSessionFinal = text;
+        if (piece.trim()) insertSpokenSegment(piece);
+        dictQuickFails = 0;
+      } else {
+        interim += text;
+      }
+    }
+    $('dictText').textContent = interim.trim();
+  };
+  rec.onerror = event => {
+    const e = event.error;
+    if (e === 'no-speech' || e === 'aborted') return;   // einfach weiter zuhören
+    if (e === 'not-allowed' || e === 'service-not-allowed') {
+      dictWanted = false;
+      showToast('Das Mikrofon ist nicht erlaubt. Erlaube es in den Einstellungen des Browsers für diese Seite.', 5000);
+    } else if (e === 'audio-capture') {
+      dictWanted = false;
+      showToast('Das Mikrofon wird gerade von einer anderen App benutzt.', 4500);
+    } else if (e === 'network') {
+      dictWanted = false;
+      showToast('Die Spracheingabe braucht gerade Internet.', 4500);
+    } else if (e === 'language-not-supported') {
+      dictWanted = false;
+      keyboardDictationFallback();
+    }
+  };
+  rec.onend = () => {
+    if (recognition !== rec) return;
+    const short = Date.now() - dictSessionStart < 1200;
+    dictQuickFails = short ? dictQuickFails + 1 : 0;
+    if (dictWanted && dictQuickFails < 8 && !document.hidden && els.editorScreen.classList.contains('active')) {
+      // Pause erkannt: sofort wieder zuhören
+      setTimeout(() => { if (dictWanted) { try { startRecognizer(); } catch { finishDictationUi(); } } }, 120);
+    } else {
+      if (dictWanted && dictQuickFails >= 8) showToast('Die Spracheingabe hat aufgehört. Tippe nochmal auf das Mikrofon.', 4000);
+      dictWanted = false;
+      finishDictationUi();
+    }
+  };
+  try { rec.start(); } catch { setTimeout(() => { if (dictWanted) startRecognizer(); }, 400); }
+}
+
+function finishDictationUi() {
   isListening = false;
   els.micBtn.classList.remove('listening');
+  els.micBtn.setAttribute('aria-label', 'Spracheingabe starten');
+  showDictation(false);
+  holdScreenOn(false);
 }
-function appendTranscript(transcript) {
+
+function startDictation() {
+  if (!speechRecognitionCtor()) return keyboardDictationFallback();
+  stopReading();
+  dictWanted = true;
+  isListening = true;
+  dictQuickFails = 0;
+  const ta = els.topicText;
+  dictInsertPos = document.activeElement === ta ? ta.selectionEnd : ta.value.length;
+  dictLastAuto = null;
   setEditing(true);
-  const current = els.topicText.value;
-  const start = els.topicText.selectionStart ?? current.length;
-  const end = els.topicText.selectionEnd ?? current.length;
-  const before = current.slice(0, start);
-  const after = current.slice(end);
-  const inserted = `${before.length && !/\s$/.test(before) ? ' ' : ''}${transcript.trim()}`;
-  els.topicText.value = before + inserted + after;
-  const caret = before.length + inserted.length;
-  els.topicText.setSelectionRange(caret, caret);
-  els.topicText.dispatchEvent(new Event('input', { bubbles: true }));
+  els.micBtn.classList.add('listening');
+  els.micBtn.setAttribute('aria-label', 'Spracheingabe beenden');
+  showDictation(true);
+  holdScreenOn(true);
+  startRecognizer();
 }
+
+function stopRecognition() {
+  const wasOn = dictWanted || isListening;
+  dictWanted = false;
+  if (recognition) { try { recognition.stop(); } catch {} }
+  finishDictationUi();
+  return wasOn;
+}
+
 function keyboardDictationFallback() {
   setEditing(true, true);
   showToast('Direkte Spracheingabe geht in diesem Browser nicht. Tippe auf das Mikrofon deiner Tastatur.', 5000);
 }
+
 function toggleRecognition() {
-  const Ctor = speechRecognitionCtor();
-  if (!Ctor) return keyboardDictationFallback();
-  if (isListening) return stopRecognition();
-  recognition = new Ctor();
-  recognition.lang = 'de-DE';
-  recognition.continuous = true;
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-  recognition.onstart = () => { isListening = true; els.micBtn.classList.add('listening'); showToast('Ich höre zu …'); };
-  recognition.onresult = event => {
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) appendTranscript(event.results[i][0].transcript);
-    }
-  };
-  recognition.onerror = event => {
-    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') showToast('Das Mikrofon ist nicht erlaubt. Erlaube es in den Browser-Einstellungen.', 4500);
-    else if (event.error === 'network' || event.error === 'language-not-supported') keyboardDictationFallback();
-    else if (event.error !== 'aborted' && event.error !== 'no-speech') showToast('Spracheingabe geht hier gerade nicht. Nutze das Mikrofon der Tastatur.', 4500);
-  };
-  recognition.onend = () => { isListening = false; els.micBtn.classList.remove('listening'); };
-  try { recognition.start(); } catch { showToast('Spracheingabe konnte nicht starten'); }
+  if (dictWanted || isListening) stopRecognition();
+  else startDictation();
 }
 
 /* =====================================================================

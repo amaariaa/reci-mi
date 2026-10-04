@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1343,9 +1343,21 @@ function looksLikeQuestion(sentence) {
   return VERB_FIRST.has(words[0]) && PRONOUNS.has(words[1]);
 }
 
+// Kleine Wörter, die mitten im Satz kleingeschrieben werden (Nomen bleiben groß)
+const LOWER_WORDS = new Set(('der die das den dem des ein eine einen einem einer eines und oder aber denn weil dass ob wenn als wie wo was wer ' +
+  'auch noch schon dann da so nur nicht kein keine keinen ich du er sie es wir ihr man mich mir dich dir sich uns euch ihn ihm ihnen ' +
+  'mein meine meinen dein deine sein seine unser zu zum zur mit von vom bei beim nach vor aus auf in im an am um für über unter durch ' +
+  'gegen ohne bis seit hat habe haben hast ist bin bist sind seid war waren wird werden wurde kann können könnte muss müssen soll ' +
+  'sollte will möchte gibt sehr mal also einfach ganz immer jetzt hier dort dabei dafür daraus damit darauf dazu daher davon wieder ' +
+  'etwa eben ja nein vielleicht doch viel viele mehr alle alles etwas nichts diese dieser dieses welche welcher bzw beziehungsweise ' +
+  'sowie zusammen dann denn deshalb trotzdem sondern obwohl nachdem bevor während falls sobald').split(' '));
+const SENTENCE_PAUSE_MS = 2500;   // erst nach so einer echten Pause kommt ein Punkt
+let dictSentenceTimer = null;
+
 function insertSpokenSegment(raw) {
   let seg = cleanSpoken(raw);
   if (!seg) return;
+  clearTimeout(dictSentenceTimer);
   setEditing(true);
   const ta = els.topicText;
   const value = ta.value;
@@ -1355,25 +1367,27 @@ function insertSpokenSegment(raw) {
   const after = value.slice(pos);
 
   const firstWord = bare(seg.split(/\s+/)[0]);
-  const continuing = dictLastAuto && dictLastAuto.pos === before.length - 1 && /[.?!]$/.test(before);
-  if (continuing && /^[,;:.!?]/.test(seg)) {
+  const autoEnded = dictLastAuto && dictLastAuto.pos === before.length - 1 && /[.?!]$/.test(before);
+  if (autoEnded && /^[,;:.!?]/.test(seg)) {
     // gesagtes Satzzeichen ersetzt den automatischen Punkt
     before = before.slice(0, -1);
     seg = seg.replace(/^([,;:.!?])\s*/, '$1 ');
-  } else if (continuing && (JOIN_PLAIN.has(firstWord) || COMMA_BEFORE.has(firstWord))) {
-    // Pause war mitten im Satz: automatischen Punkt wieder wegnehmen
+  } else if (autoEnded && (JOIN_PLAIN.has(firstWord) || COMMA_BEFORE.has(firstWord))) {
+    // Pause war doch mitten im Satz: automatischen Punkt wieder wegnehmen
     before = before.slice(0, -1) + (JOIN_PLAIN.has(firstWord) ? '' : ',');
     seg = lowerFirstWord(seg);
   } else {
     const trimmed = before.replace(/\s+$/, '');
-    if (!trimmed || /[.?!]$/.test(trimmed) || /\n\s*$/.test(before)) seg = capitalize(seg);
-  }
-
-  // Satzende ergänzen
-  if (!/[.?!,:;]$/.test(seg) && !/\n$/.test(seg)) {
-    const fullBefore = (before + ' ' + seg);
-    const lastSentence = fullBefore.split(/[.?!\n]/).pop();
-    seg += looksLikeQuestion(lastSentence) ? '?' : '.';
+    const sentenceStart = !trimmed || /[.?!]$/.test(trimmed) || /\n\s*$/.test(before);
+    if (sentenceStart) {
+      seg = capitalize(seg);
+    } else {
+      // mitten im Satz: kleine Wörter klein, Komma vor „dass“, „weil“ usw.
+      if (LOWER_WORDS.has(firstWord)) seg = lowerFirstWord(seg);
+      if (COMMA_ONLY_MID.has(firstWord) && !/[,;:]$/.test(trimmed) && !NO_COMMA_AFTER.has(bare(trimmed.split(/\s+/).pop()))) {
+        before = trimmed + ',';
+      }
+    }
   }
 
   const needsSpace = before.length && !/[\s\n]$/.test(before) && !/^[,.;:!?\n]/.test(seg);
@@ -1382,11 +1396,38 @@ function insertSpokenSegment(raw) {
   ta.value = before + inserted + (afterNeedsSpace ? ' ' : '') + after;
   const caret = before.length + inserted.length;
   dictInsertPos = caret;
-  dictLastAuto = /[.?]$/.test(seg) ? { pos: caret - 1 } : null;
+  dictLastAuto = null;
   try { ta.setSelectionRange(caret, caret); } catch {}
   ta.dispatchEvent(new Event('input', { bubbles: true }));
-  // Mitscrollen, damit du siehst, was geschrieben wird
   if (caret >= ta.value.length - 2) ta.scrollTop = ta.scrollHeight;
+  scheduleSentenceEnd();
+}
+
+// Punkt oder Fragezeichen erst setzen, wenn du wirklich eine Pause machst
+function scheduleSentenceEnd() {
+  clearTimeout(dictSentenceTimer);
+  dictSentenceTimer = setTimeout(endSpokenSentence, dictMode() === 'simple' ? SENTENCE_PAUSE_MS + 1500 : SENTENCE_PAUSE_MS);
+}
+function holdSentenceEnd() {
+  // du sprichst gerade weiter → noch keinen Punkt
+  if (dictSentenceTimer) scheduleSentenceEnd();
+}
+function endSpokenSentence() {
+  clearTimeout(dictSentenceTimer);
+  dictSentenceTimer = null;
+  const ta = els.topicText;
+  if (dictInsertPos == null) return;
+  const value = ta.value;
+  const pos = Math.min(dictInsertPos, value.length);
+  const before = value.slice(0, pos);
+  const trimmed = before.replace(/\s+$/, '');
+  if (!trimmed || /[.?!,;:]$/.test(trimmed) || /\n\s*$/.test(before)) return;
+  const sentence = trimmed.split(/[.?!\n]/).pop();
+  const mark = looksLikeQuestion(sentence) ? '?' : '.';
+  ta.value = trimmed + mark + value.slice(trimmed.length);
+  dictInsertPos = trimmed.length + 1 + (pos - trimmed.length);
+  dictLastAuto = { pos: trimmed.length };
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function speechRecognitionCtor() { return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
@@ -1438,7 +1479,8 @@ function startRecognizer() {
   };
   rec.onstart = markStarted;
   rec.onaudiostart = markStarted;
-  rec.onspeechstart = markStarted;
+  rec.onspeechstart = () => { markStarted(); holdSentenceEnd(); };
+  rec.onsoundstart = () => holdSentenceEnd();
 
   rec.onresult = event => {
     markStarted();
@@ -1461,6 +1503,7 @@ function startRecognizer() {
         interim += text;
       }
     }
+    if (interim.trim()) holdSentenceEnd();
     $('dictText').textContent = interim.trim();
   };
   rec.onerror = event => {
@@ -1557,6 +1600,7 @@ function startDictation() {
 function stopRecognition() {
   const wasOn = dictWanted || isListening;
   dictWanted = false;
+  if (dictSentenceTimer) endSpokenSentence();
   if (recognition) { try { recognition.stop(); } catch {} }
   finishDictationUi();
   return wasOn;

@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#141A36" />
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
-  <link rel="manifest" href="manifest.webmanifest?v=2.6.4" />
+  <link rel="manifest" href="manifest.webmanifest?v=2.7" />
   <link rel="icon" href="mond-192.png" />
   <link rel="apple-touch-icon" href="mond-192.png" />
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=2.6.4" />
+  <link rel="stylesheet" href="styles.css?v=2.7" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -146,7 +146,18 @@
           <div id="hlLayer" class="hl-layer hidden" aria-hidden="true"></div>
           <textarea id="topicText" spellcheck="true" placeholder="Schreib hier oder tippe auf das Mikrofon …"></textarea>
         </div>
-        <div id="saveState" class="save-state">Gespeichert</div>
+        <div class="editor-foot">
+          <div class="edit-history" aria-label="Bearbeitung">
+            <button id="undoBtn" class="edit-mini" type="button" aria-label="Rückgängig" disabled>
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+            </button>
+            <button id="redoBtn" class="edit-mini" type="button" aria-label="Wiederholen" disabled>
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>
+            </button>
+            <button id="endBtn" class="end-mini" type="button">Ans Ende</button>
+          </div>
+          <div id="saveState" class="save-state">Gespeichert</div>
+        </div>
       </main>
       <nav class="toolbar" aria-label="Textfunktionen">
         <button id="editBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg><span>Bearbeiten</span></button>
@@ -251,6 +262,7 @@
         <button type="button" id="nameMenuBtn" class="sheet-item">Wie soll ich dich nennen?</button>
         <button type="button" id="openTrashBtn" class="sheet-item">Papierkorb</button>
         <button type="button" id="exportBtn" class="sheet-item">Sicherung speichern<small id="backupAge" class="item-sub"></small></button>
+        <label class="sheet-item">Sicherung prüfen<input id="checkBackupInput" type="file" accept="application/json,.json" hidden /></label>
         <label class="sheet-item">Sicherung laden<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
         <button type="button" id="installBtn" class="sheet-item hidden">App installieren</button>
         <button type="button" id="pinMenuBtn" class="sheet-item">PIN ändern</button>
@@ -258,7 +270,23 @@
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 2.6.4</p>
+      <p class="sheet-note version">Version 2.7</p>
+    </dialog>
+
+    <!-- Blatt: Sicherung prüfen -->
+    <dialog id="backupCheckSheet" class="sheet">
+      <form id="backupCheckForm" autocomplete="off">
+        <div class="grab" aria-hidden="true"></div>
+        <h2>Sicherung prüfen</h2>
+        <p id="backupCheckMeta" class="sheet-text"></p>
+        <label for="backupCheckPin" class="lbl">PIN der Sicherung</label>
+        <input id="backupCheckPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="PIN eingeben" />
+        <p id="backupCheckHint" class="sheet-hint" role="status"></p>
+        <div class="actions">
+          <button type="button" id="backupCheckClose" class="btn btn-ghost">Schließen</button>
+          <button type="submit" id="backupCheckOk" class="btn btn-main">PIN prüfen</button>
+        </div>
+      </form>
     </dialog>
 
     <!-- Blatt: Name -->
@@ -414,6 +442,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=2.6.4" defer></script>
+  <script src="app.js?v=2.7" defer></script>
 </body>
 </html>

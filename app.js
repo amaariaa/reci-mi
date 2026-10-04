@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.6.4';
+const APP_VERSION = '2.7';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -46,12 +46,12 @@ const els = {};
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
  'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
- 'backBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState',
+ 'backBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
  'trashBackBtn', 'trashList',
  'topicSheet', 'topicForm', 'topicSheetTitle', 'topicName', 'catPicker', 'cancelTopicBtn', 'saveTopicBtn',
  'actionSheet', 'actionTitle', 'actionOpenBtn', 'actionRenameBtn', 'actionTrashBtn', 'actionCancelBtn',
- 'menuSheet', 'biometricMenuBtn', 'nameMenuBtn', 'openTrashBtn', 'exportBtn', 'importInput', 'installBtn', 'lockBtn',
+ 'menuSheet', 'biometricMenuBtn', 'nameMenuBtn', 'openTrashBtn', 'exportBtn', 'importInput', 'checkBackupInput', 'installBtn', 'lockBtn',
  'nameSheet', 'nameForm', 'nameInput', 'nameCancelBtn',
  'confirmSheet', 'confirmTitle', 'confirmText', 'confirmCancelBtn', 'confirmOkBtn',
  'toast'].forEach(id => { els[id] = $(id); });
@@ -987,7 +987,10 @@ async function persistState(immediate = false) {
 
 function saveResume() {
   let resume = { screen: 'home' };
-  if (els.editorScreen.classList.contains('active') && currentTopicId) resume = { screen: 'editor', id: currentTopicId };
+  if (els.editorScreen.classList.contains('active') && currentTopicId) {
+    rememberEditorPosition();
+    resume = { screen: 'editor', id: currentTopicId };
+  }
   else if (els.trashScreen.classList.contains('active')) resume = { screen: 'trash' };
   try { localStorage.setItem(LS_RESUME, JSON.stringify(resume)); } catch {}
 }
@@ -1295,6 +1298,7 @@ function goHomeFromScreen() {
 }
 
 async function showHome() {
+  rememberEditorPosition();
   versionCheckpoint('leave');
   if (findOpen) closeFind();
   openedProtected.clear();   // geschützte Themen beim Verlassen sofort wieder zu
@@ -1369,6 +1373,7 @@ function onSheetClosed(e) {
   if (openSheetEl !== dlg) return;
   openSheetEl = null;
   if (dlg === els.confirmSheet) resolveConfirm(false);
+  if (dlg === $('backupCheckSheet')) pendingBackupCheck = null;
   if (history.state?.rm === 'sheet') history.back();
 }
 
@@ -1410,8 +1415,10 @@ function formatLong(iso) {
   if (d.toDateString() === new Date().toDateString()) return `Heute, ${time}`;
   return `${d.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })}, ${time}`;
 }
-function excerpt(text) {
-  return (text || '').replace(/\s+/g, ' ').trim() || 'Noch nichts geschrieben';
+function excerpt(text, max = 160) {
+  const clean = (text || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return 'Noch nichts geschrieben';
+  return clean.length > max ? clean.slice(0, max).trimEnd() + ' …' : clean;
 }
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
@@ -1469,6 +1476,137 @@ function wireRow(row) {
   row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTopic(row.dataset.id); } });
 }
 
+
+/* =====================================================================
+   Editor-Komfort: Position merken, ans Ende, Rückgängig/Wiederholen
+   ===================================================================== */
+
+const EDIT_HISTORY_LIMIT = 60;
+let editUndoStack = [];
+let editRedoStack = [];
+let editGroupOpen = false;
+let editGroupTimer = null;
+let editApplying = false;
+let editPrevSnapshot = null;
+
+function editorSnapshot(text = els.topicText.value) {
+  const len = text.length;
+  const start = Math.min(Number(els.topicText.selectionStart ?? len), len);
+  const end = Math.min(Number(els.topicText.selectionEnd ?? start), len);
+  return { text, start, end, scrollTop: Number(els.topicText.scrollTop || 0) };
+}
+
+function updateEditHistoryButtons() {
+  if (!els.undoBtn || !els.redoBtn) return;
+  const canEdit = !els.topicText.readOnly;
+  els.undoBtn.disabled = !canEdit || editUndoStack.length === 0;
+  els.redoBtn.disabled = !canEdit || editRedoStack.length === 0;
+}
+
+function resetEditHistory(text = els.topicText.value) {
+  clearTimeout(editGroupTimer);
+  editUndoStack = [];
+  editRedoStack = [];
+  editGroupOpen = false;
+  editPrevSnapshot = editorSnapshot(text);
+  updateEditHistoryButtons();
+}
+
+function syncEditSnapshotPosition() {
+  if (!editPrevSnapshot || editPrevSnapshot.text !== els.topicText.value) return;
+  editPrevSnapshot = editorSnapshot(els.topicText.value);
+}
+
+function recordEditorChange(previousText) {
+  if (editApplying) return;
+  const before = editPrevSnapshot && editPrevSnapshot.text === previousText
+    ? editPrevSnapshot
+    : { text: previousText, start: previousText.length, end: previousText.length, scrollTop: els.topicText.scrollTop || 0 };
+
+  if (!editGroupOpen) {
+    editUndoStack.push({ ...before });
+    if (editUndoStack.length > EDIT_HISTORY_LIMIT) editUndoStack.shift();
+    editRedoStack = [];
+    editGroupOpen = true;
+  }
+  clearTimeout(editGroupTimer);
+  editGroupTimer = setTimeout(() => { editGroupOpen = false; }, 900);
+}
+
+async function applyEditorSnapshot(snap) {
+  const topic = currentTopic();
+  if (!topic || !snap) return;
+  editApplying = true;
+  clearTimeout(editGroupTimer);
+  editGroupOpen = false;
+  els.topicText.value = snap.text;
+  const max = snap.text.length;
+  try { els.topicText.setSelectionRange(Math.min(snap.start, max), Math.min(snap.end, max)); } catch {}
+  els.topicText.scrollTop = Math.max(0, Number(snap.scrollTop || 0));
+  versionOnInput(topic, snap.text);
+  topic.content = snap.text;
+  topic.updatedAt = new Date().toISOString();
+  els.dateLine.textContent = formatLong(topic.updatedAt);
+  if (findOpen) renderFind(false);
+  editPrevSnapshot = editorSnapshot(snap.text);
+  rememberEditorPosition();
+  editApplying = false;
+  updateEditHistoryButtons();
+  await persistState(true);
+}
+
+async function undoEdit() {
+  if (els.topicText.readOnly || !editUndoStack.length) return;
+  const current = editorSnapshot();
+  const previous = editUndoStack.pop();
+  editRedoStack.push(current);
+  if (editRedoStack.length > EDIT_HISTORY_LIMIT) editRedoStack.shift();
+  await applyEditorSnapshot(previous);
+}
+
+async function redoEdit() {
+  if (els.topicText.readOnly || !editRedoStack.length) return;
+  const current = editorSnapshot();
+  const next = editRedoStack.pop();
+  editUndoStack.push(current);
+  if (editUndoStack.length > EDIT_HISTORY_LIMIT) editUndoStack.shift();
+  await applyEditorSnapshot(next);
+}
+
+function rememberEditorPosition() {
+  const topic = currentTopic();
+  if (!topic || !els.editorScreen.classList.contains('active')) return;
+  const len = els.topicText.value.length;
+  topic.viewState = {
+    start: Math.min(Number(els.topicText.selectionStart ?? len), len),
+    end: Math.min(Number(els.topicText.selectionEnd ?? len), len),
+    scrollTop: Math.max(0, Number(els.topicText.scrollTop || 0))
+  };
+}
+
+function restoreEditorPosition(topic) {
+  const view = topic?.viewState;
+  if (!view) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (currentTopicId !== topic.id) return;
+    const len = els.topicText.value.length;
+    const start = Math.min(Math.max(0, Number(view.start ?? len)), len);
+    const end = Math.min(Math.max(start, Number(view.end ?? start)), len);
+    try { els.topicText.setSelectionRange(start, end); } catch {}
+    const maxScroll = Math.max(0, els.topicText.scrollHeight - els.topicText.clientHeight);
+    els.topicText.scrollTop = Math.min(Math.max(0, Number(view.scrollTop || 0)), maxScroll);
+    syncEditSnapshotPosition();
+  }));
+}
+
+function goEditorEnd() {
+  const len = els.topicText.value.length;
+  try { els.topicText.setSelectionRange(len, len); } catch {}
+  els.topicText.scrollTop = els.topicText.scrollHeight;
+  rememberEditorPosition();
+  syncEditSnapshotPosition();
+}
+
 function setEditorTag(topic) {
   const cat = catOf(topic);
   const varName = { 'Bücher': '--c-books', 'Apps': '--c-apps', 'Privat': '--c-private', 'Sonstiges': '--c-other', 'Schnellnotizen': '--c-quick' }[cat];
@@ -1488,6 +1626,7 @@ function openTopic(id, { push = true, verified = false } = {}) {
   els.editorTitle.textContent = topic.title;
   setEditorTag(topic);
   els.topicText.value = topic.content || '';
+  resetEditHistory(topic.content || '');
   renderSketches();
   if (findOpen) closeFind();
   stopReading();
@@ -1497,6 +1636,7 @@ function openTopic(id, { push = true, verified = false } = {}) {
   els.saveState.textContent = 'Gespeichert';
   if (push) history.pushState({ rm: 'editor', id }, '');
   showScreen(els.editorScreen);
+  restoreEditorPosition(topic);
 }
 
 function currentTopic() {
@@ -1504,15 +1644,21 @@ function currentTopic() {
 }
 
 function setEditing(on, focus = false) {
+  if (!on) rememberEditorPosition();
   els.topicText.readOnly = !on;
   els.editBtn.classList.toggle('active', on);
   els.editBtn.querySelector('span').textContent = on ? 'Fertig' : 'Bearbeiten';
   if (on && focus) {
-    els.topicText.focus();
     const len = els.topicText.value.length;
-    els.topicText.setSelectionRange(len, len);
+    const start = Math.min(Number(els.topicText.selectionStart ?? len), len);
+    const end = Math.min(Number(els.topicText.selectionEnd ?? start), len);
+    const scrollTop = els.topicText.scrollTop;
+    try { els.topicText.focus({ preventScroll: true }); } catch { els.topicText.focus(); }
+    try { els.topicText.setSelectionRange(start, end); } catch {}
+    els.topicText.scrollTop = scrollTop;
   }
   if (!on) els.topicText.blur();
+  updateEditHistoryButtons();
 }
 
 function openTopicSheet(mode = 'create', id = null) {
@@ -2586,6 +2732,7 @@ async function restoreVersion() {
   topic.updatedAt = new Date().toISOString();
   verTopicId = topic.id; verBaseline = verPrev = restored;
   els.topicText.value = restored;
+  resetEditHistory(restored);
   els.dateLine.textContent = formatLong(topic.updatedAt);
   await persistState(true);
   closeSheet($('versionViewSheet'));
@@ -3068,6 +3215,63 @@ async function exportBackup() {
   showToast('Sicherung gespeichert (verschlüsselt). Sie liegt im Ordner Downloads.', 3500);
 }
 
+
+let pendingBackupCheck = null;
+
+function parseBackupPayload(text) {
+  const parsed = JSON.parse(text);
+  if (parsed.format !== 'ReciMi-Backup' || !parsed.salt || !parsed.verifier || !parsed.vault) throw new Error('invalid');
+  if (!parsed.verifier.iv || !parsed.verifier.data || !parsed.vault.iv || !parsed.vault.data) throw new Error('invalid');
+  return parsed;
+}
+
+async function openBackupCheck(file) {
+  let parsed;
+  try {
+    parsed = parseBackupPayload(await file.text());
+  } catch {
+    pendingBackupCheck = null;
+    return showToast('Diese Datei ist keine gültige Reci-mi-Sicherung', 3500);
+  }
+  pendingBackupCheck = parsed;
+  const when = parsed.exportedAt ? formatLong(parsed.exportedAt) : 'Datum unbekannt';
+  const fromVersion = parsed.appVersion ? `Version ${parsed.appVersion}` : 'App-Version unbekannt';
+  $('backupCheckMeta').textContent = `Datei erkannt. Gespeichert: ${when}. ${fromVersion}. Dabei wird nichts verändert.`;
+  $('backupCheckPin').value = '';
+  $('backupCheckHint').textContent = 'Gib die PIN dieser Sicherung ein, um zu prüfen, ob sie wirklich entschlüsselt werden kann.';
+  $('backupCheckOk').disabled = false;
+  openSheet($('backupCheckSheet'));
+  setTimeout(() => $('backupCheckPin').focus(), 100);
+}
+
+async function verifyBackupCheck() {
+  const parsed = pendingBackupCheck;
+  if (!parsed) return;
+  const pin = $('backupCheckPin').value.trim();
+  const hint = $('backupCheckHint');
+  if (!/^\d{4,6}$/.test(pin)) {
+    hint.textContent = 'Bitte die PIN der Sicherung eingeben.';
+    return;
+  }
+  $('backupCheckOk').disabled = true;
+  hint.textContent = 'Prüfe Sicherung …';
+  try {
+    const key = await deriveKey(pin, base64ToBytes(parsed.salt));
+    const verifier = await decryptValue(parsed.verifier, key);
+    if (!verifier || verifier.marker !== 'reci-mi') throw new Error('pin');
+    const vault = await decryptValue(parsed.vault, key);
+    if (!vault || !Array.isArray(vault.topics)) throw new Error('vault');
+    const active = vault.topics.filter(t => !t.deletedAt).length;
+    const deleted = vault.topics.filter(t => Boolean(t.deletedAt)).length;
+    const totalText = vault.topics.reduce((n, t) => n + String(t.content || '').length, 0);
+    hint.textContent = `Sicherung ist vollständig lesbar: ${active} Themen${deleted ? `, ${deleted} im Papierkorb` : ''}, ${totalText.toLocaleString('de-DE')} Textzeichen. Deine aktuellen Daten wurden nicht verändert.`;
+  } catch {
+    hint.textContent = 'Die Sicherung konnte mit dieser PIN nicht entschlüsselt werden. Prüfe die PIN oder wähle eine andere Sicherungsdatei.';
+  } finally {
+    $('backupCheckOk').disabled = false;
+  }
+}
+
 async function importBackup(file) {
   let parsed;
   try {
@@ -3196,13 +3400,23 @@ function wireEvents() {
   els.topicText.addEventListener('input', () => {
     const topic = currentTopic();
     if (!topic) return;
+    recordEditorChange(topic.content || '');
     versionOnInput(topic, els.topicText.value);
     topic.content = els.topicText.value;
     topic.updatedAt = new Date().toISOString();
     if (findOpen) renderFind(false);
     els.dateLine.textContent = formatLong(topic.updatedAt);
+    editPrevSnapshot = editorSnapshot(els.topicText.value);
+    rememberEditorPosition();
+    updateEditHistoryButtons();
     persistState();
   });
+
+  ['keyup', 'click', 'select'].forEach(ev => els.topicText.addEventListener(ev, () => { syncEditSnapshotPosition(); rememberEditorPosition(); }));
+  els.topicText.addEventListener('scroll', () => { syncEditSnapshotPosition(); rememberEditorPosition(); });
+  els.undoBtn.addEventListener('click', undoEdit);
+  els.redoBtn.addEventListener('click', redoEdit);
+  els.endBtn.addEventListener('click', goEditorEnd);
 
   els.menuBtn.addEventListener('click', () => { updateBiometricUi(); $('backupAge').textContent = backupAgeText(); updateEmergencyMenu(); openSheet(els.menuSheet); });
   els.openTrashBtn.addEventListener('click', () => { closeSheetAndReplace(els.menuSheet, { rm: 'trash' }); openTrash({ push: false }); });
@@ -3227,6 +3441,15 @@ function wireEvents() {
   });
   els.nameCancelBtn.addEventListener('click', () => closeSheet(els.nameSheet));
   els.exportBtn.addEventListener('click', () => { closeSheet(els.menuSheet); exportBackup(); });
+  els.checkBackupInput.addEventListener('click', () => { suppressLock = true; setTimeout(() => { suppressLock = false; }, 120000); });
+  els.checkBackupInput.addEventListener('change', e => {
+    suppressLock = false;
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) openBackupCheck(file);
+  });
+  $('backupCheckForm').addEventListener('submit', e => { e.preventDefault(); verifyBackupCheck(); });
+  $('backupCheckClose').addEventListener('click', () => { pendingBackupCheck = null; closeSheet($('backupCheckSheet')); });
   els.importInput.addEventListener('click', () => { suppressLock = true; setTimeout(() => { suppressLock = false; }, 120000); });
   els.importInput.addEventListener('change', e => {
     suppressLock = false;
@@ -3244,7 +3467,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });

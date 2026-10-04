@@ -157,7 +157,15 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 #topicText { flex: 1; width: 100%; resize: none; border: 0; outline: none; background: transparent; color: var(--ink); padding: 22px 22px 10px; font: 18px/1.7 var(--serif); caret-color: var(--accent-text); }
 #topicText::placeholder { color: var(--muted); }
 .page:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); }
-.save-state { padding: 0 20px 12px; text-align: right; font-size: 12px; color: var(--muted); }
+.editor-foot { min-height: 42px; padding: 2px 16px 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.edit-history { display: flex; align-items: center; gap: 5px; }
+.edit-mini, .end-mini { border: 0; background: transparent; color: var(--muted); height: 32px; border-radius: 10px; }
+.edit-mini { width: 34px; display: grid; place-items: center; }
+.edit-mini .ui-icon { width: 18px; height: 18px; }
+.edit-mini:disabled { opacity: .28; }
+.end-mini { padding: 0 8px; font: 500 12px var(--sans); }
+.edit-mini:not(:disabled):active, .end-mini:active { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.save-state { padding: 0; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
 .toolbar { flex: 0 0 auto; margin: 12px 12px calc(14px + var(--safe-bottom)); height: 80px; border-radius: 26px; background: var(--surface-2); box-shadow: var(--shadow-soft); display: grid; grid-template-columns: 1fr 1fr 92px 1fr 1fr; align-items: center; }
 .tb { border: 0; background: transparent; color: var(--ink); display: grid; place-items: center; gap: 5px; height: 100%; font-size: 11px; border-radius: 20px; }

@@ -239,7 +239,7 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .hero > .hero-top, .hero > .hero-main, .hero > .daily-quote, .hero > .moon-line, .hero > .sun-row { position: relative; z-index: 2; }
 .lock-inner, .lock-phase { z-index: 2; }
 .sun-path { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }
-.sun-path polyline { fill: none; stroke: var(--hero-ink); stroke-opacity: .22; stroke-width: 1.2; stroke-dasharray: 2 6; stroke-linecap: round; }
+.sun-path polyline { display: none; }  /* Bahnlinie ausgeblendet, die Sonne wandert trotzdem */
 
 .sun { position: absolute; z-index: 1; width: var(--sun-size, 140px); height: var(--sun-size, 140px); transform: translate(-50%, -50%); pointer-events: none; opacity: var(--sun-veil, 1); transition: left 2s ease, top 2s ease, opacity 2s ease; }
 .sun-core { position: absolute; inset: 0; border-radius: 50%;

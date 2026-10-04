@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -547,6 +547,8 @@ function startPrecip() {
 }
 
 function initSkyExtras() {
+  const hero = document.querySelector('.hero');
+  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => placeSun()).observe(hero);
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
   window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); });
   applyPlaceGeo();
@@ -1230,6 +1232,7 @@ async function maybeShowBioCard() {
    ===================================================================== */
 
 function showScreen(screen) {
+  if (screen === els.homeScreen) requestAnimationFrame(() => placeSun());
   [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen')].forEach(el => el.classList.toggle('active', el === screen));
   window.scrollTo(0, 0);
 }
@@ -3277,6 +3280,11 @@ async function boot() {
   wireEvents();
   registerServiceWorker();
   updateQuickButton();
+  try {
+    const seen = localStorage.getItem('rm_seen_version');
+    if (seen && seen !== APP_VERSION) setTimeout(() => showToast(`Reci mi ist jetzt auf Version ${APP_VERSION.replace(/\.0$/, '')}`, 3000), 900);
+    localStorage.setItem('rm_seen_version', APP_VERSION);
+  } catch {}
   const wantsQuick = /[?&]schnell=1/.test(location.search);
   if (wantsQuick) history.replaceState(null, '', location.pathname);
   const resumed = hasVaultConfig() && await tryResumeSession();

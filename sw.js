@@ -1,9 +1,9 @@
-const CACHE = 'reci-mi-v2.5.0';
+const CACHE = 'reci-mi-v2.6.1';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=2.5.0',
-  './app.js?v=2.5.0',
+  './styles.css?v=2.6.1',
+  './app.js?v=2.6.1',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -36,7 +36,7 @@ self.addEventListener('fetch', event => {
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then(response => {
           const copy = response.clone();
           caches.open(CACHE).then(cache => cache.put('./index.html', copy));

@@ -11,7 +11,7 @@
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.woff" as="font" type="font/woff" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=2.0.0" />
+  <link rel="stylesheet" href="styles.css?v=2.1.0" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -38,6 +38,7 @@
           <button id="pinSubmit" class="btn btn-main" type="submit">Entsperren</button>
         </form>
         <button id="showPinBtn" class="btn btn-ghost hidden" type="button">Mit PIN entsperren</button>
+        <button id="quickLockBtn" class="quick-lock-btn hidden" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>Schnell notieren</button>
         <p id="lockHint" class="hint" role="status"></p>
       </div>
       <p id="lockPhase" class="lock-phase"></p>
@@ -83,6 +84,7 @@
           <button class="chip" data-filter="Apps" type="button"><span class="dot" data-cat="Apps"></span>Apps</button>
           <button class="chip" data-filter="Privat" type="button"><span class="dot" data-cat="Privat"></span>Privat</button>
           <button class="chip" data-filter="Sonstiges" type="button"><span class="dot" data-cat="Sonstiges"></span>Sonstiges</button>
+          <button class="chip" data-filter="Schnellnotizen" type="button"><span class="dot" data-cat="Schnellnotizen"></span>Schnellnotizen</button>
         </div>
 
         <div id="bioCard" class="bio-card hidden">
@@ -122,13 +124,10 @@
         <div class="meta"><span id="editorTag" class="tag"></span><span id="dateLine"></span></div>
       </div>
       <main class="page">
+        <div id="sketchStrip" class="sketch-strip hidden"></div>
         <textarea id="topicText" spellcheck="true" placeholder="Schreib hier oder tippe auf das Mikrofon …"></textarea>
         <div id="saveState" class="save-state">Gespeichert</div>
       </main>
-      <div id="dictation" class="dictation hidden" role="status" aria-live="polite">
-        <div class="dict-head"><span class="dict-dot"></span><span id="dictHead">Ich höre zu. Tippe auf das Mikrofon zum Beenden.</span></div>
-        <div id="dictText" class="dict-text"></div>
-      </div>
       <nav class="toolbar" aria-label="Textfunktionen">
         <button id="editBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg><span>Bearbeiten</span></button>
         <button id="copyBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg><span>Kopieren</span></button>
@@ -136,6 +135,33 @@
         <button id="readBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M11 5 7 9H4v6h3l4 4V5Z"/><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/></svg><span>Vorlesen</span></button>
         <button id="deleteBtn" class="tb danger" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Löschen</span></button>
       </nav>
+    </section>
+
+    <!-- Schnellnotiz -->
+    <section id="quickScreen" class="screen quick-screen" aria-labelledby="quickTitle">
+      <header class="quick-head">
+        <button id="quickCloseBtn" class="icon-btn" type="button" aria-label="Verwerfen">
+          <svg class="ui-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+        <h1 id="quickTitle">Schnellnotiz</h1>
+        <button id="quickSaveBtn" class="btn btn-main btn-small" type="button">Speichern</button>
+      </header>
+      <div id="quickTabs" class="quick-tabs" role="tablist">
+        <button type="button" data-tab="write" class="active">Schreiben</button>
+        <button type="button" data-tab="draw">Zeichnen</button>
+      </div>
+      <div id="quickWrite" class="quick-write">
+        <textarea id="quickText" placeholder="Schnell notieren … mit Tastatur, Handschrift-Tastatur, S Pen oder Mikrofon" spellcheck="true"></textarea>
+        <button id="quickMicBtn" class="mic quick-mic" type="button" aria-label="Spracheingabe starten"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      </div>
+      <div id="quickDraw" class="quick-draw hidden">
+        <canvas id="padCanvas" class="pad" aria-label="Zeichenfläche"></canvas>
+        <div class="pad-tools">
+          <button id="padUndo" class="btn btn-ghost btn-small" type="button" disabled>Rückgängig</button>
+          <button id="padClear" class="btn btn-ghost btn-small" type="button" disabled>Leeren</button>
+        </div>
+      </div>
+      <p id="quickNote" class="quick-note"></p>
     </section>
 
     <!-- Papierkorb -->
@@ -163,6 +189,7 @@
           <button type="button" class="cat" data-cat="Apps"><span class="dot" data-cat="Apps"></span>Apps</button>
           <button type="button" class="cat" data-cat="Privat"><span class="dot" data-cat="Privat"></span>Privat</button>
           <button type="button" class="cat" data-cat="Sonstiges"><span class="dot" data-cat="Sonstiges"></span>Sonstiges</button>
+          <button type="button" class="cat cat-wide" data-cat="Schnellnotizen"><span class="dot" data-cat="Schnellnotizen"></span>Schnellnotizen</button>
         </div>
         <label id="protectRow" class="switch-row">
           <span><strong>Extra schützen</strong><small>Öffnen nur mit Fingerabdruck oder PIN</small></span>
@@ -182,6 +209,7 @@
       <div class="sheet-list">
         <button type="button" id="actionOpenBtn" class="sheet-item">Öffnen</button>
         <button type="button" id="actionRenameBtn" class="sheet-item">Umbenennen oder Bereich ändern</button>
+        <button type="button" id="actionDrawBtn" class="sheet-item">Zeichnung hinzufügen</button>
         <button type="button" id="actionProtectBtn" class="sheet-item">Extra schützen (Fingerabdruck oder PIN)</button>
         <button type="button" id="actionTrashBtn" class="sheet-item danger">In den Papierkorb</button>
       </div>
@@ -203,7 +231,7 @@
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 2.0</p>
+      <p class="sheet-note version">Version 2.1</p>
     </dialog>
 
     <!-- Blatt: Name -->
@@ -263,6 +291,16 @@
       <button type="button" id="placeCancelBtn" class="btn btn-ghost wide" style="margin-top:14px">Schließen</button>
     </dialog>
 
+    <!-- Blatt: Zeichnung ansehen -->
+    <dialog id="sketchSheet" class="sheet">
+      <div class="grab" aria-hidden="true"></div>
+      <img id="sketchBig" class="sketch-big" alt="Zeichnung" />
+      <div class="actions">
+        <button type="button" id="sketchDeleteBtn" class="btn btn-ghost">Löschen</button>
+        <button type="button" id="sketchCloseBtn" class="btn btn-main">Schließen</button>
+      </div>
+    </dialog>
+
     <!-- Blatt: Bestätigen -->
     <dialog id="confirmSheet" class="sheet">
       <div class="grab" aria-hidden="true"></div>
@@ -274,9 +312,13 @@
       </div>
     </dialog>
 
+    <div id="dictation" class="dictation hidden" role="status" aria-live="polite">
+        <div class="dict-head"><span class="dict-dot"></span><span id="dictHead">Ich höre zu. Tippe auf das Mikrofon zum Beenden.</span></div>
+        <div id="dictText" class="dict-text"></div>
+      </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=2.0.0" defer></script>
+  <script src="app.js?v=2.1.0" defer></script>
 </body>
 </html>

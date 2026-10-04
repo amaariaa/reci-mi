@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -56,7 +56,7 @@ const els = {};
  'confirmSheet', 'confirmTitle', 'confirmText', 'confirmCancelBtn', 'confirmOkBtn',
  'toast'].forEach(id => { els[id] = $(id); });
 
-const categoryOrder = ['Bücher', 'Apps', 'Privat', 'Sonstiges'];
+const categoryOrder = ['Bücher', 'Apps', 'Privat', 'Sonstiges', 'Schnellnotizen'];
 
 /* =====================================================================
    Tageszeit-Himmel: Farben wandern fließend durch den Tag
@@ -87,8 +87,8 @@ const BODY = {
 };
 
 const CAT_COLORS = {
-  dark:  { books: '#E7B776', apps: '#8CC7B4', private: '#C3A8E6', other: '#AEB4CC' },
-  light: { books: '#C4862C', apps: '#3A967C', private: '#9270CC', other: '#878DA6' }
+  dark:  { books: '#E7B776', apps: '#8CC7B4', private: '#C3A8E6', other: '#AEB4CC', quick: '#EBA3B4' },
+  light: { books: '#C4862C', apps: '#3A967C', private: '#9270CC', other: '#878DA6', quick: '#C25A74' }
 };
 
 const PHASE_LABEL = {
@@ -257,6 +257,7 @@ function applySky(fromWeather = false) {
   root.setProperty('--c-apps', cats.apps);
   root.setProperty('--c-private', cats.private);
   root.setProperty('--c-other', cats.other);
+  root.setProperty('--c-quick', cats.quick);
   document.documentElement.dataset.mode = body.dark ? 'dark' : 'light';
   document.documentElement.dataset.phase = phase;
 
@@ -1219,7 +1220,7 @@ async function maybeShowBioCard() {
    ===================================================================== */
 
 function showScreen(screen) {
-  [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen].forEach(el => el.classList.toggle('active', el === screen));
+  [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen')].forEach(el => el.classList.toggle('active', el === screen));
   window.scrollTo(0, 0);
 }
 
@@ -1244,6 +1245,9 @@ function configureLockScreen() {
 }
 
 function showUnlocked(resume = { screen: 'home' }) {
+  ensureInboxKeys().then(openInbox).then(n => {
+    if (n) { renderTopics(); showToast(n === 1 ? 'Eine Schnellnotiz wurde einsortiert' : `${n} Schnellnotizen wurden einsortiert`, 3000); }
+  }).catch(() => {});
   renderDailyBits();
   renderTopics();
   maybeShowBioCard();
@@ -1275,6 +1279,12 @@ async function showHome() {
 }
 
 function onPopState(e) {
+  if (quickClosing) { quickClosing = false; return; }
+  if ($('quickScreen').classList.contains('active')) {
+    if (openSheetEl) { sheetSilentClose = true; const sh = openSheetEl; openSheetEl = null; sh.close(); sheetSilentClose = false; if (sh === els.confirmSheet) resolveConfirm(false); return; }
+    leaveQuick({ save: true, viaHistory: true });   // Zurück-Taste: nichts geht verloren
+    return;
+  }
   if (!cryptoKey) return;
   if (openSheetEl) {
     sheetSilentClose = true;
@@ -1396,7 +1406,7 @@ function renderTopics() {
   els.topicList.innerHTML = topics.map(t => `
     <article class="row${t.locked ? ' is-locked' : ''}" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" tabindex="0">
       <div class="row-top"><h2>${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
-      <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : escapeHtml(excerpt(t.content))}</p>
+      <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : (!(t.content || '').trim() && t.sketches?.length ? 'Zeichnung' : escapeHtml(excerpt(t.content)))}</p>
     </article>`).join('');
 
   els.emptyState.classList.toggle('hidden', all.length !== 0);
@@ -1432,7 +1442,7 @@ function wireRow(row) {
 
 function setEditorTag(topic) {
   const cat = catOf(topic);
-  const varName = { 'Bücher': '--c-books', 'Apps': '--c-apps', 'Privat': '--c-private', 'Sonstiges': '--c-other' }[cat];
+  const varName = { 'Bücher': '--c-books', 'Apps': '--c-apps', 'Privat': '--c-private', 'Sonstiges': '--c-other', 'Schnellnotizen': '--c-quick' }[cat];
   els.editorTag.innerHTML = `<span class="dot" data-cat="${escapeHtml(cat)}"></span>${escapeHtml(cat)}`;
   els.editorTag.style.setProperty('--tag-c', `var(${varName})`);
 }
@@ -1449,6 +1459,7 @@ function openTopic(id, { push = true, verified = false } = {}) {
   els.editorTitle.textContent = topic.title;
   setEditorTag(topic);
   els.topicText.value = topic.content || '';
+  renderSketches();
   setEditing(!topic.content);
   els.dateLine.textContent = formatLong(topic.updatedAt);
   els.saveState.textContent = 'Gespeichert';
@@ -1833,12 +1844,17 @@ const LOWER_WORDS = new Set(('der die das den dem des ein eine einen einem einer
 const SENTENCE_PAUSE_MS = 2500;   // erst nach so einer echten Pause kommt ein Punkt
 let dictSentenceTimer = null;
 
+let dictTarget = null;
+let dictMicBtn = null;
+function dictTA() { return dictTarget || els.topicText; }
+function dictBtn() { return dictMicBtn || els.micBtn; }
+
 function insertSpokenSegment(raw) {
   let seg = cleanSpoken(raw);
   if (!seg) return;
   clearTimeout(dictSentenceTimer);
-  setEditing(true);
-  const ta = els.topicText;
+  const ta = dictTA();
+  if (ta === els.topicText) setEditing(true);
   const value = ta.value;
   let pos = document.activeElement === ta ? ta.selectionEnd : (dictInsertPos ?? value.length);
   pos = Math.min(Math.max(0, pos), value.length);
@@ -1894,7 +1910,7 @@ function holdSentenceEnd() {
 function endSpokenSentence() {
   clearTimeout(dictSentenceTimer);
   dictSentenceTimer = null;
-  const ta = els.topicText;
+  const ta = dictTA();
   if (dictInsertPos == null) return;
   const value = ta.value;
   const pos = Math.min(dictInsertPos, value.length);
@@ -2016,7 +2032,7 @@ function startRecognizer() {
       // Live-Modus liefert auf diesem Handy nichts → auf einfachen Modus umschalten
       if (dictNoResultEnds >= 2) { setDictMode('simple'); dictNoResultEnds = 0; }
     }
-    if (dictWanted && dictQuickFails < 8 && els.editorScreen.classList.contains('active')) {
+    if (dictWanted && dictQuickFails < 8 && dictTA().closest('.screen')?.classList.contains('active')) {
       setTimeout(() => { if (dictWanted) startRecognizer(); }, 150);
     } else {
       if (dictWanted && dictQuickFails >= 8) showToast('Die Spracheingabe hat aufgehört. Tippe nochmal auf das Mikrofon.', 4000);
@@ -2049,8 +2065,7 @@ function startRecognizer() {
 
 function finishDictationUi() {
   isListening = false;
-  els.micBtn.classList.remove('listening');
-  els.micBtn.setAttribute('aria-label', 'Spracheingabe starten');
+  [els.micBtn, $('quickMicBtn')].forEach(b => { b.classList.remove('listening'); b.setAttribute('aria-label', 'Spracheingabe starten'); });
   showDictation(false);
   holdScreenOn(false);
 }
@@ -2065,12 +2080,12 @@ function startDictation() {
   dictNoResultEnds = 0;
   dictStartFails = 0;
   setDictStatus('Mikrofon startet …');
-  const ta = els.topicText;
+  const ta = dictTA();
   dictInsertPos = document.activeElement === ta ? ta.selectionEnd : ta.value.length;
   dictLastAuto = null;
   setEditing(true);
-  els.micBtn.classList.add('listening');
-  els.micBtn.setAttribute('aria-label', 'Spracheingabe beenden');
+  dictBtn().classList.add('listening');
+  dictBtn().setAttribute('aria-label', 'Spracheingabe beenden');
   showDictation(true);
   startRecognizer();
   holdScreenOn(true);
@@ -2093,6 +2108,337 @@ function keyboardDictationFallback() {
 function toggleRecognition() {
   if (dictWanted || isListening) stopRecognition();
   else startDictation();
+}
+
+/* =====================================================================
+   Schnellnotiz: auch ohne Entsperren
+   Die Notiz wird mit einem öffentlichen Schlüssel verschlüsselt. Lesen kann man
+   sie nur mit dem privaten Schlüssel, und der liegt im verschlüsselten Tresor.
+   ===================================================================== */
+
+const LS_INBOX_PUB = 'rm_inbox_pub';
+const INBOX_KEY = 'inbox';
+const ECDH = { name: 'ECDH', namedCurve: 'P-256' };
+let quickMode = 'new';          // 'new' = neue Schnellnotiz, 'attach' = Zeichnung an Thema anhängen
+let quickAttachId = null;
+let quickTab = 'write';
+let quickReturn = null;          // Bildschirm, zu dem wir zurückgehen
+
+function hasInboxKey() { return Boolean(localStorage.getItem(LS_INBOX_PUB)); }
+
+async function ensureInboxKeys() {
+  if (!state) return;
+  try {
+    if (!state.settings.inboxPriv) {
+      const pair = await crypto.subtle.generateKey(ECDH, true, ['deriveKey']);
+      state.settings.inboxPriv = await crypto.subtle.exportKey('jwk', pair.privateKey);
+      const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+      localStorage.setItem(LS_INBOX_PUB, JSON.stringify(pub));
+      await persistState(true);
+    } else if (!hasInboxKey()) {
+      const { kty, crv, x, y } = state.settings.inboxPriv;
+      localStorage.setItem(LS_INBOX_PUB, JSON.stringify({ kty, crv, x, y, ext: true }));
+    }
+  } catch {}
+  updateQuickButton();
+}
+
+async function inboxSealKey(pubJwk, ephPriv) {
+  const pub = await crypto.subtle.importKey('jwk', pubJwk, ECDH, false, []);
+  return crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, ephPriv, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+async function sealToInbox(note) {
+  const pubJwk = JSON.parse(localStorage.getItem(LS_INBOX_PUB));
+  const eph = await crypto.subtle.generateKey(ECDH, true, ['deriveKey']);
+  const key = await inboxSealKey(pubJwk, eph.privateKey);
+  const sealed = await encryptValue(note, key);
+  sealed.epk = await crypto.subtle.exportKey('jwk', eph.publicKey);
+  const box = (await idbGet(INBOX_KEY)) || [];
+  box.push(sealed);
+  await idbSet(INBOX_KEY, box);
+}
+
+async function openInbox() {
+  if (!state?.settings?.inboxPriv) return 0;
+  const box = (await idbGet(INBOX_KEY).catch(() => null)) || [];
+  if (!box.length) return 0;
+  const priv = await crypto.subtle.importKey('jwk', state.settings.inboxPriv, ECDH, false, ['deriveKey']);
+  let added = 0;
+  for (const sealed of box) {
+    try {
+      const key = await inboxSealKey(sealed.epk, priv);
+      const note = await decryptValue(sealed, key);
+      addQuickTopic(note);
+      added++;
+    } catch { /* gehört zu einem anderen Tresor (z. B. nach Sicherung laden) */ }
+  }
+  await persistState(true);
+  await idbDelete(INBOX_KEY).catch(() => {});
+  return added;
+}
+
+function quickTitle(note) {
+  const firstLine = (note.text || '').trim().split('\n')[0].replace(/\s+/g, ' ');
+  if (firstLine) return firstLine.length > 42 ? firstLine.slice(0, 40).replace(/\s+\S*$/, '') + ' …' : firstLine;
+  const d = new Date(note.createdAt || Date.now());
+  return `${note.sketch ? 'Zeichnung' : 'Notiz'} vom ${d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function addQuickTopic(note) {
+  const when = note.createdAt || new Date().toISOString();
+  const topic = {
+    id: uid(), title: quickTitle(note), category: 'Schnellnotizen', content: note.text || '',
+    sketches: note.sketch ? [note.sketch] : [], createdAt: when, updatedAt: when, deletedAt: null
+  };
+  state.topics.push(topic);
+  return topic;
+}
+
+function updateQuickButton() {
+  const btn = $('quickLockBtn');
+  if (btn) btn.classList.toggle('hidden', !hasInboxKey() || !hasVaultConfig());
+}
+
+/* ---------- Bildschirm ---------- */
+function openQuick(mode = 'new', attachId = null, tab = 'write', replace = false) {
+  quickMode = mode;
+  quickAttachId = attachId;
+  quickReturn = cryptoKey ? (els.editorScreen.classList.contains('active') ? 'editor' : 'home') : 'lock';
+  $('quickText').value = '';
+  pad.clear();
+  $('quickTitle').textContent = mode === 'attach' ? 'Zeichnung hinzufügen' : 'Schnellnotiz';
+  $('quickTabs').classList.toggle('hidden', mode === 'attach');
+  $('quickNote').textContent = cryptoKey
+    ? (mode === 'attach' ? 'Die Zeichnung kommt in dein Thema.' : 'Landet in „Schnellnotizen“.')
+    : 'Wird sofort verschlüsselt. Lesen kannst du sie erst nach dem Entsperren.';
+  if (replace) history.replaceState({ rm: 'quick' }, ''); else history.pushState({ rm: 'quick' }, '');
+  showScreen($('quickScreen'));
+  setQuickTab(mode === 'attach' ? 'draw' : tab);
+}
+
+function setQuickTab(tab) {
+  quickTab = tab;
+  document.querySelectorAll('#quickTabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  $('quickWrite').classList.toggle('hidden', tab !== 'write');
+  $('quickDraw').classList.toggle('hidden', tab !== 'draw');
+  if (tab === 'draw') { requestAnimationFrame(() => pad.resize()); $('quickText').blur(); }
+  else setTimeout(() => $('quickText').focus(), 60);
+}
+
+function quickHasContent() { return Boolean($('quickText').value.trim()) || !pad.isEmpty(); }
+
+async function saveQuick() {
+  stopRecognition();
+  const text = $('quickText').value.trim();
+  const sketch = pad.isEmpty() ? null : pad.toDataURL();
+  if (!text && !sketch) return false;
+  const note = { text, sketch, createdAt: new Date().toISOString() };
+  if (quickMode === 'attach' && cryptoKey) {
+    const topic = state.topics.find(t => t.id === quickAttachId);
+    if (topic && sketch) {
+      topic.sketches = [...(topic.sketches || []), sketch];
+      topic.updatedAt = note.createdAt;
+      await persistState(true);
+    }
+  } else if (cryptoKey) {
+    addQuickTopic(note);
+    await persistState(true);
+    renderTopics();
+  } else {
+    await sealToInbox(note);
+  }
+  $('quickText').value = '';
+  pad.clear();
+  return true;
+}
+
+async function leaveQuick({ save = true, viaHistory = false } = {}) {
+  let saved = false;
+  if (save) {
+    try { saved = await saveQuick(); } catch { showToast('Speichern hat nicht geklappt. Versuch es nochmal.', 4000); return; }
+  }
+  stopRecognition();
+  const back = quickReturn;
+  if (!viaHistory && history.state?.rm === 'quick') { quickClosing = true; history.back(); }
+  if (back === 'editor' && cryptoKey && quickAttachId) {
+    showScreen(els.editorScreen);
+    renderSketches();
+  } else if (cryptoKey) {
+    showScreen(els.homeScreen);
+    renderTopics();
+  } else {
+    showScreen(els.lockScreen);
+    configureLockScreen();
+  }
+  if (saved) showToast(cryptoKey ? 'Gespeichert' : 'Gespeichert und verschlüsselt. Du findest sie nach dem Entsperren in „Schnellnotizen“.', cryptoKey ? 1800 : 4200);
+}
+let quickClosing = false;
+
+/* ---------- Zeichenfläche ---------- */
+const pad = (() => {
+  let canvas, ctx, strokes = [], current = null, dpr = 1;
+  const INK = '#22253A', PAPER = '#FFFDF8';
+  function init(c) {
+    canvas = c; ctx = c.getContext('2d');
+    c.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      c.setPointerCapture(e.pointerId);
+      current = { pts: [pt(e)], pen: e.pointerType === 'pen' };
+      strokes.push(current);
+      redraw();
+    });
+    c.addEventListener('pointermove', e => {
+      if (!current) return;
+      e.preventDefault();
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      evs.forEach(ev => current.pts.push(pt(ev)));
+      drawLast();
+    });
+    const end = () => { current = null; updateButtons(); };
+    c.addEventListener('pointerup', end);
+    c.addEventListener('pointercancel', end);
+  }
+  function pt(e) {
+    const r = canvas.getBoundingClientRect();
+    const p = e.pressure && e.pointerType === 'pen' ? e.pressure : 0.5;
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height, p };
+  }
+  function width(p, w) { return Math.max(1.2, (1.4 + p * 3.2) * (w / 390)); }
+  function strokePath(s, W, H) {
+    const pts = s.pts;
+    if (pts.length === 1) {
+      ctx.beginPath(); ctx.arc(pts[0].x * W, pts[0].y * H, width(pts[0].p, W) / 2, 0, 6.283); ctx.fill(); return;
+    }
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      ctx.lineWidth = width((a.p + b.p) / 2, W);
+      ctx.beginPath();
+      if (i === 1) ctx.moveTo(a.x * W, a.y * H);
+      else { const z = pts[i - 2]; ctx.moveTo(((z.x + a.x) / 2) * W, ((z.y + a.y) / 2) * H); }
+      ctx.quadraticCurveTo(a.x * W, a.y * H, ((a.x + b.x) / 2) * W, ((a.y + b.y) / 2) * H);
+      ctx.stroke();
+    }
+  }
+  function setup(W, H) {
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = INK; ctx.fillStyle = INK; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  }
+  function redraw() {
+    if (!canvas) return;
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    setup(W, H);
+    strokes.forEach(s => strokePath(s, W, H));
+  }
+  function drawLast() {
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const s = current; const n = s.pts.length;
+    if (n < 2) return;
+    strokePath({ pts: s.pts.slice(Math.max(0, n - 3)) }, W, H);
+  }
+  function resize() {
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width) return;
+    dpr = Math.min(3, window.devicePixelRatio || 1);
+    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  }
+  function updateButtons() {
+    $('padUndo').disabled = !strokes.length;
+    $('padClear').disabled = !strokes.length;
+  }
+  return {
+    init, resize,
+    clear() { strokes = []; current = null; redraw(); if (canvas) updateButtons(); },
+    undo() { strokes.pop(); redraw(); updateButtons(); },
+    isEmpty() { return !strokes.length; },
+    toDataURL() {
+      // nur den bemalten Bereich (mit etwas Rand) speichern – kleine Datei, gute Vorschau
+      const r = canvas.getBoundingClientRect();
+      const aspect = r.height / r.width;
+      let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+      strokes.forEach(st => st.pts.forEach(q => { x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }));
+      const m = 0.06;
+      x0 = Math.max(0, x0 - m); x1 = Math.min(1, x1 + m);
+      y0 = Math.max(0, y0 - m / aspect); y1 = Math.min(1, y1 + m / aspect);
+      // nicht zu schmal oder zu flach
+      if ((x1 - x0) < 0.35) { const c = (x0 + x1) / 2; x0 = Math.max(0, c - .175); x1 = Math.min(1, c + .175); }
+      if ((y1 - y0) * aspect < 0.2) { const c = (y0 + y1) / 2, h = 0.1 / aspect; y0 = Math.max(0, c - h); y1 = Math.min(1, c + h); }
+      const FW = 1100;
+      const fullH = Math.round(FW * aspect);
+      const sx = Math.round(x0 * FW), sy = Math.round(y0 * fullH);
+      const W = Math.max(1, Math.round((x1 - x0) * FW)), H = Math.max(1, Math.round((y1 - y0) * fullH));
+      const off = document.createElement('canvas'); off.width = W; off.height = H;
+      const keep = { canvas, ctx, dpr };
+      canvas = off; ctx = off.getContext('2d'); dpr = 1;
+      ctx.translate(-sx, -sy);
+      setup(FW, fullH); strokes.forEach(st => strokePath(st, FW, fullH));
+      const url = off.toDataURL('image/png');
+      ({ canvas, ctx, dpr } = keep);
+      return url;
+    }
+  };
+})();
+
+/* ---------- Zeichnungen im Thema ---------- */
+function renderSketches() {
+  const box = $('sketchStrip');
+  const topic = currentTopic();
+  const list = topic?.sketches || [];
+  box.classList.toggle('hidden', !list.length);
+  box.innerHTML = list.map((src, i) => `<button type="button" class="sketch-thumb" data-i="${i}" aria-label="Zeichnung ${i + 1} ansehen"><img src="${src}" alt=""></button>`).join('');
+  box.querySelectorAll('.sketch-thumb').forEach(b => b.addEventListener('click', () => openSketchViewer(Number(b.dataset.i))));
+}
+
+let viewerIndex = 0;
+function openSketchViewer(i) {
+  const topic = currentTopic();
+  if (!topic?.sketches?.[i]) return;
+  viewerIndex = i;
+  $('sketchBig').src = topic.sketches[i];
+  openSheet($('sketchSheet'));
+}
+
+async function deleteSketch() {
+  const topic = currentTopic();
+  if (!topic) return;
+  const yes = await askConfirm('Zeichnung löschen?', 'Die Zeichnung wird aus diesem Thema entfernt.', 'Löschen');
+  if (!yes) return;
+  topic.sketches.splice(viewerIndex, 1);
+  topic.updatedAt = new Date().toISOString();
+  await persistState(true);
+  renderSketches();
+  showToast('Zeichnung gelöscht');
+}
+
+function wireQuick() {
+  pad.init($('padCanvas'));
+  window.addEventListener('resize', () => { if ($('quickScreen').classList.contains('active')) pad.resize(); });
+  $('quickLockBtn').addEventListener('click', () => openQuick('new'));
+  $('quickTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setQuickTab(b.dataset.tab); });
+  $('quickSaveBtn').addEventListener('click', async () => {
+    if (!quickHasContent()) { showToast(quickTab === 'draw' ? 'Zeichne zuerst etwas' : 'Schreib oder sprich zuerst etwas'); return; }
+    leaveQuick({ save: true });
+  });
+  $('quickCloseBtn').addEventListener('click', async () => {
+    if (quickHasContent()) {
+      const yes = await askConfirm('Verwerfen?', 'Was du gerade notiert hast, wird nicht gespeichert.', 'Verwerfen');
+      if (!yes) return;
+    }
+    leaveQuick({ save: false });
+  });
+  $('quickMicBtn').addEventListener('click', () => { dictTarget = $('quickText'); dictMicBtn = $('quickMicBtn'); toggleRecognition(); });
+  $('padUndo').addEventListener('click', () => pad.undo());
+  $('padClear').addEventListener('click', () => pad.clear());
+  $('sketchDeleteBtn').addEventListener('click', deleteSketch);
+  $('sketchCloseBtn').addEventListener('click', () => closeSheet($('sketchSheet')));
+  $('actionDrawBtn').addEventListener('click', () => {
+    const id = actionTopicId;
+    sheetSilentClose = true; els.actionSheet.close(); sheetSilentClose = false; openSheetEl = null;
+    openQuick('attach', id, 'draw', history.state?.rm === 'sheet');
+  });
 }
 
 /* =====================================================================
@@ -2236,7 +2582,8 @@ function wireEvents() {
   els.copyBtn.addEventListener('click', copyAll);
   els.readBtn.addEventListener('click', readText);
   els.deleteBtn.addEventListener('click', () => { if (currentTopicId) moveTopicToTrash(currentTopicId); });
-  els.micBtn.addEventListener('click', toggleRecognition);
+  els.micBtn.addEventListener('click', () => { dictTarget = null; dictMicBtn = null; toggleRecognition(); });
+  wireQuick();
   els.editorMenuBtn.addEventListener('click', () => openActionSheet(currentTopicId));
 
   els.topicText.addEventListener('input', () => {
@@ -2288,7 +2635,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });
@@ -2334,7 +2681,12 @@ async function boot() {
   configureLockScreen();
   wireEvents();
   registerServiceWorker();
-  if (hasVaultConfig() && await tryResumeSession()) return;
+  updateQuickButton();
+  const wantsQuick = /[?&]schnell=1/.test(location.search);
+  if (wantsQuick) history.replaceState(null, '', location.pathname);
+  const resumed = hasVaultConfig() && await tryResumeSession();
+  if (wantsQuick && hasVaultConfig() && (resumed || hasInboxKey())) { openQuick('new'); return; }
+  if (resumed) return;
   autoBiometric();
 }
 

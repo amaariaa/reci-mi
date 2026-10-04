@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1023,6 +1023,7 @@ async function tryResumeSession() {
 let dictHiddenTimer = null;
 function onHidden() {
   stopReading();
+  versionCheckpoint('pause');
   if (dictWanted) {
     // Beim Sprechen legt das Handy oft kurz sein eigenes Sprach-Fenster über die App.
     // Das zählt nicht als „weg“ – Diktat läuft weiter (Sicherheitsstopp nach 5 Minuten).
@@ -1055,6 +1056,7 @@ function onVisible() {
 }
 
 function lockApp(message = '') {
+  versionCheckpoint('leave');
   openedProtected.clear();
   stopRecognition();
   stopReading();
@@ -1251,6 +1253,7 @@ function showUnlocked(resume = { screen: 'home' }) {
   renderDailyBits();
   renderTopics();
   maybeShowBioCard();
+  maybeShowBackupCard();
   // Verlauf neu aufbauen: Startseite ist die Basis
   history.replaceState({ rm: 'home' }, '');
   if (resume.screen === 'editor' && state.topics.some(t => t.id === resume.id && !t.deletedAt)) {
@@ -1269,6 +1272,8 @@ function goHomeFromScreen() {
 }
 
 async function showHome() {
+  versionCheckpoint('leave');
+  if (findOpen) closeFind();
   openedProtected.clear();   // geschützte Themen beim Verlassen sofort wieder zu
   stopRecognition();
   stopReading();
@@ -1391,6 +1396,7 @@ function escapeHtml(value) {
 function catOf(t) { return categoryOrder.includes(t.category) ? t.category : 'Sonstiges'; }
 
 const LOCK_ICON = '<svg class="ui-icon lock-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const PIN_ICON = '<svg class="ui-icon pin-icon" viewBox="0 0 24 24" aria-label="angeheftet"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6Z"/><path d="M12 13v7"/></svg>';
 const openedProtected = new Set();
 let protectRequest = null;   // { id, purpose }
 
@@ -1401,11 +1407,11 @@ function renderTopics() {
   let topics = all;
   if (currentFilter !== 'Alle') topics = topics.filter(t => catOf(t) === currentFilter);
   if (q) topics = topics.filter(t => (t.locked ? t.title : `${t.title} ${t.content}`).toLowerCase().includes(q));
-  topics.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  topics.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.updatedAt) - new Date(a.updatedAt));
 
   els.topicList.innerHTML = topics.map(t => `
     <article class="row${t.locked ? ' is-locked' : ''}" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" tabindex="0">
-      <div class="row-top"><h2>${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
+      <div class="row-top"><h2>${t.pinned ? PIN_ICON : ''}${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
       <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : (!(t.content || '').trim() && t.sketches?.length ? 'Zeichnung' : escapeHtml(excerpt(t.content)))}</p>
     </article>`).join('');
 
@@ -1460,6 +1466,9 @@ function openTopic(id, { push = true, verified = false } = {}) {
   setEditorTag(topic);
   els.topicText.value = topic.content || '';
   renderSketches();
+  if (findOpen) closeFind();
+  stopReading();
+  versionStart(topic);
   setEditing(!topic.content);
   els.dateLine.textContent = formatLong(topic.updatedAt);
   els.saveState.textContent = 'Gespeichert';
@@ -1549,6 +1558,12 @@ function openActionSheet(id) {
   els.actionTitle.textContent = topic.title;
   els.actionOpenBtn.classList.toggle('hidden', currentTopicId === id && els.editorScreen.classList.contains('active'));
   $('actionProtectBtn').textContent = topic.locked ? 'Schutz aufheben' : 'Extra schützen (Fingerabdruck oder PIN)';
+  const inEditor = currentTopicId === id && els.editorScreen.classList.contains('active');
+  $('actionFindBtn').classList.toggle('hidden', !inEditor);
+  $('actionVersionsBtn').classList.toggle('hidden', !inEditor);
+  $('actionDrawBtn').classList.toggle('hidden', !inEditor);
+  $('actionShareBtn').classList.toggle('hidden', topic.locked && !openedProtected.has(id));
+  $('actionPinBtn').textContent = topic.pinned ? 'Nicht mehr anheften' : 'Oben anheften';
   openSheet(els.actionSheet);
 }
 
@@ -1756,20 +1771,17 @@ async function copyAll() {
 }
 
 function stopReading() {
+  tts.playing = false;
+  tts.token = (tts.token || 0) + 1;
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   els.readBtn.classList.remove('active');
+  const p = document.getElementById('player');
+  if (p) p.classList.add('hidden');
+  if (!findOpen && document.getElementById('hlLayer')) renderHighlights([], -1);
 }
 function readText() {
-  if (!('speechSynthesis' in window)) return showToast('Vorlesen geht auf diesem Gerät nicht');
-  if (speechSynthesis.speaking || speechSynthesis.pending) { stopReading(); return showToast('Vorlesen gestoppt'); }
-  const text = els.topicText.value.trim();
-  if (!text) return showToast('Hier steht noch nichts');
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'de-DE';
-  u.rate = 0.95;
-  u.onend = u.onerror = () => els.readBtn.classList.remove('active');
-  els.readBtn.classList.add('active');
-  speechSynthesis.speak(u);
+  if (!$('player').classList.contains('hidden')) return stopReading();
+  openPlayer();
 }
 
 /* ---------- Spracheingabe ----------
@@ -2442,6 +2454,387 @@ function wireQuick() {
 }
 
 /* =====================================================================
+   Versionsverlauf: die letzten 10 Stände pro Thema (im verschlüsselten Tresor)
+   ===================================================================== */
+
+const MAX_VERSIONS = 10;
+const BIG_DELETE = 150;               // so viele Zeichen auf einmal weg = vorher sichern
+const VERSION_PAUSE_MS = 3 * 60 * 1000;
+let verTopicId = null, verBaseline = '', verPrev = '', verTimer = null;
+
+function versionStart(topic) {
+  versionCheckpoint('leave');
+  verTopicId = topic.id;
+  verBaseline = topic.content || '';
+  verPrev = verBaseline;
+}
+
+function pushVersion(topic, content, reason) {
+  content = String(content || '');
+  if (!content.trim()) return false;
+  topic.versions = Array.isArray(topic.versions) ? topic.versions : [];
+  if (topic.versions[0]?.content === content) return false;
+  topic.versions.unshift({ at: new Date().toISOString(), content, reason });
+  if (topic.versions.length > MAX_VERSIONS) topic.versions.length = MAX_VERSIONS;
+  return true;
+}
+
+function versionOnInput(topic, value) {
+  if (verTopicId !== topic.id) { verTopicId = topic.id; verBaseline = verPrev = topic.content || ''; }
+  if (verPrev.length - value.length >= BIG_DELETE) {
+    if (pushVersion(topic, verPrev, 'Vor dem Löschen')) verBaseline = value;
+  }
+  verPrev = value;
+  clearTimeout(verTimer);
+  verTimer = setTimeout(() => versionCheckpoint('pause'), VERSION_PAUSE_MS);
+}
+
+function versionCheckpoint(reason) {
+  clearTimeout(verTimer);
+  if (!verTopicId || !state) return;
+  const t = state.topics.find(x => x.id === verTopicId);
+  if (!t) { verTopicId = null; return; }
+  if ((t.content || '') !== verBaseline) {
+    pushVersion(t, verBaseline, reason === 'pause' ? 'Zwischenstand' : 'Früherer Stand');
+    verBaseline = t.content || '';
+    persistState().catch?.(() => {});
+  }
+  if (reason === 'leave') verTopicId = null;
+}
+
+function openVersions() {
+  const topic = currentTopic();
+  if (!topic) return;
+  versionCheckpoint('pause');
+  const list = topic.versions || [];
+  $('versionsTitle').textContent = 'Frühere Versionen';
+  $('versionsList').innerHTML = list.length
+    ? list.map((v, i) => `<button type="button" class="sheet-item version-item" data-i="${i}">
+        <strong>${escapeHtml(formatLong(v.at))}</strong>
+        <small>${escapeHtml(v.reason || 'Früherer Stand')}, ${v.content.length.toLocaleString('de-DE')} Zeichen</small>
+        <span>${escapeHtml(v.content.replace(/\s+/g, ' ').trim().slice(0, 90))}${v.content.length > 90 ? ' …' : ''}</span>
+      </button>`).join('')
+    : '<p class="sheet-text">Noch keine früheren Versionen. Reci mi hebt automatisch einen Stand auf, wenn du ein Thema verlässt, länger Pause machst oder viel Text auf einmal löschst.</p>';
+  $('versionsList').querySelectorAll('.version-item').forEach(b => b.addEventListener('click', () => openVersionView(Number(b.dataset.i))));
+  openSheet($('versionsSheet'));
+}
+
+let viewVersionIndex = 0;
+function openVersionView(i) {
+  const topic = currentTopic();
+  const v = topic?.versions?.[i];
+  if (!v) return;
+  viewVersionIndex = i;
+  $('versionViewTitle').textContent = formatLong(v.at);
+  $('versionViewText').textContent = v.content;
+  openSheet($('versionViewSheet'));
+}
+
+async function restoreVersion() {
+  const topic = currentTopic();
+  const v = topic?.versions?.[viewVersionIndex];
+  if (!v) return;
+  const restored = v.content;
+  pushVersion(topic, topic.content || '', 'Vor dem Wiederherstellen');
+  topic.content = restored;
+  topic.updatedAt = new Date().toISOString();
+  verTopicId = topic.id; verBaseline = verPrev = restored;
+  els.topicText.value = restored;
+  els.dateLine.textContent = formatLong(topic.updatedAt);
+  await persistState(true);
+  closeSheet($('versionViewSheet'));
+  if (findOpen) renderFind();
+  showToast('Version wiederhergestellt. Der vorige Stand ist auch als Version aufgehoben.', 3500);
+}
+
+/* =====================================================================
+   Anheften und Teilen
+   ===================================================================== */
+
+async function togglePin(id) {
+  const t = state?.topics.find(x => x.id === id);
+  if (!t) return;
+  closeSheet(els.actionSheet);
+  t.pinned = !t.pinned;
+  await persistState(true);
+  renderTopics();
+  showToast(t.pinned ? 'Oben angeheftet' : 'Nicht mehr angeheftet');
+}
+
+async function dataUrlToFile(url, name) {
+  const blob = await (await fetch(url)).blob();
+  return new File([blob], name, { type: blob.type || 'image/png' });
+}
+
+async function shareTopic(id) {
+  const t = state?.topics.find(x => x.id === id);
+  if (!t) return;
+  if (t.locked) {
+    const yes = await askConfirm('Geschütztes Thema teilen?', 'Der Text verlässt dann Reci mi und ist dort nicht mehr geschützt.', 'Teilen');
+    if (!yes) return;
+  } else {
+    closeSheet(els.actionSheet);
+  }
+  const text = (t.content || '').trim();
+  const payload = { title: t.title, text: text ? `${t.title}\n\n${text}` : t.title };
+  try {
+    if (t.sketches?.length && navigator.canShare) {
+      const files = await Promise.all(t.sketches.map((s, i) => dataUrlToFile(s, `Zeichnung-${i + 1}.png`)));
+      if (navigator.canShare({ ...payload, files })) payload.files = files;
+    }
+    if (navigator.share) {
+      suppressLock = true;
+      await navigator.share(payload);
+      return;
+    }
+    throw new Error('kein Teilen');
+  } catch (err) {
+    if (err?.name === 'AbortError') return;
+    try { await navigator.clipboard.writeText(payload.text); showToast('Teilen geht hier nicht. Der Text ist kopiert, du kannst ihn einfügen.', 4000); }
+    catch { showToast('Teilen geht hier leider nicht.'); }
+  } finally {
+    setTimeout(() => { suppressLock = false; }, 1500);
+  }
+}
+
+/* =====================================================================
+   Im Text suchen (mit Markierung)
+   ===================================================================== */
+
+let findOpen = false, findMatches = [], findIndex = 0;
+
+function openFind() {
+  closeSheet(els.actionSheet);
+  stopReading();
+  findOpen = true;
+  $('findBar').classList.remove('hidden');
+  $('findInput').value = '';
+  renderFind();
+  setTimeout(() => $('findInput').focus(), 120);
+}
+
+function closeFind() {
+  findOpen = false;
+  findMatches = [];
+  $('findBar').classList.add('hidden');
+  renderHighlights([], -1);
+}
+
+function renderFind(jump = true) {
+  const q = $('findInput').value.trim().toLowerCase();
+  const text = els.topicText.value;
+  findMatches = [];
+  if (q.length) {
+    const low = text.toLowerCase();
+    let i = low.indexOf(q);
+    while (i !== -1) { findMatches.push([i, i + q.length]); i = low.indexOf(q, i + q.length); }
+  }
+  if (findIndex >= findMatches.length) findIndex = 0;
+  $('findCount').textContent = !q ? '' : findMatches.length ? `${findIndex + 1} von ${findMatches.length}` : 'Nichts gefunden';
+  $('findPrev').disabled = $('findNext').disabled = findMatches.length < 2;
+  renderHighlights(findMatches, findMatches.length ? findIndex : -1, jump);
+}
+
+function findStep(dir) {
+  if (!findMatches.length) return;
+  findIndex = (findIndex + dir + findMatches.length) % findMatches.length;
+  $('findCount').textContent = `${findIndex + 1} von ${findMatches.length}`;
+  renderHighlights(findMatches, findIndex, true);
+}
+
+// Zeichnet Markierungen hinter das Textfeld und scrollt zur aktuellen Stelle
+function renderHighlights(ranges, current, jump = false) {
+  const layer = $('hlLayer');
+  const ta = els.topicText;
+  if (!ranges.length) { layer.innerHTML = ''; layer.classList.add('hidden'); return; }
+  const text = ta.value;
+  let html = '', pos = 0;
+  ranges.forEach(([a, b], i) => {
+    html += escapeHtml(text.slice(pos, a)) + `<mark${i === current ? ' class="cur"' : ''}>${escapeHtml(text.slice(a, b))}</mark>`;
+    pos = b;
+  });
+  html += escapeHtml(text.slice(pos)) + '\n';
+  layer.innerHTML = html;
+  layer.classList.remove('hidden');
+  if (jump && current >= 0) {
+    const mark = layer.querySelector('mark.cur');
+    if (mark) ta.scrollTop = Math.max(0, mark.offsetTop - ta.clientHeight * 0.35);
+  }
+  layer.scrollTop = ta.scrollTop;
+}
+
+/* =====================================================================
+   Vorlese-Player (Satz für Satz)
+   ===================================================================== */
+
+const TTS_RATES = [0.8, 1, 1.2, 1.5];
+const tts = {
+  sentences: [], idx: 0, playing: false, token: 0,
+  rate: Number(localStorage.getItem('rm_tts_rate')) || 1,
+  voice: localStorage.getItem('rm_tts_voice') || ''
+};
+
+function splitSentences(text) {
+  const out = [];
+  const re = /[^.!?…\n]+(?:[.!?…]+["“”»«')\]]*)?|\n+/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const raw = m[0];
+    if (!raw.trim()) continue;
+    const lead = raw.length - raw.trimStart().length;
+    out.push({ start: m.index + lead, end: m.index + raw.trimEnd().length, text: raw.trim() });
+  }
+  return out;
+}
+
+function germanVoices() {
+  const all = ('speechSynthesis' in window) ? speechSynthesis.getVoices() : [];
+  const de = all.filter(v => (v.lang || '').toLowerCase().startsWith('de'));
+  return de.length ? de : all;
+}
+
+function fillVoices() {
+  const sel = $('playerVoice');
+  const voices = germanVoices();
+  sel.innerHTML = voices.map(v => `<option value="${escapeHtml(v.voiceURI)}">${escapeHtml(v.name.replace(/^(Google|Samsung|Microsoft)\s+/i, ''))}</option>`).join('');
+  if (tts.voice && voices.some(v => v.voiceURI === tts.voice)) sel.value = tts.voice;
+  sel.classList.toggle('hidden', voices.length < 2);
+}
+
+function openPlayer() {
+  if (!('speechSynthesis' in window)) return showToast('Vorlesen geht auf diesem Gerät nicht');
+  const text = els.topicText.value;
+  if (!text.trim()) return showToast('Hier steht noch nichts');
+  stopRecognition();
+  if (findOpen) closeFind();
+  tts.sentences = splitSentences(text);
+  // Wenn der Cursor im Text steht, ab diesem Satz vorlesen
+  const caret = document.activeElement === els.topicText ? els.topicText.selectionStart : 0;
+  tts.idx = Math.max(0, tts.sentences.findIndex(s => s.end >= caret));
+  fillVoices();
+  $('playerSpeed').textContent = `${String(tts.rate).replace('.', ',')}×`;
+  $('player').classList.remove('hidden');
+  els.readBtn.classList.add('active');
+  tts.playing = true;
+  speakCurrent();
+}
+
+function speakCurrent() {
+  const tok = ++tts.token;
+  speechSynthesis.cancel();
+  const s = tts.sentences[tts.idx];
+  if (!s) return finishPlayer();
+  const u = new SpeechSynthesisUtterance(s.text);
+  u.lang = 'de-DE';
+  u.rate = tts.rate;
+  const v = germanVoices().find(x => x.voiceURI === tts.voice);
+  if (v) { u.voice = v; u.lang = v.lang; }
+  u.onend = () => {
+    if (tok !== tts.token || !tts.playing) return;
+    if (tts.idx + 1 >= tts.sentences.length) return finishPlayer();
+    tts.idx++;
+    speakCurrent();
+  };
+  u.onerror = e => {
+    if (tok !== tts.token || e.error === 'interrupted' || e.error === 'canceled') return;
+    tts.playing = false; updatePlayerUi();
+  };
+  // kleiner Abstand, sonst verschluckt Android manchmal den Anfang
+  setTimeout(() => { if (tok === tts.token) speechSynthesis.speak(u); }, 60);
+  updatePlayerUi();
+}
+
+function updatePlayerUi() {
+  const n = tts.sentences.length;
+  $('playerInfo').textContent = n ? `Satz ${Math.min(tts.idx + 1, n)} von ${n}` : '';
+  $('playerPlay').classList.toggle('paused', !tts.playing);
+  $('playerPlay').setAttribute('aria-label', tts.playing ? 'Pause' : 'Weiter');
+  const s = tts.sentences[tts.idx];
+  if (s && !findOpen) renderHighlights([[s.start, s.end]], 0, true);
+}
+
+function finishPlayer() {
+  tts.playing = false;
+  tts.token++;
+  tts.idx = 0;
+  updatePlayerUi();
+  $('playerInfo').textContent = 'Fertig vorgelesen';
+  renderHighlights([], -1);
+}
+
+function playerToggle() {
+  if (tts.playing) { tts.playing = false; tts.token++; speechSynthesis.cancel(); updatePlayerUi(); }
+  else { tts.playing = true; speakCurrent(); }
+}
+function playerJump(dir) {
+  tts.idx = Math.min(Math.max(0, tts.idx + dir), Math.max(0, tts.sentences.length - 1));
+  if (tts.playing) speakCurrent(); else updatePlayerUi();
+}
+function playerSpeed() {
+  const i = TTS_RATES.indexOf(tts.rate);
+  tts.rate = TTS_RATES[(i + 1) % TTS_RATES.length];
+  localStorage.setItem('rm_tts_rate', String(tts.rate));
+  $('playerSpeed').textContent = `${String(tts.rate).replace('.', ',')}×`;
+  if (tts.playing) speakCurrent();
+}
+
+/* =====================================================================
+   Sicherung: Anzeige und dezente Erinnerung
+   ===================================================================== */
+
+const LS_LAST_BACKUP = 'rm_last_backup';
+const LS_BACKUP_SNOOZE = 'rm_backup_snooze';
+const BACKUP_REMIND_DAYS = 14;
+
+function daysSince(ts) { return Math.floor((Date.now() - ts) / 86400000); }
+
+function backupAgeText() {
+  const ts = Number(localStorage.getItem(LS_LAST_BACKUP) || 0);
+  if (!ts) return 'Noch nie gesichert';
+  const d = daysSince(ts);
+  return d === 0 ? 'Letzte Sicherung: heute' : d === 1 ? 'Letzte Sicherung: gestern' : `Letzte Sicherung: vor ${d} Tagen`;
+}
+
+function maybeShowBackupCard() {
+  const card = $('backupCard');
+  if (!state || !card) return;
+  const ts = Number(localStorage.getItem(LS_LAST_BACKUP) || 0);
+  const snooze = Number(localStorage.getItem(LS_BACKUP_SNOOZE) || 0);
+  const created = new Date(state.createdAt || Date.now()).getTime();
+  const hasContent = activeTopics().some(t => (t.content || '').trim() || t.sketches?.length);
+  const due = ts ? daysSince(ts) >= BACKUP_REMIND_DAYS : daysSince(created) >= 7;
+  const show = hasContent && due && Date.now() > snooze;
+  card.classList.toggle('hidden', !show);
+  if (show) $('backupCardText').textContent = ts ? `Deine letzte Sicherung ist ${daysSince(ts)} Tage her.` : 'Du hast noch nie eine Sicherung gemacht.';
+}
+
+function wireV22() {
+  $('versionsList');
+  $('actionVersionsBtn').addEventListener('click', openVersions);
+  $('versionRestoreBtn').addEventListener('click', restoreVersion);
+  $('versionBackBtn').addEventListener('click', () => openVersions());
+  $('versionsCloseBtn').addEventListener('click', () => closeSheet($('versionsSheet')));
+  $('actionPinBtn').addEventListener('click', () => togglePin(actionTopicId));
+  $('actionShareBtn').addEventListener('click', () => shareTopic(actionTopicId));
+  $('actionFindBtn').addEventListener('click', openFind);
+  $('findInput').addEventListener('input', () => { findIndex = 0; renderFind(); });
+  $('findInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); } });
+  $('findNext').addEventListener('click', () => findStep(1));
+  $('findPrev').addEventListener('click', () => findStep(-1));
+  $('findClose').addEventListener('click', closeFind);
+  els.topicText.addEventListener('scroll', () => { $('hlLayer').scrollTop = els.topicText.scrollTop; });
+  $('playerPlay').addEventListener('click', playerToggle);
+  $('playerPrev').addEventListener('click', () => playerJump(-1));
+  $('playerNext').addEventListener('click', () => playerJump(1));
+  $('playerSpeed').addEventListener('click', playerSpeed);
+  $('playerVoice').addEventListener('change', e => { tts.voice = e.target.value; localStorage.setItem('rm_tts_voice', tts.voice); if (tts.playing) speakCurrent(); });
+  $('playerClose').addEventListener('click', stopReading);
+  if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', () => { if (!$('player').classList.contains('hidden')) fillVoices(); });
+  $('backupLater').addEventListener('click', () => { localStorage.setItem(LS_BACKUP_SNOOZE, String(Date.now() + 3 * 86400000)); $('backupCard').classList.add('hidden'); });
+  $('backupNow').addEventListener('click', async () => { await exportBackup(); $('backupCard').classList.add('hidden'); });
+}
+
+/* =====================================================================
    Sicherung
    ===================================================================== */
 
@@ -2464,7 +2857,9 @@ async function exportBackup() {
   a.click();
   a.remove();
   setTimeout(() => { URL.revokeObjectURL(url); suppressLock = false; }, 4000);
-  showToast('Sicherung gespeichert (verschlüsselt)');
+  localStorage.setItem(LS_LAST_BACKUP, String(Date.now()));
+  maybeShowBackupCard();
+  showToast('Sicherung gespeichert (verschlüsselt). Sie liegt im Ordner Downloads.', 3500);
 }
 
 async function importBackup(file) {
@@ -2584,18 +2979,21 @@ function wireEvents() {
   els.deleteBtn.addEventListener('click', () => { if (currentTopicId) moveTopicToTrash(currentTopicId); });
   els.micBtn.addEventListener('click', () => { dictTarget = null; dictMicBtn = null; toggleRecognition(); });
   wireQuick();
+  wireV22();
   els.editorMenuBtn.addEventListener('click', () => openActionSheet(currentTopicId));
 
   els.topicText.addEventListener('input', () => {
     const topic = currentTopic();
     if (!topic) return;
+    versionOnInput(topic, els.topicText.value);
     topic.content = els.topicText.value;
     topic.updatedAt = new Date().toISOString();
+    if (findOpen) renderFind(false);
     els.dateLine.textContent = formatLong(topic.updatedAt);
     persistState();
   });
 
-  els.menuBtn.addEventListener('click', () => { updateBiometricUi(); openSheet(els.menuSheet); });
+  els.menuBtn.addEventListener('click', () => { updateBiometricUi(); $('backupAge').textContent = backupAgeText(); openSheet(els.menuSheet); });
   els.openTrashBtn.addEventListener('click', () => { closeSheetAndReplace(els.menuSheet, { rm: 'trash' }); openTrash({ push: false }); });
   els.biometricMenuBtn.addEventListener('click', async () => {
     if (hasBiometricConfig()) { disableBiometrics(); }
@@ -2635,7 +3033,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.9.3';
+const APP_VERSION = '2.9.4';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -771,14 +771,15 @@ function moonSvg(date) {
   </svg>`;
 }
 
-// Startseiten-Mond fest auf die Darstellung aus Reci mi V2.9 eingefroren.
+// Startseiten-Mond: ursprüngliche plastische Reci-mi-Optik von vor den heutigen Änderungen.
+// Bewusst getrennt vom Sperrseiten-Mond, damit beide künftig unabhängig angepasst werden können.
 function homeMoonSvgV29(date) {
   const age = moonAge(date);
   const f = age / SYNODIC;
   const c = Math.cos(2 * Math.PI * f);
-  const k = moonIllumination(age);
+  const k = (1 - c) / 2;
   const R = 96, C = 100;
-  const rx = Math.max(2.5, Math.abs(c) * R);
+  const rx = Math.abs(c) * R;
   const waxing = f < 0.5;
   const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
   let d;
@@ -786,44 +787,26 @@ function homeMoonSvgV29(date) {
   else if (k > 0.985) d = `M${top} A${R} ${R} 0 1 1 ${bottom} A${R} ${R} 0 1 1 ${top}Z`;
   else if (waxing) d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
   else d = `M${top} A${R} ${R} 0 0 0 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 1 : 0} ${top}Z`;
-  const id = `m${++moonUid}`;
-  const glow = (0.42 + 0.58 * k).toFixed(2);
-  const maria = `
-    <ellipse cx="78" cy="84" rx="21" ry="17" fill="var(--moon-maria)" opacity=".30"/>
-    <ellipse cx="122" cy="74" rx="16" ry="13" fill="var(--moon-maria)" opacity=".24"/>
-    <ellipse cx="130" cy="118" rx="18" ry="15" fill="var(--moon-maria)" opacity=".20"/>
-    <ellipse cx="88" cy="126" rx="14" ry="11" fill="var(--moon-maria)" opacity=".18"/>
-    <circle cx="63" cy="62" r="5.5" fill="var(--moon-crater)" opacity=".22"/>
-    <circle cx="110" cy="98" r="4.8" fill="var(--moon-crater)" opacity=".20"/>
-    <circle cx="140" cy="56" r="6" fill="var(--moon-crater)" opacity=".18"/>
-    <circle cx="146" cy="138" r="5" fill="var(--moon-crater)" opacity=".18"/>
-  `;
+  const id = `hm${++moonUid}`;
+  const glow = (0.35 + 0.65 * k).toFixed(2);
 
   return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
     <defs>
       <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
-      <filter id="${id}g" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="10"/></filter>
-      <filter id="${id}h" x="-140%" y="-140%" width="380%" height="380%"><feGaussianBlur stdDeviation="24"/></filter>
-      <filter id="${id}s" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2"/></filter>
-      <radialGradient id="${id}lit" cx="35%" cy="30%" r="72%">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="28%" stop-color="var(--moon-lit-2)"/>
-        <stop offset="78%" stop-color="var(--moon-lit)"/>
-        <stop offset="100%" stop-color="var(--moon-maria)"/>
-      </radialGradient>
-      <radialGradient id="${id}base" cx="34%" cy="28%" r="80%">
-        <stop offset="0%" stop-color="color-mix(in srgb, var(--moon-dark) 70%, white)" stop-opacity=".55"/>
-        <stop offset="55%" stop-color="var(--moon-dark)"/>
-        <stop offset="100%" stop-color="color-mix(in srgb, var(--moon-dark) 88%, black)"/>
-      </radialGradient>
-      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}s)"/></mask>
+      <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
+      <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
+      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
+      <g id="${id}sf">
+        <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
+        <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
+        <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
+      </g>
     </defs>
-    ${d ? `<path class="moon-glow wide" d="${d}" fill="var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" fill="var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
-    <circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}base)"/>
-    <circle cx="${C}" cy="${C}" r="${R - 1.5}" fill="var(--moon-lit)" opacity="calc(var(--earthshine) * .85)"/>
-    ${d ? `<path d="${d}" fill="url(#${id}lit)"/>` : ''}
-    <g clip-path="url(#${id}c)" ${d ? `mask="url(#${id}m)"` : ''}>${maria}</g>
-    <circle cx="${C}" cy="${C}" r="${R - 1.5}" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/>
+    ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
+    <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
+    <use href="#${id}sf" style="opacity:var(--earthshine)"/>
+    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
   </svg>`;
 }
 

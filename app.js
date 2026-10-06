@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -36,6 +36,7 @@ let confirmResolver = null;
 let topicSheetMode = 'create';
 let topicSheetId = null;
 let selectedCategory = 'Bücher';
+let editorMode = 'text';
 let actionTopicId = null;
 let openSheetEl = null;
 let sheetSilentClose = false;
@@ -46,7 +47,7 @@ const els = {};
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
  'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
- 'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
+ 'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'textModeBtn', 'listModeBtn', 'textPane', 'topicText', 'checklistPane', 'checklistForm', 'checklistInput', 'checklistAddBtn', 'checklistList', 'checklistEmpty', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
  'trashBackBtn', 'trashHomeBtn', 'trashList',
  'topicSheet', 'topicForm', 'topicSheetTitle', 'topicName', 'catPicker', 'cancelTopicBtn', 'saveTopicBtn',
@@ -1320,6 +1321,7 @@ async function loadVaultWithKey(key) {
   delete state.settings.lockMode;
   if (!state.settings.name) state.settings.name = DEFAULT_NAME;
   if (!Array.isArray(state.settings.customCategories)) state.settings.customCategories = [];
+  state.topics.forEach(t => { if (!Array.isArray(t.checklist)) t.checklist = []; });
 }
 
 async function unlockVault(pin) {
@@ -1806,12 +1808,27 @@ function categoryColor(cat) {
 }
 function dotHtml(cat) { return `<span class="dot" data-cat="${escapeHtml(cat)}" style="--cat-c:${escapeHtml(categoryColor(cat))}"></span>`; }
 function catOf(t) { return categoryNames().includes(t.category) ? t.category : 'Sonstiges'; }
+function checklistItems(topic) {
+  if (!topic) return [];
+  if (!Array.isArray(topic.checklist)) topic.checklist = [];
+  return topic.checklist;
+}
+function checklistPlainText(topic, includeState = true) {
+  return checklistItems(topic).map(i => `${includeState ? (i.done ? '☑ ' : '☐ ') : ''}${i.text || ''}`.trim()).filter(Boolean).join('\n');
+}
+function combinedTopicText(topic) {
+  const parts = [];
+  if ((topic?.content || '').trim()) parts.push(topic.content.trim());
+  const list = checklistPlainText(topic, true);
+  if (list) parts.push(list);
+  return parts.join('\n\n');
+}
 
 function renderCategoryControls() {
   const cats = categoryNames();
   if (!cats.includes(currentFilter) && currentFilter !== 'Alle') currentFilter = 'Alle';
-  els.filterRow.innerHTML = `<button class="chip${currentFilter === 'Alle' ? ' active' : ''}" data-filter="Alle" type="button">Alle</button>` + cats.map(cat => `<button class="chip${currentFilter === cat ? ' active' : ''}" data-filter="${escapeHtml(cat)}" type="button">${dotHtml(cat)}${escapeHtml(cat)}</button>`).join('');
-  els.catPicker.innerHTML = cats.map(cat => `<button type="button" class="cat${cat === QUICK_CATEGORY ? ' cat-wide' : ''}${selectedCategory === cat ? ' selected' : ''}" data-cat="${escapeHtml(cat)}">${dotHtml(cat)}${escapeHtml(cat)}</button>`).join('');
+  els.filterRow.innerHTML = `<button class="chip${currentFilter === 'Alle' ? ' active' : ''}" data-filter="Alle" type="button">Alle</button>` + cats.map(cat => `<button class="chip${currentFilter === cat ? ' active' : ''}" data-filter="${escapeHtml(cat)}" type="button">${dotHtml(cat)}${escapeHtml(cat)}</button>`).join('') + `<button class="chip add-category-chip" data-action="add-category" type="button" aria-label="Bereich hinzufügen">+</button>`;
+  els.catPicker.innerHTML = cats.map(cat => `<button type="button" class="cat${cat === QUICK_CATEGORY ? ' cat-wide' : ''}${selectedCategory === cat ? ' selected' : ''}" data-cat="${escapeHtml(cat)}">${dotHtml(cat)}${escapeHtml(cat)}</button>`).join('') + `<button type="button" class="cat add-category-cat" data-action="add-category">+ Bereich</button>`;
 }
 
 function renderCategoryManager() {
@@ -1870,13 +1887,13 @@ function renderTopics() {
   const all = activeTopics();
   let topics = all;
   if (currentFilter !== 'Alle') topics = topics.filter(t => catOf(t) === currentFilter);
-  if (q) topics = topics.filter(t => (t.locked ? t.title : `${t.title} ${t.content}`).toLowerCase().includes(q));
+  if (q) topics = topics.filter(t => (t.locked ? t.title : `${t.title} ${t.content || ''} ${checklistPlainText(t, false)}`).toLowerCase().includes(q));
   topics.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.updatedAt) - new Date(a.updatedAt));
 
   els.topicList.innerHTML = topics.map(t => `
     <article class="row${t.locked ? ' is-locked' : ''}" data-id="${escapeHtml(t.id)}" data-cat="${escapeHtml(catOf(t))}" style="--row-cat-color:${escapeHtml(categoryColor(catOf(t)))}" tabindex="0">
       <div class="row-top"><h2>${t.pinned ? PIN_ICON : ''}${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h2><time>${escapeHtml(formatDate(t.updatedAt))}</time></div>
-      <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : (!(t.content || '').trim() && t.sketches?.length ? 'Zeichnung' : escapeHtml(excerpt(t.content)))}</p>
+      <p>${t.locked ? 'Geschützt. Zum Öffnen Fingerabdruck oder PIN.' : (!(t.content || '').trim() && checklistItems(t).length ? escapeHtml(excerpt(checklistPlainText(t, true))) : (!(t.content || '').trim() && t.sketches?.length ? 'Zeichnung' : escapeHtml(excerpt(t.content))))}</p>
     </article>`).join('');
 
   els.emptyState.classList.toggle('hidden', all.length !== 0);
@@ -2041,6 +2058,78 @@ function goEditorEnd() {
   syncEditSnapshotPosition();
 }
 
+function setEditorMode(mode, { focus = false, persist = true } = {}) {
+  editorMode = mode === 'list' ? 'list' : 'text';
+  const listOn = editorMode === 'list';
+  els.textModeBtn.classList.toggle('active', !listOn);
+  els.listModeBtn.classList.toggle('active', listOn);
+  els.textModeBtn.setAttribute('aria-selected', String(!listOn));
+  els.listModeBtn.setAttribute('aria-selected', String(listOn));
+  els.textPane.classList.toggle('hidden', listOn);
+  els.checklistPane.classList.toggle('hidden', !listOn);
+  const topic = currentTopic();
+  if (topic) {
+    topic.editorMode = editorMode;
+    if (persist) persistState();
+  }
+  if (listOn) {
+    setEditing(false);
+    renderChecklist();
+    if (focus) setTimeout(() => els.checklistInput.focus(), 40);
+  } else if (focus) {
+    setEditing(true, true);
+  }
+}
+
+function renderChecklist() {
+  const topic = currentTopic();
+  const items = checklistItems(topic);
+  els.checklistList.innerHTML = items.map(i => `<div class="checklist-item${i.done ? ' done' : ''}" data-id="${escapeHtml(i.id)}">
+    <input class="checklist-check" type="checkbox" ${i.done ? 'checked' : ''} aria-label="${i.done ? 'Als offen markieren' : 'Abhaken'}" />
+    <div class="checklist-text">${escapeHtml(i.text || '')}</div>
+    <button class="checklist-delete" type="button" aria-label="Punkt löschen">×</button>
+  </div>`).join('');
+  els.checklistEmpty.classList.toggle('hidden', items.length > 0);
+}
+
+function touchTopic(topic) {
+  if (!topic) return;
+  topic.updatedAt = new Date().toISOString();
+  els.dateLine.textContent = formatLong(topic.updatedAt);
+}
+
+function addChecklistItem(text = els.checklistInput.value) {
+  const topic = currentTopic();
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!topic || !clean) return false;
+  checklistItems(topic).push({ id: uid(), text: clean, done: false, createdAt: new Date().toISOString() });
+  els.checklistInput.value = '';
+  touchTopic(topic);
+  renderChecklist();
+  persistState();
+  setTimeout(() => els.checklistInput.focus(), 0);
+  return true;
+}
+
+function updateChecklistItem(id, changes) {
+  const topic = currentTopic();
+  const item = checklistItems(topic).find(i => i.id === id);
+  if (!item) return;
+  Object.assign(item, changes);
+  touchTopic(topic);
+  renderChecklist();
+  persistState();
+}
+
+function removeChecklistItem(id) {
+  const topic = currentTopic();
+  if (!topic) return;
+  topic.checklist = checklistItems(topic).filter(i => i.id !== id);
+  touchTopic(topic);
+  renderChecklist();
+  persistState();
+}
+
 function setEditorTag(topic) {
   const cat = catOf(topic);
   els.editorTag.innerHTML = `${dotHtml(cat)}${escapeHtml(cat)}`;
@@ -2059,12 +2148,16 @@ function openTopic(id, { push = true, verified = false } = {}) {
   els.editorTitle.textContent = topic.title;
   setEditorTag(topic);
   els.topicText.value = topic.content || '';
+  checklistItems(topic);
   resetEditHistory(topic.content || '');
   renderSketches();
+  renderChecklist();
   if (findOpen) closeFind();
   stopReading();
   versionStart(topic);
-  setEditing(!topic.content);
+  const initialMode = topic.editorMode === 'list' ? 'list' : 'text';
+  setEditorMode(initialMode, { focus: false, persist: false });
+  if (initialMode === 'text') setEditing(!topic.content);
   els.dateLine.textContent = formatLong(topic.updatedAt);
   els.saveState.textContent = 'Gespeichert';
   if (push) history.pushState({ rm: 'editor', id }, '');
@@ -2144,7 +2237,7 @@ async function saveTopicSheet() {
     renderTopics();
     showToast('Gespeichert');
   } else {
-    const topic = { id: uid(), title, category: selectedCategory, content: '', createdAt: now, updatedAt: now, deletedAt: null };
+    const topic = { id: uid(), title, category: selectedCategory, content: '', checklist: [], createdAt: now, updatedAt: now, deletedAt: null };
     if ($('protectToggle').checked) { topic.locked = true; openedProtected.add(topic.id); }
     state.topics.push(topic);
     await persistState(true);
@@ -2183,7 +2276,7 @@ function renderArchive() {
   }
   box.innerHTML = topics.map(t => `<article class="archive-row" data-id="${escapeHtml(t.id)}">
     <h3>${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h3>
-    <p>${t.locked ? 'Geschützt.' : escapeHtml(excerpt(t.content, 110))}</p>
+    <p>${t.locked ? 'Geschützt.' : escapeHtml(excerpt((t.content || '').trim() ? t.content : checklistPlainText(t, true), 110))}</p>
     <div class="archive-actions">
       <button class="btn btn-main btn-small archive-open" type="button">Öffnen</button>
       <button class="btn btn-ghost btn-small archive-restore" type="button">Zurückholen</button>
@@ -2236,6 +2329,7 @@ async function mergeIntoTopic(targetId) {
   const offset = old.length + sep.length;
   target.content = add ? old + sep + add : old;
   if (src.sketches?.length) target.sketches = [...(target.sketches || []), ...src.sketches];
+  if (checklistItems(src).length) target.checklist = [...checklistItems(target), ...checklistItems(src).map(i => ({ ...i, id: uid() }))];
   if (src.markers?.length) {
     target.markers = [...(target.markers || []), ...src.markers.map(m => ({ ...m, id: uid(), pos: Math.max(0, offset + Number(m.pos || 0)) }))];
   }
@@ -2552,18 +2646,23 @@ function showToast(message, duration = 2000) {
 }
 
 async function copyAll() {
-  const text = els.topicText.value;
+  const topic = currentTopic();
+  const text = combinedTopicText(topic);
   if (!text.trim()) return showToast('Hier steht noch nichts');
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    const ro = els.topicText.readOnly;
-    els.topicText.readOnly = false;
-    els.topicText.select();
+    const tmp = document.createElement('textarea');
+    tmp.value = text;
+    tmp.setAttribute('readonly', '');
+    tmp.style.position = 'fixed';
+    tmp.style.opacity = '0';
+    document.body.appendChild(tmp);
+    tmp.select();
     document.execCommand('copy');
-    els.topicText.readOnly = ro;
+    tmp.remove();
   }
-  showToast('Ganzer Text kopiert');
+  showToast('Ganzer Inhalt kopiert');
 }
 
 function stopReading() {
@@ -2881,6 +2980,8 @@ function finishDictationUi() {
   [els.micBtn, $('quickMicBtn')].forEach(b => { b.classList.remove('listening'); b.setAttribute('aria-label', 'Spracheingabe starten'); });
   showDictation(false);
   holdScreenOn(false);
+  if (dictTarget === els.checklistInput && els.checklistInput.value.trim()) addChecklistItem(els.checklistInput.value);
+  if (dictTarget === els.checklistInput) { dictTarget = null; dictMicBtn = null; }
 }
 
 function startDictation() {
@@ -2896,7 +2997,7 @@ function startDictation() {
   const ta = dictTA();
   dictInsertPos = document.activeElement === ta ? ta.selectionEnd : ta.value.length;
   dictLastAuto = null;
-  setEditing(true);
+  if (ta === els.topicText) setEditing(true);
   dictBtn().classList.add('listening');
   dictBtn().setAttribute('aria-label', 'Spracheingabe beenden');
   showDictation(true);
@@ -2914,7 +3015,9 @@ function stopRecognition() {
 }
 
 function keyboardDictationFallback() {
-  setEditing(true, true);
+  const ta = dictTA();
+  if (ta === els.topicText) setEditing(true, true);
+  else { try { ta.focus(); } catch {} }
   showToast('Direkte Spracheingabe geht in diesem Browser nicht. Tippe auf das Mikrofon deiner Tastatur.', 5000);
 }
 
@@ -3522,7 +3625,8 @@ function fillVoices() {
 
 function openPlayer() {
   if (!('speechSynthesis' in window)) return showToast('Vorlesen geht auf diesem Gerät nicht');
-  const text = els.topicText.value;
+  const topic = currentTopic();
+  const text = combinedTopicText(topic);
   if (!text.trim()) return showToast('Hier steht noch nichts');
   stopRecognition();
   if (findOpen) closeFind();
@@ -3978,7 +4082,7 @@ function wireEvents() {
     if (e.target.closest('.category-edit')) { editingCategoryName = name; els.categoryName.value = name; els.categorySaveBtn.textContent = 'Speichern'; els.categoryName.focus(); }
     if (e.target.closest('.category-delete')) deleteCustomCategory(name);
   });
-  els.catPicker.addEventListener('click', e => { const b = e.target.closest('.cat'); if (b) selectCategory(b.dataset.cat); });
+  els.catPicker.addEventListener('click', e => { const b = e.target.closest('.cat'); if (!b) return; if (b.dataset.action === 'add-category') { closeSheet(els.topicSheet); openCategoryManager(); return; } selectCategory(b.dataset.cat); });
   els.topicForm.addEventListener('submit', e => { e.preventDefault(); saveTopicSheet(); });
   els.cancelTopicBtn.addEventListener('click', () => closeSheet(els.topicSheet));
 
@@ -4017,6 +4121,7 @@ function wireEvents() {
   els.filterRow.addEventListener('click', e => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
+    if (chip.dataset.action === 'add-category') { openCategoryManager(); return; }
     currentFilter = chip.dataset.filter;
     els.filterRow.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
     renderTopics();
@@ -4030,15 +4135,30 @@ function wireEvents() {
   els.editorHomeBtn.addEventListener('click', jumpHome);
   els.trashBackBtn.addEventListener('click', goHomeFromScreen);
   els.trashHomeBtn.addEventListener('click', jumpHome);
-  els.editBtn.addEventListener('click', () => setEditing(els.topicText.readOnly, true));
+  els.editBtn.addEventListener('click', () => { if (editorMode === 'list') setEditorMode('text', { focus: true }); else setEditing(els.topicText.readOnly, true); });
   els.copyBtn.addEventListener('click', copyAll);
   els.readBtn.addEventListener('click', readText);
   els.deleteBtn.addEventListener('click', () => { if (currentTopicId) moveTopicToTrash(currentTopicId); });
-  els.micBtn.addEventListener('click', () => { dictTarget = null; dictMicBtn = null; toggleRecognition(); });
+  els.micBtn.addEventListener('click', () => {
+    if (editorMode === 'list') { dictTarget = els.checklistInput; dictMicBtn = els.micBtn; }
+    else { dictTarget = null; dictMicBtn = null; }
+    toggleRecognition();
+  });
   wireQuick();
   wireV22();
   wireV25();
   els.editorMenuBtn.addEventListener('click', () => openActionSheet(currentTopicId));
+  els.textModeBtn.addEventListener('click', () => { if (dictWanted || isListening) stopRecognition(); setEditorMode('text', { focus: true }); });
+  els.listModeBtn.addEventListener('click', () => { if (dictWanted || isListening) stopRecognition(); setEditorMode('list', { focus: true }); });
+  els.checklistForm.addEventListener('submit', e => { e.preventDefault(); addChecklistItem(); });
+  els.checklistList.addEventListener('change', e => {
+    const row = e.target.closest('.checklist-item');
+    if (row && e.target.matches('.checklist-check')) updateChecklistItem(row.dataset.id, { done: e.target.checked });
+  });
+  els.checklistList.addEventListener('click', e => {
+    const row = e.target.closest('.checklist-item');
+    if (row && e.target.closest('.checklist-delete')) removeChecklistItem(row.dataset.id);
+  });
 
   els.topicText.addEventListener('input', () => {
     const topic = currentTopic();

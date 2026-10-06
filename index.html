@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#141A36" />
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
-  <link rel="manifest" href="manifest.webmanifest?v=3.2" />
+  <link rel="manifest" href="manifest.webmanifest?v=3.3" />
   <link rel="icon" href="mond-192.png" />
   <link rel="apple-touch-icon" href="mond-192.png" />
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=3.2" />
+  <link rel="stylesheet" href="styles.css?v=3.3" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -148,9 +148,21 @@
       </div>
       <main class="page">
         <div id="sketchStrip" class="sketch-strip hidden"></div>
-        <div class="ta-wrap">
+        <div class="editor-mode" role="tablist" aria-label="Notizmodus">
+          <button id="textModeBtn" class="editor-mode-btn active" type="button" role="tab" aria-selected="true">Text</button>
+          <button id="listModeBtn" class="editor-mode-btn" type="button" role="tab" aria-selected="false">Liste</button>
+        </div>
+        <div id="textPane" class="ta-wrap">
           <div id="hlLayer" class="hl-layer hidden" aria-hidden="true"></div>
           <textarea id="topicText" spellcheck="true" placeholder="Schreib hier oder tippe auf das Mikrofon …"></textarea>
+        </div>
+        <div id="checklistPane" class="checklist-pane hidden">
+          <form id="checklistForm" class="checklist-add">
+            <input id="checklistInput" maxlength="240" autocomplete="off" placeholder="Neuer Punkt …" aria-label="Neuer Listenpunkt" />
+            <button id="checklistAddBtn" class="checklist-add-btn" type="submit" aria-label="Listenpunkt hinzufügen">+</button>
+          </form>
+          <div id="checklistList" class="checklist-list"></div>
+          <p id="checklistEmpty" class="checklist-empty">Noch keine Punkte. Schreib etwas oder sprich es über das Mikrofon ein.</p>
         </div>
         <div class="editor-foot">
           <div class="edit-history" aria-label="Bearbeitung">
@@ -293,7 +305,7 @@
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 3.2</p>
+      <p class="sheet-note version">Version 3.3</p>
     </dialog>
 
     <!-- Blatt: Archiv -->
@@ -496,6 +508,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=3.2" defer></script>
+  <script src="app.js?v=3.3" defer></script>
 </body>
 </html>

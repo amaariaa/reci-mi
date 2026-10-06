@@ -257,7 +257,7 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .moon-path polyline { display: none; }  /* Mond bewegt sich auf der Bahn, Linie bleibt unsichtbar */
 
 .sun { position: absolute; z-index: 1; width: var(--sun-size, 140px); height: var(--sun-size, 140px); transform: translate(-50%, -50%); pointer-events: none; opacity: var(--sun-veil, 1); transition: left 2s ease, top 2s ease, opacity 2s ease; }
-.moon-orb { position: absolute; z-index: 1; width: var(--moon-size, 82px); height: var(--moon-size, 82px); transform: translate(-50%, -50%); pointer-events: none; transition: left 2s ease, top 2s ease, opacity 2s ease; filter: drop-shadow(0 10px 22px color-mix(in srgb, var(--moon-glow) 65%, transparent)); }
+.moon-orb { position: absolute; z-index: 1; width: var(--moon-size, 52px); height: var(--moon-size, 52px); transform: translate(-50%, -50%); pointer-events: none; transition: left 2s ease, top 2s ease, opacity 2s ease; filter: drop-shadow(0 3px 9px color-mix(in srgb, var(--moon-glow) 48%, transparent)); }
 .moon-orb .moon-art { display: block; width: 100%; height: 100%; }
 .sun-core { position: absolute; inset: 0; border-radius: 50%;
   background: radial-gradient(circle, #FFFFFF 0 3.5%, var(--sun-core, #FFF6D8) 6%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 70%, transparent) 11%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 28%, transparent) 24%, transparent 58%);

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.9.4';
+const APP_VERSION = '2.9.5';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -461,6 +461,28 @@ function moonTimes(date) {
   return { rise, set, age, phase, illum: moonIllumination(age) };
 }
 
+function virtualSunPoint(date, W, H, pad, horizon, apex) {
+  const { rise, set } = sunTimes(date);
+  const minutes = date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
+  const center = W / 2;
+  const radius = (W - 2 * pad) / 2;
+  const height = horizon - apex;
+  let theta;
+  if (isBetweenWrapped(minutes, rise, set)) {
+    const dayLen = set >= rise ? set - rise : 1440 - rise + set;
+    const elapsed = set >= rise ? minutes - rise : (minutes >= rise ? minutes - rise : 1440 - rise + minutes);
+    theta = Math.PI * Math.max(0, Math.min(1, elapsed / Math.max(1, dayLen)));
+  } else {
+    const nightLen = rise <= set ? 1440 - set + rise : rise - set;
+    const elapsed = minutes >= set ? minutes - set : 1440 - set + minutes;
+    theta = Math.PI + Math.PI * Math.max(0, Math.min(1, elapsed / Math.max(1, nightLen)));
+  }
+  return {
+    x: center - radius * Math.cos(theta),
+    y: horizon - height * Math.sin(theta)
+  };
+}
+
 function placeMoon() {
   const hero = document.querySelector('.hero');
   const svg = $('moonPath');
@@ -476,7 +498,9 @@ function placeMoon() {
 
   const W = hero.clientWidth, H = hero.clientHeight;
   if (!W || !H) return;
-  const pad = 28, horizon = H - 66, apex = 112;
+  // Die Bahn bleibt unsichtbar. Der Mond sitzt bewusst höher über den Zeitzeilen,
+  // wie in der früheren Reci-mi-Ansicht.
+  const pad = 30, horizon = H - 118, apex = 108;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const pts = [];
   for (let i = 0; i <= 40; i++) {
@@ -492,14 +516,27 @@ function placeMoon() {
   const up = isBetweenWrapped(minutes, info.rise, info.set);
   moonOrb.classList.toggle('hidden', !up);
   if (!up) return;
+
   const ff = Math.min(1, Math.max(0, f));
   const x = pad + ff * (W - 2 * pad);
   const alt = Math.sin(Math.PI * ff);
   const y = horizon - (horizon - apex) * alt;
+
+  // Klein wie in der früheren Ansicht: am Horizont minimal größer, oben etwas kleiner.
   moonOrb.style.left = `${x}px`;
   moonOrb.style.top = `${y}px`;
-  moonOrb.style.setProperty('--moon-size', `${Math.round(74 - alt * 10)}px`);
-  moonOrb.innerHTML = homeMoonSvgV29(now);
+  moonOrb.style.setProperty('--moon-size', `${Math.round(52 - alt * 8)}px`);
+
+  // Die helle Seite zeigt zur Sonne. Dadurch kippt der Schatten natürlich mit,
+  // statt immer starr links/rechts zu stehen.
+  const sun = virtualSunPoint(now, W, H, pad, horizon, apex);
+  const sunAngle = Math.atan2(sun.y - y, sun.x - x) * 180 / Math.PI;
+  const baseBrightAngle = info.phase < 0.5 ? 0 : 180;
+  let lightRotation = sunAngle - baseBrightAngle;
+  while (lightRotation > 180) lightRotation -= 360;
+  while (lightRotation < -180) lightRotation += 360;
+
+  moonOrb.innerHTML = homeMoonSvgV29(now, lightRotation);
 }
 
 function applyWeatherFx() {
@@ -773,7 +810,7 @@ function moonSvg(date) {
 
 // Startseiten-Mond: ursprüngliche plastische Reci-mi-Optik von vor den heutigen Änderungen.
 // Bewusst getrennt vom Sperrseiten-Mond, damit beide künftig unabhängig angepasst werden können.
-function homeMoonSvgV29(date) {
+function homeMoonSvgV29(date, lightRotation = 0) {
   const age = moonAge(date);
   const f = age / SYNODIC;
   const c = Math.cos(2 * Math.PI * f);
@@ -796,14 +833,14 @@ function homeMoonSvgV29(date) {
       <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
       <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
       <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
-      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})"/></mask>
       <g id="${id}sf">
         <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
         <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
         <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
       </g>
     </defs>
-    ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
+    ${d ? `<path class="moon-glow wide" d="${d}" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
     <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
     <use href="#${id}sf" style="opacity:var(--earthshine)"/>
     ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
@@ -965,7 +1002,7 @@ function lockMoonSvgClassic(date) {
       <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
       <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
       <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
-      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})"/></mask>
       <g id="${id}sf">
         <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
         <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>

@@ -46,7 +46,13 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 /* ---------- Himmel ---------- */
 .sky { color: var(--hero-ink); position: relative; overflow: hidden; }
 .stars { position: absolute; inset: 0; pointer-events: none; opacity: var(--stars); transition: opacity 1.2s ease; }
-.stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; }
+.stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; opacity: var(--o, .6); animation: twinkle 4s ease-in-out infinite; }
+.stars i.big { box-shadow: 0 0 6px 1px rgba(255,255,255,.55); }
+@keyframes twinkle { 0%, 100% { opacity: var(--o, .6); transform: scale(1); } 45% { opacity: .08; transform: scale(.6); } 55% { opacity: 1; transform: scale(1.5); } }
+.stars .shoot { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; opacity: 0; transform: rotate(var(--rot, 20deg)); box-shadow: 0 0 8px 2px rgba(255,255,255,.7); animation: shoot 1.4s ease-out forwards; }
+.stars .shoot::after { content: ""; position: absolute; right: 1px; top: 50%; width: 110px; height: 1.5px; transform: translateY(-50%); transform-origin: right center; background: linear-gradient(270deg, rgba(255,255,255,.95), rgba(255,255,255,0)); }
+@keyframes shoot { 0% { opacity: 0; translate: 0 0; } 12% { opacity: 1; } 100% { opacity: 0; translate: var(--dx) var(--dy); } }
+@media (prefers-reduced-motion: reduce) { .stars i { animation: none; } .stars .shoot { display: none; } }
 
 .moon-art svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .moon-glow { opacity: calc(var(--k, .6) * var(--glow-mul, 1)); }
@@ -86,11 +92,11 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .lock-phase { position: absolute; left: 24px; right: 24px; bottom: calc(var(--safe-bottom) + 26px); text-align: center; margin: 0; font-size: 13px; line-height: 1.5; color: var(--hor-ink); white-space: pre-line; }
 
 /* ---------- Startseite ---------- */
-.hero { padding: calc(var(--safe-top) + 14px) 22px 64px; background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) calc(100% - 64px), var(--sky-hor) calc(100% - 20px), var(--bg) 100%); }
+.hero { display: flex; flex-direction: column; min-height: calc(var(--safe-top) + 362px); padding: calc(var(--safe-top) + 14px) 22px 64px; background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) calc(100% - 64px), var(--sky-hor) calc(100% - 20px), var(--bg) 100%); }
 .hero-top { position: relative; display: flex; justify-content: space-between; align-items: center; }
 .brand { font: italic 500 27px var(--serif); color: var(--hero-ink); }
 .hero-btn { background: color-mix(in srgb, var(--hero-ink) 12%, transparent); color: var(--hero-ink); }
-.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 30px; }
+.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 8px; }
 .greeting { margin: 0; font: 500 24px/1.2 var(--serif); color: var(--hero-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hero-text { flex: 1; min-width: 0; }
 .hero-moon { width: 72px; height: 72px; flex: 0 0 auto; margin-right: 4px; }
@@ -250,15 +256,15 @@ dialog.sheet input.switch { width: 50px; height: 30px; padding: 0; border: 0; bo
 dialog.sheet input.switch:checked { background: var(--accent-text); }
 
 /* ---------- Sonne und Wetter ---------- */
-.hero > .hero-top, .hero > .hero-main, .hero > .daily-quote, .hero > .moon-line, .hero > .sun-row, .hero > .moon-row { position: relative; z-index: 2; }
+.hero > .hero-top, .hero > .hero-main, .hero > .sky-rows { position: relative; z-index: 2; }
+.hero .hero-moon, .hero .daily-quote, .hero .moon-line { display: none; }
+.sky-rows { margin-top: auto; padding-top: 16px; display: grid; gap: 8px; }
 .lock-inner, .lock-phase { z-index: 2; }
-.sun-path, .moon-path { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }
-.sun-path polyline { display: none; }  /* Bahnlinie ausgeblendet, die Sonne wandert trotzdem */
-.moon-path polyline { display: none; }  /* Mond bewegt sich auf der Bahn, Linie bleibt unsichtbar */
 
 .sun { position: absolute; z-index: 1; width: var(--sun-size, 140px); height: var(--sun-size, 140px); transform: translate(-50%, -50%); pointer-events: none; opacity: var(--sun-veil, 1); transition: left 2s ease, top 2s ease, opacity 2s ease; }
-.moon-orb { position: absolute; z-index: 1; width: var(--moon-size, 52px); height: var(--moon-size, 52px); transform: translate(-50%, -50%); pointer-events: none; transition: left 2s ease, top 2s ease, opacity 2s ease; filter: drop-shadow(0 3px 9px color-mix(in srgb, var(--moon-glow) 48%, transparent)); }
-.moon-orb .moon-art { display: block; width: 100%; height: 100%; }
+.moon-orb { position: absolute; z-index: 1; width: var(--moon-size, 110px); height: var(--moon-size, 110px); transform: translate(-50%, -50%); pointer-events: none; opacity: var(--moon-veil, 1); transition: left 2s ease, top 2s ease, opacity 2s ease; animation: moonBreathe 7s ease-in-out infinite; }
+.moon-orb svg { display: block; overflow: visible; }
+@keyframes moonBreathe { 50% { filter: brightness(1.06); } }
 .sun-core { position: absolute; inset: 0; border-radius: 50%;
   background: radial-gradient(circle, #FFFFFF 0 3.5%, var(--sun-core, #FFF6D8) 6%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 70%, transparent) 11%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 28%, transparent) 24%, transparent 58%);
   animation: sunBreathe 6s ease-in-out infinite; }
@@ -273,11 +279,9 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 @keyframes sunBreathe { 50% { transform: scale(1.06); opacity: .92; } }
 
 .sun-row, .moon-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--hero-muted); }
-.sun-row { margin-top: 16px; }
-.moon-row { margin-top: 10px; }
 .sun-time, .moon-time { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sun-time .ui-icon, .moon-time .ui-icon { width: 17px; height: 17px; }
-.moon-phase-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--hero-ink) 12%, transparent); color: var(--hero-ink); font-size: 12px; line-height: 1.2; text-align: center; }
+.moon-phase-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .weather-label { border: 0; background: none; padding: 4px 6px; color: inherit; font: inherit; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weather-label.link { text-decoration: underline; text-underline-offset: 3px; color: var(--hero-ink); }

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.9.5';
+const APP_VERSION = '3.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -44,7 +44,7 @@ const $ = id => document.getElementById(id);
 const els = {};
 ['lockScreen', 'homeScreen', 'editorScreen', 'trashScreen',
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
- 'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonPath', 'moonArc', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
+ 'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
  'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'topicText', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
@@ -146,9 +146,10 @@ function sunTimes(date) {
   const cosDec = Math.cos(Math.asin(sinDec));
   const cosW = (Math.sin(-0.833 * rad) - Math.sin(GEO.lat * rad) * sinDec) / (Math.cos(GEO.lat * rad) * cosDec);
   const w = Math.acos(Math.max(-1, Math.min(1, cosW))) / rad;
+  const off = placeOffsetMin(noon);
   const toLocalMinutes = j => {
     const d = new Date((j - 2440587.5) * 86400000);
-    return d.getHours() * 60 + d.getMinutes();
+    return wrapMinutes(d.getUTCHours() * 60 + d.getUTCMinutes() + off);
   };
   return { rise: toLocalMinutes(jTransit - w / 360), set: toLocalMinutes(jTransit + w / 360) };
 }
@@ -184,11 +185,33 @@ function previewMinutes() {
   return m ? Math.min(1439, parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null;
 }
 
+// Zeitzone des gewählten Ortes: Minuten Abstand zu UTC zu einem Zeitpunkt
+function placeOffsetMin(instant) {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem('rm_place') || 'null'); } catch {}
+  if (!p || !isFinite(p.lat) || !isFinite(p.lon)) return -instant.getTimezoneOffset();
+  if (p.tz) {
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: p.tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(instant).map(x => [x.type, +x.value]));
+      return Math.round((Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
+    } catch {}
+  }
+  return Math.round(p.lon / 15) * 60;   // grobe Schätzung, wenn die Zeitzone unbekannt ist
+}
+// „Wanduhr“ des Ortes: ein Date, dessen lokale Felder die Ortszeit zeigen
 function nowForSky() {
-  const now = new Date();
+  const real = new Date();
+  const off = placeOffsetMin(real);
+  const sh = new Date(real.getTime() + off * 60000);
+  const now = new Date(sh.getUTCFullYear(), sh.getUTCMonth(), sh.getUTCDate(), sh.getUTCHours(), sh.getUTCMinutes(), sh.getUTCSeconds());
   const p = previewMinutes();
   if (p !== null) now.setHours(Math.floor(p / 60), p % 60, 0, 0);
   return now;
+}
+// echter Zeitpunkt zu einer Ortszeit-Wanduhr
+function instantOfSky(wall) {
+  const guess = new Date(wall.getTime() - wall.getTimezoneOffset() * 60000 - placeOffsetMin(wall) * 60000);
+  return guess;
 }
 
 function skyStateAt(date) {
@@ -364,6 +387,7 @@ async function refreshWeather(force = false) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
+    if (data.timezone && place.tz !== data.timezone) { try { localStorage.setItem(LS_PLACE, JSON.stringify({ ...place, tz: data.timezone })); } catch {} applySky(); placeSun(); placeMoon(); }
     const w = { code: data.current.weather_code, cloud: data.current.cloud_cover, temp: data.current.temperature_2m };
     localStorage.setItem(LS_WEATHER, JSON.stringify({ key: `${place.lat},${place.lon}`, t: Date.now(), w }));
     weatherNow = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp) };
@@ -391,40 +415,28 @@ function isBetweenWrapped(value, start, end) {
 
 function placeSun() {
   const hero = document.querySelector('.hero');
-  const svg = $('sunPath');
   const sun = $('sun');
-  if (!hero || !svg || !sun) return;
+  if (!hero || !sun) return;
   const now = nowForSky();
   const { rise, set } = sunTimes(now);
   $('sunriseLabel').textContent = minutesToClock(rise);
   $('sunsetLabel').textContent = minutesToClock(set);
 
-  const W = hero.clientWidth, H = hero.clientHeight;
-  if (!W || !H) return;
-  const pad = 22, horizon = H - 46, apex = 54;
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const pts = [];
-  for (let i = 0; i <= 40; i++) {
-    const f = i / 40;
-    pts.push(`${(pad + f * (W - 2 * pad)).toFixed(1)},${(horizon - (horizon - apex) * Math.sin(Math.PI * f)).toFixed(1)}`);
-  }
-  $('sunArc').setAttribute('points', pts.join(' '));
-
+  const arc = skyArc(hero);
+  if (!arc.W || !arc.H) return;
   const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   const f = (minutes - rise) / (set - rise);
   const up = f > -0.03 && f < 1.03;
   sun.classList.toggle('hidden', !up);
   if (!up) return;
-  const ff = Math.min(1, Math.max(0, f));
-  const x = pad + ff * (W - 2 * pad);
-  const alt = Math.sin(Math.PI * ff);                 // 0 am Horizont, 1 mittags
-  const y = horizon - (horizon - apex) * alt + (f < 0 || f > 1 ? 10 : 0);
-  sun.style.left = `${x}px`;
-  sun.style.top = `${y}px`;
+  const p = arcPoint(arc, f);
+  const alt = p.alt;                                   // 0 am Horizont, 1 mittags
+  sun.style.left = `${p.x}px`;
+  sun.style.top = `${p.y + (f < 0 || f > 1 ? 10 : 0)}px`;
   // tief = warm und größer, hoch = weißgelb
   sun.style.setProperty('--sun-core', mixHex('#FFB866', '#FFFBEA', Math.min(1, alt * 1.6)));
   sun.style.setProperty('--sun-halo', mixHex('#FF9A4D', '#FFF1C2', Math.min(1, alt * 1.4)));
-  sun.style.setProperty('--sun-size', `${Math.round(150 - alt * 30)}px`);
+  sun.style.setProperty('--sun-size', `${Math.round(200 - alt * 36)}px`);
   const fx = currentFx();
   sun.style.setProperty('--sun-veil', (1 - Math.min(.7, fx.clouds * .5 + fx.fog * .4 + fx.rain * .2 + fx.snow * .2)).toFixed(2));
 }
@@ -452,91 +464,251 @@ function moonIllumination(age) {
   return (1 - Math.cos(2 * Math.PI * (age / SYNODIC))) / 2;
 }
 
-function moonTimes(date) {
-  const age = moonAge(date);
-  const phase = age / SYNODIC;
-  const sun = sunTimes(date);
-  const rise = wrapMinutes(sun.rise + phase * 24 * 60);
-  const set = wrapMinutes(rise + 12 * 60 + 25);
-  return { rise, set, age, phase, illum: moonIllumination(age) };
-}
+/* =====================================================================
+   Mond: echte Position, Auf-/Untergang, Phase und Neigung der Sichel
+   (Bahnelemente nach P. Schlyter mit den wichtigsten Störungstermen,
+   Genauigkeit etwa 1–2 Bogenminuten – mehr als genug für die Anzeige)
+   ===================================================================== */
+const MOON_RAD = Math.PI / 180;
+function moonNorm(a) { return ((a % 360) + 360) % 360; }
 
-function virtualSunPoint(date, W, H, pad, horizon, apex) {
-  const { rise, set } = sunTimes(date);
-  const minutes = date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
-  const center = W / 2;
-  const radius = (W - 2 * pad) / 2;
-  const height = horizon - apex;
-  let theta;
-  if (isBetweenWrapped(minutes, rise, set)) {
-    const dayLen = set >= rise ? set - rise : 1440 - rise + set;
-    const elapsed = set >= rise ? minutes - rise : (minutes >= rise ? minutes - rise : 1440 - rise + minutes);
-    theta = Math.PI * Math.max(0, Math.min(1, elapsed / Math.max(1, dayLen)));
-  } else {
-    const nightLen = rise <= set ? 1440 - set + rise : rise - set;
-    const elapsed = minutes >= set ? minutes - set : 1440 - set + minutes;
-    theta = Math.PI + Math.PI * Math.max(0, Math.min(1, elapsed / Math.max(1, nightLen)));
+// Mond nach Meeus (Kap. 47, wichtigste Terme) – Genauigkeit wenige Bogensekunden
+const MOON_LR = [ // D, M, M', F, Σl (1e-6°), Σr (1e-3 km)
+  [0,0,1,0,6288774,-20905355],[2,0,-1,0,1274027,-3699111],[2,0,0,0,658314,-2955968],[0,0,2,0,213618,-569925],
+  [0,1,0,0,-185116,48888],[0,0,0,2,-114332,-3149],[2,0,-2,0,58793,246158],[2,-1,-1,0,57066,-152138],
+  [2,0,1,0,53322,-170733],[2,-1,0,0,45758,-204586],[0,1,-1,0,-40923,-129620],[1,0,0,0,-34720,108743],
+  [0,1,1,0,-30383,104755],[2,0,0,-2,15327,10321],[0,0,1,2,-12528,0],[0,0,1,-2,10980,79661],
+  [4,0,-1,0,10675,-34782],[0,0,3,0,10034,-23210],[4,0,-2,0,8548,-21636],[2,1,-1,0,-7888,24208],
+  [2,1,0,0,-6766,30824],[1,0,-1,0,-5163,-8379],[1,1,0,0,4987,-16675],[2,-1,1,0,4036,-12831],
+  [2,0,2,0,3994,-10445],[4,0,0,0,3861,-11650],[2,0,-3,0,3665,14403],[0,1,-2,0,-2689,-7003],
+  [2,0,-1,2,-2602,0],[2,-1,-2,0,2390,10056],[1,0,1,0,-2348,6322],[2,-2,0,0,2236,-9884],
+  [0,1,2,0,-2120,5751],[0,2,0,0,-2069,0]
+];
+const MOON_B = [ // D, M, M', F, Σb (1e-6°)
+  [0,0,0,1,5128122],[0,0,1,1,280602],[0,0,1,-1,277693],[2,0,0,-1,173237],[2,0,-1,1,55413],[2,0,-1,-1,46271],
+  [2,0,0,1,32573],[0,0,2,1,17198],[2,0,1,-1,9266],[0,0,2,-1,8822],[2,-1,0,-1,8216],[2,0,-2,-1,4324],
+  [2,0,1,1,4200],[2,1,0,-1,-3359],[2,-1,-1,1,2463],[2,-1,0,1,2211],[2,-1,-1,-1,2065],[0,1,-1,-1,-1870],
+  [4,0,-1,-1,1828],[0,1,0,1,-1794],[0,0,0,3,-1749],[0,1,-1,1,-1565],[1,0,0,1,-1491],[0,1,1,1,-1475],
+  [0,1,1,-1,-1410],[0,1,0,-1,-1344],[1,0,0,-1,-1335],[0,0,3,1,1107],[4,0,0,-1,1021],[4,0,-1,1,833]
+];
+
+function moonEcliptic(jd) {
+  const T = (jd - 2451545.0) / 36525;
+  const Lp = moonNorm(218.3164477 + 481267.88123421 * T);
+  const D = moonNorm(297.8501921 + 445267.1114034 * T);
+  const M = moonNorm(357.5291092 + 35999.0502909 * T);
+  const Mp = moonNorm(134.9633964 + 477198.8675055 * T);
+  const F = moonNorm(93.2720950 + 483202.0175233 * T);
+  const A1 = 119.75 + 131.849 * T, A2 = 53.09 + 479264.290 * T, A3 = 313.45 + 481266.484 * T;
+  const E = 1 - 0.002516 * T;
+  const s = x => Math.sin(x * MOON_RAD), c = x => Math.cos(x * MOON_RAD);
+  let sl = 0, sr = 0, sb = 0;
+  for (const [d, m, mp, f, l, r] of MOON_LR) {
+    const arg = d * D + m * M + mp * Mp + f * F;
+    const e = Math.abs(m) === 1 ? E : Math.abs(m) === 2 ? E * E : 1;
+    sl += l * e * s(arg); sr += r * e * c(arg);
   }
+  for (const [d, m, mp, f, b] of MOON_B) {
+    const e = Math.abs(m) === 1 ? E : Math.abs(m) === 2 ? E * E : 1;
+    sb += b * e * s(d * D + m * M + mp * Mp + f * F);
+  }
+  sl += 3958 * s(A1) + 1962 * s(Lp - F) + 318 * s(A2);
+  sb += -2235 * s(Lp) + 382 * s(A3) + 175 * s(A1 - F) + 175 * s(A1 + F) + 127 * s(Lp - Mp) - 115 * s(Lp + Mp);
+  // Sonne (Meeus Kap. 25, vereinfacht)
+  const L0 = 280.46646 + 36000.76983 * T;
+  const Ms = 357.52911 + 35999.05029 * T;
+  const C = (1.914602 - 0.004817 * T) * s(Ms) + 0.019993 * s(2 * Ms) + 0.000289 * s(3 * Ms);
+  const ecc = 0.016708634;
+  const sunR = 1.000001018 * (1 - ecc * ecc) / (1 + ecc * c(Ms + C));
   return {
-    x: center - radius * Math.cos(theta),
-    y: horizon - height * Math.sin(theta)
+    lon: moonNorm(Lp + sl / 1e6), lat: sb / 1e6, distKm: 385000.56 + sr / 1000,
+    sunLon: moonNorm(L0 + C), sunR, T
   };
 }
 
+function eclToEq(lon, lat, T) {
+  const ecl = (23.439291 - 0.0130042 * T) * MOON_RAD;
+  const x = Math.cos(lon) * Math.cos(lat);
+  const y = Math.sin(lon) * Math.cos(lat);
+  const z = Math.sin(lat);
+  const ye = y * Math.cos(ecl) - z * Math.sin(ecl);
+  const ze = y * Math.sin(ecl) + z * Math.cos(ecl);
+  return { ra: Math.atan2(ye, x), dec: Math.atan2(ze, Math.hypot(x, ye)) };
+}
+
+/* Alles, was die App über den Mond zu einem Zeitpunkt braucht */
+function moonState(date, lat = GEO.lat, lon = GEO.lon) {
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  const m = moonEcliptic(jd);
+  const mq = eclToEq(m.lon * MOON_RAD, m.lat * MOON_RAD, m.T);
+  const sq = eclToEq(m.sunLon * MOON_RAD, 0, m.T);
+  const gmst = 280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * m.T * m.T;
+  const lst = moonNorm(gmst + lon) * MOON_RAD;
+  const phi = lat * MOON_RAD;
+  const H = lst - mq.ra;
+  const sinAlt = Math.sin(phi) * Math.sin(mq.dec) + Math.cos(phi) * Math.cos(mq.dec) * Math.cos(H);
+  const altGeo = Math.asin(sinAlt);
+  const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(mq.dec) * Math.cos(phi)) / MOON_RAD + 180;
+  const parallax = Math.asin(6378.14 / m.distKm);                          // Horizontalparallaxe
+  const altTopo = altGeo - parallax * Math.cos(altGeo);
+  // Parallaktischer Winkel: wie weit „Norden am Mond“ gegen „oben am Himmel“ gedreht ist
+  const q = Math.atan2(Math.sin(H), Math.tan(phi) * Math.cos(mq.dec) - Math.sin(mq.dec) * Math.cos(H));
+  // Positionswinkel des hellen Randes (zur Sonne hin), von Norden über Osten
+  const dRa = sq.ra - mq.ra;
+  const chi = Math.atan2(Math.cos(sq.dec) * Math.sin(dRa), Math.sin(sq.dec) * Math.cos(mq.dec) - Math.cos(sq.dec) * Math.sin(mq.dec) * Math.cos(dRa));
+  // Beleuchteter Anteil
+  const elong = Math.acos(Math.sin(sq.dec) * Math.sin(mq.dec) + Math.cos(sq.dec) * Math.cos(mq.dec) * Math.cos(dRa));
+  const distKm = m.distKm;
+  const sunKm = m.sunR * 149597870.7;
+  const phaseAngle = Math.atan2(sunKm * Math.sin(elong), distKm - sunKm * Math.cos(elong));
+  const illum = (1 + Math.cos(phaseAngle)) / 2;
+  const waxing = moonNorm(m.lon - m.sunLon) < 180;
+  const age = moonNorm(m.lon - m.sunLon) / 360 * 29.530589;    // „Alter“ in Tagen seit Neumond
+  return {
+    alt: altTopo / MOON_RAD,
+    altGeo: altGeo / MOON_RAD,
+    az: moonNorm(az),
+    parallax: parallax / MOON_RAD,
+    illum, waxing, age, distKm,
+    // Drehung auf dem Bildschirm (Grad, gegen den Uhrzeigersinn ab „oben“):
+    limbAngle: (chi - q) / MOON_RAD,   // Richtung des hellen Randes
+    northAngle: -q / MOON_RAD          // Richtung des Mond-Nordpols (für die Textur)
+  };
+}
+
+/* Auf- und Untergänge im Fenster [from, to] (10-Minuten-Raster, dazwischen linear) */
+function moonEvents(from, to, lat = GEO.lat, lon = GEO.lon) {
+  const step = 10 * 60000;
+  const h = t => { const s = moonState(new Date(t), lat, lon); return s.altGeo - (0.7275 * s.parallax - 0.5667); };
+  const out = [];
+  let t0 = from.getTime(), h0 = h(t0);
+  for (let t1 = t0 + step; t1 <= to.getTime() + step; t1 += step) {
+    const h1 = h(t1);
+    if ((h0 < 0) !== (h1 < 0)) {
+      const t = t0 + (t1 - t0) * (h0 / (h0 - h1));
+      out.push({ type: h0 < 0 ? 'rise' : 'set', time: new Date(t) });
+    }
+    t0 = t1; h0 = h1;
+  }
+  return out;
+}
+
+/* Der aktuelle bzw. nächste „Bogen“ des Mondes: Aufgang → Untergang */
+function moonPass(now, lat = GEO.lat, lon = GEO.lon) {
+  const ev = moonEvents(new Date(now.getTime() - 30 * 3600000), new Date(now.getTime() + 36 * 3600000), lat, lon);
+  const t = now.getTime();
+  let rise = null, set = null;
+  const lastRise = [...ev].reverse().find(e => e.type === 'rise' && e.time.getTime() <= t);
+  const lastSet = [...ev].reverse().find(e => e.type === 'set' && e.time.getTime() <= t);
+  const up = lastRise && (!lastSet || lastRise.time > lastSet.time);
+  if (up) {
+    rise = lastRise.time;
+    set = ev.find(e => e.type === 'set' && e.time.getTime() > t)?.time || null;
+  } else {
+    rise = ev.find(e => e.type === 'rise' && e.time.getTime() > t)?.time || null;
+    set = rise ? (ev.find(e => e.type === 'set' && e.time > rise)?.time || null) : null;
+  }
+  return { up: Boolean(up), rise, set };
+}
+
+/* Gemeinsamer Himmelsbogen für Sonne und Mond (Linie selbst bleibt unsichtbar) */
+function skyArc(hero) {
+  const W = hero.clientWidth, H = hero.clientHeight;
+  const rows = hero.querySelector('.sky-rows');
+  const horizon = rows ? rows.offsetTop - 14 : H - 46;
+  return { W, H, pad: 26, horizon, apex: 46 };
+}
+function arcPoint(arc, f) {
+  const ff = Math.min(1, Math.max(0, f));
+  const alt = Math.sin(Math.PI * ff);
+  return { x: arc.pad + ff * (arc.W - 2 * arc.pad), y: arc.horizon - (arc.horizon - arc.apex) * alt, alt };
+}
+
+/* Mondscheibe: echte Phase, echte Neigung der Sichel, dazu ein Leuchten wie bei der Sonne */
+let moonSeq = 0;
+function moonDiscSvg(st, variant) {
+  const id = 'md' + (++moonSeq);
+  const R = 50, C = 100, k = st.illum;
+  const rx = Math.max(0.8, Math.abs(1 - 2 * k) * R).toFixed(2);
+  const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
+  let d;
+  if (k < 0.01) d = '';
+  else if (k > 0.99) d = `M${top} A${R} ${R} 0 1 1 ${bottom} A${R} ${R} 0 1 1 ${top}Z`;
+  else d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
+  // heller Rand zeigt im lokalen Bild nach rechts → auf echte Richtung drehen
+  const rot = -(st.limbAngle + 90);
+  const tex = -st.northAngle;
+  const glowOp = (0.35 + 0.65 * k).toFixed(2);
+  const surface = variant === 'b'
+    ? `<circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}p)"/><g transform="rotate(${tex.toFixed(1)} ${C} ${C})" opacity=".26" style="mix-blend-mode:multiply"><image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/></g>`
+    : `<g transform="rotate(${tex.toFixed(1)} ${C} ${C})"><image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/></g><circle cx="${C}" cy="${C}" r="${R}" fill="url(#${id}t)" style="mix-blend-mode:multiply"/>`;
+  return `<svg viewBox="0 0 200 200" width="100%" height="100%">
+    <defs>
+      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="20"/></filter>
+      <filter id="${id}g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter>
+      <filter id="${id}s"><feGaussianBlur stdDeviation="1.3"/></filter>
+      <radialGradient id="${id}p" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#FBF7EC"/><stop offset=".92" stop-color="#EAE4D6"/><stop offset="1" stop-color="#DCD6CA"/>
+      </radialGradient>
+      <radialGradient id="${id}t" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#FFFDF6"/><stop offset=".8" stop-color="#F6F0E2"/><stop offset="1" stop-color="#D9D2C4"/>
+      </radialGradient>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}s)" transform="rotate(${rot.toFixed(1)} ${C} ${C})"/></mask>
+      <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
+    </defs>
+    ${d ? `<g transform="rotate(${rot.toFixed(1)} ${C} ${C})" opacity="${glowOp}">
+      <circle cx="${C}" cy="${C}" r="${R * 1.05}" fill="var(--moon-halo, #F4F1FF)" filter="url(#${id}h)" opacity=".55"/>
+      <path d="${d}" fill="#FFFFFF" filter="url(#${id}g)" opacity=".8"/>
+    </g>` : ''}
+    <g clip-path="url(#${id}c)">
+      <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-shadow, transparent)"/>
+      <g style="opacity:var(--moon-earthshine, .16)">${surface}</g>
+      ${d ? `<g mask="url(#${id}m)">${surface}<circle cx="${C}" cy="${C}" r="${R}" fill="#FFFFFF" style="opacity:var(--moon-wash, 0)"/></g>` : ''}
+    </g>
+  </svg>`;
+}
+
+const MOON_STYLE = 'a';
+let moonPassCache = null;
 function placeMoon() {
   const hero = document.querySelector('.hero');
-  const svg = $('moonPath');
   const moonOrb = $('moonOrb');
-  if (!hero || !svg || !moonOrb) return;
-  const now = nowForSky();
-  const info = moonTimes(now);
-  if (els.moonriseLabel) els.moonriseLabel.textContent = minutesToClock(info.rise);
-  if (els.moonsetLabel) els.moonsetLabel.textContent = minutesToClock(info.set);
-  if (els.moonPhaseLabel) {
-    els.moonPhaseLabel.textContent = `${moonPhaseName(info.age)} · ${Math.round(info.illum * 100)} %`;
+  if (!hero || !moonOrb) return;
+  const wall = nowForSky();
+  const now = instantOfSky(wall);
+  const t = now.getTime();
+  if (!moonPassCache || moonPassCache.geo !== GEO.lat + ',' + GEO.lon || t < moonPassCache.from || t > moonPassCache.to) {
+    const pass = moonPass(now);
+    const until = pass.up ? pass.set : pass.rise;
+    moonPassCache = { pass, geo: GEO.lat + ',' + GEO.lon, from: t - 60000, to: until ? until.getTime() : t + 3600000 };
   }
+  const { pass } = moonPassCache;
+  const st = moonState(now);
+  const clock = d => { if (!d) return '--:--'; const m = wrapMinutes(Math.round(d.getTime() / 60000) + placeOffsetMin(d)); return minutesToClock(m); };
+  if (els.moonriseLabel) els.moonriseLabel.textContent = clock(pass.rise);
+  if (els.moonsetLabel) els.moonsetLabel.textContent = clock(pass.set);
+  if (els.moonPhaseLabel) els.moonPhaseLabel.textContent = `${moonPhaseName(st.age)} · ${Math.round(st.illum * 100)} %`;
+  window.__moonDebug = { alt: st.alt, az: st.az, illum: st.illum, limb: st.limbAngle, rise: pass.rise && pass.rise.toString(), set: pass.set && pass.set.toString(), up: pass.up };
 
-  const W = hero.clientWidth, H = hero.clientHeight;
-  if (!W || !H) return;
-  // Die Bahn bleibt unsichtbar. Der Mond sitzt bewusst höher über den Zeitzeilen,
-  // wie in der früheren Reci-mi-Ansicht.
-  const pad = 30, horizon = H - 118, apex = 108;
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const pts = [];
-  for (let i = 0; i <= 40; i++) {
-    const f = i / 40;
-    pts.push(`${(pad + f * (W - 2 * pad)).toFixed(1)},${(horizon - (horizon - apex) * Math.sin(Math.PI * f)).toFixed(1)}`);
-  }
-  $('moonArc').setAttribute('points', pts.join(' '));
-
-  const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  const cycle = info.set >= info.rise ? (info.set - info.rise) : (1440 - info.rise + info.set);
-  const progressed = info.set >= info.rise ? (minutes - info.rise) : (minutes >= info.rise ? minutes - info.rise : 1440 - info.rise + minutes);
-  const f = progressed / cycle;
-  const up = isBetweenWrapped(minutes, info.rise, info.set);
+  const up = pass.up && pass.rise && pass.set;
   moonOrb.classList.toggle('hidden', !up);
   if (!up) return;
-
-  const ff = Math.min(1, Math.max(0, f));
-  const x = pad + ff * (W - 2 * pad);
-  const alt = Math.sin(Math.PI * ff);
-  const y = horizon - (horizon - apex) * alt;
-
-  // Klein wie in der früheren Ansicht: am Horizont minimal größer, oben etwas kleiner.
-  moonOrb.style.left = `${x}px`;
-  moonOrb.style.top = `${y}px`;
-  moonOrb.style.setProperty('--moon-size', `${Math.round(52 - alt * 8)}px`);
-
-  // Die helle Seite zeigt zur Sonne. Dadurch kippt der Schatten natürlich mit,
-  // statt immer starr links/rechts zu stehen.
-  const sun = virtualSunPoint(now, W, H, pad, horizon, apex);
-  const sunAngle = Math.atan2(sun.y - y, sun.x - x) * 180 / Math.PI;
-  const baseBrightAngle = info.phase < 0.5 ? 0 : 180;
-  let lightRotation = sunAngle - baseBrightAngle;
-  while (lightRotation > 180) lightRotation -= 360;
-  while (lightRotation < -180) lightRotation += 360;
-
-  moonOrb.innerHTML = homeMoonSvgV29(now, lightRotation);
+  const arc = skyArc(hero);
+  if (!arc.W || !arc.H) return;
+  const f = (t - pass.rise.getTime()) / (pass.set.getTime() - pass.rise.getTime());
+  const p = arcPoint(arc, f);
+  moonOrb.style.left = `${p.x}px`;
+  moonOrb.style.top = `${p.y}px`;
+  moonOrb.style.setProperty('--moon-size', `${Math.round(104 - p.alt * 8)}px`);
+  const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
+  moonOrb.style.setProperty('--moon-earthshine', night ? '.1' : '.04');
+  moonOrb.style.setProperty('--moon-wash', night ? '0' : '.28');
+  moonOrb.style.setProperty('--moon-shadow', night ? 'color-mix(in srgb, var(--sky-mid) 88%, black)' : 'transparent');
+  moonOrb.style.setProperty('--moon-halo', night ? '#F3EAD3' : '#FFFFFF');
+  const fx = currentFx();
+  moonOrb.style.setProperty('--moon-veil', (1 - Math.min(.7, fx.clouds * .5 + fx.fog * .4 + fx.rain * .2 + fx.snow * .2)).toFixed(2));
+  const key = `${MOON_STYLE}|${st.illum.toFixed(3)}|${Math.round(st.limbAngle)}|${Math.round(st.northAngle)}`;
+  if (moonOrb.dataset.key !== key) { moonOrb.dataset.key = key; moonOrb.innerHTML = moonDiscSvg(st, MOON_STYLE); }
 }
 
 function applyWeatherFx() {
@@ -687,7 +859,7 @@ async function searchPlace() {
     }).join('');
     $('placeResults').querySelectorAll('.place-item').forEach(btn => btn.addEventListener('click', () => {
       const r = list[Number(btn.dataset.i)];
-      choosePlace({ name: r.name, lat: r.latitude, lon: r.longitude });
+      choosePlace({ name: r.name, lat: r.latitude, lon: r.longitude, tz: r.timezone });
     }));
   } catch {
     $('placeHint').textContent = 'Die Suche braucht Internet. Versuch es gleich nochmal.';
@@ -805,45 +977,6 @@ function moonSvg(date) {
     ${d ? `<path d="${d}" fill="url(#${id}lit)"/>` : ''}
     <g clip-path="url(#${id}c)" ${d ? `mask="url(#${id}m)"` : ''}>${maria}</g>
     <circle cx="${C}" cy="${C}" r="${R - 1.5}" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/>
-  </svg>`;
-}
-
-// Startseiten-Mond: ursprüngliche plastische Reci-mi-Optik von vor den heutigen Änderungen.
-// Bewusst getrennt vom Sperrseiten-Mond, damit beide künftig unabhängig angepasst werden können.
-function homeMoonSvgV29(date, lightRotation = 0) {
-  const age = moonAge(date);
-  const f = age / SYNODIC;
-  const c = Math.cos(2 * Math.PI * f);
-  const k = (1 - c) / 2;
-  const R = 96, C = 100;
-  const rx = Math.abs(c) * R;
-  const waxing = f < 0.5;
-  const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
-  let d;
-  if (k < 0.015) d = '';
-  else if (k > 0.985) d = `M${top} A${R} ${R} 0 1 1 ${bottom} A${R} ${R} 0 1 1 ${top}Z`;
-  else if (waxing) d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
-  else d = `M${top} A${R} ${R} 0 0 0 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 1 : 0} ${top}Z`;
-  const id = `hm${++moonUid}`;
-  const glow = (0.35 + 0.65 * k).toFixed(2);
-
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
-    <defs>
-      <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
-      <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
-      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
-      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})"/></mask>
-      <g id="${id}sf">
-        <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
-        <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
-        <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
-      </g>
-    </defs>
-    ${d ? `<path class="moon-glow wide" d="${d}" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
-    <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
-    <use href="#${id}sf" style="opacity:var(--earthshine)"/>
-    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
   </svg>`;
 }
 
@@ -977,82 +1110,59 @@ function fitGreeting() {
   while (el.scrollWidth > el.clientWidth && size > 17) { size -= 0.5; el.style.fontSize = size + 'px'; }
 }
 
-// Klassischer Reci-mi-Mond nur für die Sperrseite. Das ist bewusst die Optik
-// von vor V2.8; die neue Mondgrafik auf der Himmelsbahn bleibt unverändert.
-function lockMoonSvgClassic(date) {
-  const age = moonAge(date);
-  const f = age / SYNODIC;
-  const c = Math.cos(2 * Math.PI * f);
-  const k = (1 - c) / 2;
-  const R = 96, C = 100;
-  const rx = Math.abs(c) * R;
-  const waxing = f < 0.5;
-  const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
-  let d;
-  if (k < 0.015) d = '';
-  else if (k > 0.985) d = `M${top} A${R} ${R} 0 1 1 ${bottom} A${R} ${R} 0 1 1 ${top}Z`;
-  else if (waxing) d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
-  else d = `M${top} A${R} ${R} 0 0 0 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 1 : 0} ${top}Z`;
-  const id = `lm${++moonUid}`;
-  const glow = (0.35 + 0.65 * k).toFixed(2);
-
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
-    <defs>
-      <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
-      <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
-      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
-      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)" transform="rotate(${lightRotation.toFixed(1)} ${C} ${C})"/></mask>
-      <g id="${id}sf">
-        <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
-        <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
-        <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
-      </g>
-    </defs>
-    ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
-    <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
-    <use href="#${id}sf" style="opacity:var(--earthshine)"/>
-    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
-  </svg>`;
-}
-
 function renderDailyBits(date = nowForSky(), phase = document.documentElement.dataset.phase || 'nacht') {
-  const age = moonAge(date);
-  const illumination = moonIllumination(age);
-  const phaseName = moonPhaseName(age);
-  const lockMoon = lockMoonSvgClassic(date);
-  const moon = moonSvg(date);
-
-  // Der Mond auf der Sperrseite bleibt in der ursprünglichen Reci-mi-Optik und zeigt trotzdem die echte aktuelle Phase.
-  // Zunehmend = rechts hell, abnehmend = links hell.
-  els.lockMoon.innerHTML = lockMoon;
-  els.lockMoon.dataset.moonPhase = phaseName;
-  els.moonBtn.setAttribute('aria-label', `Mit Fingerabdruck entsperren. ${phaseName}, ${Math.round(illumination * 100)} Prozent beleuchtet.`);
-
-  // Für die ausgeblendete Startseiten-Mondgrafik bleibt die bisherige Struktur erhalten.
-  els.heroMoon.innerHTML = moonSvg(date);
+  const moon = moonSvg(new Date());
+  els.lockMoon.innerHTML = moon;
+  els.heroMoon.innerHTML = moonSvg(new Date());
   els.greeting.textContent = `${GREETING[phase] || 'Hallo'}, ${userName()}`;
   requestAnimationFrame(fitGreeting);
-  els.dailyQuote.textContent = quoteOfDay(date);
-  const line = moonLineText(date);
+  els.dailyQuote.textContent = quoteOfDay(new Date());
+  const line = moonLineText(new Date());
   els.moonLine.textContent = line;
-  els.lockPhase.textContent = `${PHASE_LABEL[phase] || ''}
-${line}`;
+  els.lockPhase.textContent = `${PHASE_LABEL[phase] || ''}\n${line}`;
 }
 
 function placeStars() {
   document.querySelectorAll('.stars').forEach(box => {
     if (box.childElementCount) return;
-    let seed = box.closest('.hero') ? 7 : 3;
+    const hero = Boolean(box.closest('.hero'));
+    let seed = hero ? 7 : 3;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    const count = box.closest('.hero') ? 18 : 34;
+    const count = hero ? 26 : 40;
     let html = '';
     for (let i = 0; i < count; i++) {
-      const size = rnd() < 0.15 ? 3 : 2;
-      html += `<i style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 92).toFixed(1)}%;opacity:${(0.2 + rnd() * 0.6).toFixed(2)};width:${size}px;height:${size}px"></i>`;
+      const big = rnd() < 0.2;
+      const size = big ? 3 : 2;
+      const dur = (2.4 + rnd() * 4.2).toFixed(1);
+      const delay = (-rnd() * 7).toFixed(1);
+      html += `<i class="${big ? 'big' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 92).toFixed(1)}%;--o:${(0.35 + rnd() * 0.55).toFixed(2)};width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
     }
     box.innerHTML = html;
   });
+}
+
+/* Sternschnuppen: ab und zu eine, nur wenn der Himmel dunkel genug ist */
+function shootingStar() {
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const boxes = [...document.querySelectorAll('.stars')].filter(b => b.offsetParent !== null);
+  const visible = boxes[0];
+  const dark = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stars')) > 0.6;
+  if (visible && dark && !reduce && !document.hidden) {
+    const w = visible.clientWidth, h = visible.clientHeight;
+    const star = document.createElement('b');
+    star.className = 'shoot';
+    const fromRight = Math.random() < 0.5;
+    const len = 130 + Math.random() * 90;
+    const dx = (fromRight ? -1 : 1) * len * 1.7, dy = len * 0.6;
+    star.style.left = `${(fromRight ? 0.55 + Math.random() * 0.4 : 0.05 + Math.random() * 0.4) * w}px`;
+    star.style.top = `${(0.03 + Math.random() * 0.3) * h}px`;
+    star.style.setProperty('--dx', `${dx}px`);
+    star.style.setProperty('--dy', `${dy}px`);
+    star.style.setProperty('--rot', `${Math.atan2(dy, dx) * 180 / Math.PI}deg`);
+    visible.appendChild(star);
+    setTimeout(() => star.remove(), 1700);
+  }
+  setTimeout(shootingStar, 9000 + Math.random() * 14000);
 }
 
 /* =====================================================================
@@ -3796,6 +3906,7 @@ function wireEvents() {
 
 async function boot() {
   placeStars();
+  setTimeout(shootingStar, 4000);
   applySky();
   initSkyExtras();
   setInterval(applySky, 60000);

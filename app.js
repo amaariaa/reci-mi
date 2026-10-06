@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.1.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -329,6 +329,7 @@ function applyPlaceGeo() {
   const p = getPlace();
   GEO.lat = p ? p.lat : 49.5;
   GEO.lon = p ? p.lon : 10.5;
+  if (els.lockMoon) renderLockMoon(nowForSky());
 }
 
 // WMO-Wettercodes → was wir zeigen
@@ -1110,9 +1111,24 @@ function fitGreeting() {
   while (el.scrollWidth > el.clientWidth && size > 17) { size -= 0.5; el.style.fontSize = size + 'px'; }
 }
 
+function renderLockMoon(date = nowForSky()) {
+  if (!els.lockMoon) return;
+  const st = moonState(instantOfSky(date));
+  const phase = document.documentElement.dataset.phase || 'nacht';
+  const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(phase);
+
+  // Exakt dieselbe Mondscheibe wie auf der Startseite, nur größer im Anmeldebereich.
+  els.lockMoon.style.setProperty('--moon-earthshine', night ? '.1' : '.04');
+  els.lockMoon.style.setProperty('--moon-wash', night ? '0' : '.28');
+  els.lockMoon.style.setProperty('--moon-shadow', night ? 'color-mix(in srgb, var(--sky-mid) 88%, black)' : 'transparent');
+  els.lockMoon.style.setProperty('--moon-halo', night ? '#F3EAD3' : '#FFFFFF');
+  els.lockMoon.style.transform = 'scale(1.45)';
+  els.lockMoon.style.transformOrigin = 'center';
+  els.lockMoon.innerHTML = moonDiscSvg(st, MOON_STYLE);
+}
+
 function renderDailyBits(date = nowForSky(), phase = document.documentElement.dataset.phase || 'nacht') {
-  const moon = moonSvg(new Date());
-  els.lockMoon.innerHTML = moon;
+  renderLockMoon(date);
   els.heroMoon.innerHTML = moonSvg(new Date());
   els.greeting.textContent = `${GREETING[phase] || 'Hallo'}, ${userName()}`;
   requestAnimationFrame(fitGreeting);
@@ -1573,6 +1589,7 @@ function showScreen(screen) {
 }
 
 function configureLockScreen() {
+  renderLockMoon(nowForSky());
   const firstRun = !hasVaultConfig();
   const bio = !firstRun && hasBiometricConfig();
   els.pinInput.value = '';

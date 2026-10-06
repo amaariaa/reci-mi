@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#141A36" />
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
-  <link rel="manifest" href="manifest.webmanifest?v=3.1" />
+  <link rel="manifest" href="manifest.webmanifest?v=2.9.1" />
   <link rel="icon" href="mond-192.png" />
   <link rel="apple-touch-icon" href="mond-192.png" />
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=3.1" />
+  <link rel="stylesheet" href="styles.css?v=2.9.1" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -24,7 +24,7 @@
       <div class="weather-layer" aria-hidden="true"><div class="clouds"></div><div class="fog-layer"></div><canvas class="precip"></canvas><div class="frost"></div><div class="flash"></div></div>
       <div class="lock-inner">
         <button id="moonBtn" class="moon-btn" type="button" aria-label="Mit Fingerabdruck entsperren">
-          <span id="lockMoon" class="moon-art"></span>
+          <span id="lockMoon" class="moon-art lock-moon-live"></span>
           <span id="fpBadge" class="fp-badge hidden" aria-hidden="true">
             <svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 20c1.1-2.1 1.8-4.5 1.8-7a2 2 0 0 1 4 0c0 2.4-.5 4.6-1.3 6.6"/><path d="M5.8 18.7C7.1 16.6 8 14.3 8 12a4 4 0 0 1 8 0c0 2.2-.3 4.3-.9 6.2"/><path d="M4 15.5V12a8 8 0 0 1 16 0c0 1.7-.1 3.3-.4 4.8"/><path d="M6 8.2A7 7 0 0 1 18.6 9"/></svg>
           </span>
@@ -49,8 +49,10 @@
     <section id="homeScreen" class="screen home-screen">
       <header class="hero sky">
         <div class="stars" aria-hidden="true"></div>
+        <svg id="sunPath" class="sun-path" aria-hidden="true"><polyline id="sunArc" points=""/></svg>
+        <svg id="moonPath" class="moon-path" aria-hidden="true"><polyline id="moonArc" points=""/></svg>
         <div id="sun" class="sun hidden" aria-hidden="true"><span class="sun-rays"></span><span class="sun-core"></span></div>
-        <div id="moonOrb" class="moon-orb hidden" aria-hidden="true"></div>
+        <div id="moonOrb" class="moon-orb hidden" aria-hidden="true"><span class="moon-art"></span></div>
         <div class="weather-layer" aria-hidden="true"><div class="clouds"></div><div class="fog-layer"></div><canvas class="precip"></canvas><div class="frost"></div><div class="flash"></div></div>
         <div class="hero-top">
           <span class="brand">Reci mi</span>
@@ -66,17 +68,15 @@
         </div>
         <p id="dailyQuote" class="daily-quote hidden"></p>
         <p id="moonLine" class="moon-line hidden"></p>
-        <div class="sky-rows">
-          <div class="sun-row">
-            <span class="sun-time" title="Sonnenaufgang"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 4v5M9.5 6.5 12 4l2.5 2.5"/></svg><span class="sr">Sonnenaufgang </span><span id="sunriseLabel">--:--</span></span>
-            <button type="button" id="weatherLabel" class="weather-label"></button>
-            <span class="sun-time" title="Sonnenuntergang"><span class="sr">Sonnenuntergang </span><span id="sunsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 9V4M9.5 6.5 12 9l2.5-2.5"/></svg></span>
-          </div>
-          <div class="moon-row">
-            <span class="moon-time" title="Mondaufgang"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M12.6 9.2a5 5 0 1 0 2.7 8.8 4 4 0 0 1-2.7-8.8Z"/><path d="M18.5 12V5M16.2 7.3 18.5 5l2.3 2.3"/></svg><span class="sr">Mondaufgang </span><span id="moonriseLabel">--:--</span></span>
-            <span id="moonPhaseLabel" class="moon-phase-label"></span>
-            <span class="moon-time" title="Monduntergang"><span class="sr">Monduntergang </span><span id="moonsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M12.6 9.2a5 5 0 1 0 2.7 8.8 4 4 0 0 1-2.7-8.8Z"/><path d="M18.5 5v7M16.2 9.7l2.3 2.3 2.3-2.3"/></svg></span>
-          </div>
+        <div class="sun-row">
+          <span class="sun-time" title="Sonnenaufgang"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 4v5M9.5 6.5 12 4l2.5 2.5"/></svg><span class="sr">Sonnenaufgang </span><span id="sunriseLabel">--:--</span></span>
+          <button type="button" id="weatherLabel" class="weather-label"></button>
+          <span class="sun-time" title="Sonnenuntergang"><span class="sr">Sonnenuntergang </span><span id="sunsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 9V4M9.5 6.5 12 9l2.5-2.5"/></svg></span>
+        </div>
+        <div class="moon-row">
+          <span class="moon-time" title="Mondaufgang"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 19a5 5 0 0 1 10 0"/><path d="M12 4c-1.8 1-3 2.8-3 4.9 0 3.2 2.6 5.8 5.8 5.8 1.3 0 2.4-.4 3.4-1.1"/></svg><span class="sr">Mondaufgang </span><span id="moonriseLabel">--:--</span></span>
+          <span id="moonPhaseLabel" class="moon-phase-pill">Mondphase</span>
+          <span class="moon-time" title="Monduntergang"><span class="sr">Monduntergang </span><span id="moonsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 19a5 5 0 0 1 10 0"/><path d="M12 4c-1.8 1-3 2.8-3 4.9 0 3.2 2.6 5.8 5.8 5.8 1.3 0 2.4-.4 3.4-1.1" transform="rotate(180 12 11.5)"/></svg></span>
         </div>
       </header>
 
@@ -288,7 +288,7 @@
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 3.1</p>
+      <p class="sheet-note version">Version 2.9.1</p>
     </dialog>
 
     <!-- Blatt: Sicherung prüfen -->
@@ -460,6 +460,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=3.1" defer></script>
+  <script src="app.js?v=2.9.1" defer></script>
 </body>
 </html>

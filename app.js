@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '2.9.1';
+const APP_VERSION = '2.9.2';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -901,15 +901,55 @@ function fitGreeting() {
   while (el.scrollWidth > el.clientWidth && size > 17) { size -= 0.5; el.style.fontSize = size + 'px'; }
 }
 
+// Klassischer Reci-mi-Mond nur für die Sperrseite. Das ist bewusst die Optik
+// von vor V2.8; die neue Mondgrafik auf der Himmelsbahn bleibt unverändert.
+function lockMoonSvgClassic(date) {
+  const age = moonAge(date);
+  const f = age / SYNODIC;
+  const c = Math.cos(2 * Math.PI * f);
+  const k = (1 - c) / 2;
+  const R = 96, C = 100;
+  const rx = Math.abs(c) * R;
+  const waxing = f < 0.5;
+  const top = `${C} ${C - R}`, bottom = `${C} ${C + R}`;
+  let d;
+  if (k < 0.015) d = '';
+  else if (k > 0.985) d = `M${top} A${R} ${R} 0 1 1 ${bottom} A${R} ${R} 0 1 1 ${top}Z`;
+  else if (waxing) d = `M${top} A${R} ${R} 0 0 1 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 0 : 1} ${top}Z`;
+  else d = `M${top} A${R} ${R} 0 0 0 ${bottom} A${rx.toFixed(2)} ${R} 0 0 ${k < 0.5 ? 1 : 0} ${top}Z`;
+  const id = `lm${++moonUid}`;
+  const glow = (0.35 + 0.65 * k).toFixed(2);
+
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${moonPhaseName(age)}" style="--k:${glow}">
+    <defs>
+      <clipPath id="${id}c"><circle cx="${C}" cy="${C}" r="${R}"/></clipPath>
+      <filter id="${id}t" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6"/></filter>
+      <filter id="${id}g" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="9"/></filter>
+      <filter id="${id}h" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="26"/></filter>
+      <mask id="${id}m"><path d="${d || 'M0 0'}" fill="#fff" filter="url(#${id}t)"/></mask>
+      <g id="${id}sf">
+        <circle cx="${C}" cy="${C}" r="${R - 2}" style="fill:#CFCAC0"/>
+        <image href="moon.webp" x="${C - R}" y="${C - R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid meet"/>
+        <circle cx="${C}" cy="${C}" r="${R}" style="fill:var(--moon-lit);mix-blend-mode:multiply"/>
+      </g>
+    </defs>
+    ${d ? `<path class="moon-glow wide" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}h)"/><path class="moon-glow" d="${d}" style="fill:var(--moon-lit)" filter="url(#${id}g)"/>` : ''}
+    <circle cx="${C}" cy="${C}" r="${R - 1.5}" style="fill:var(--moon-dark)"/>
+    <use href="#${id}sf" style="opacity:var(--earthshine)"/>
+    ${d ? `<use href="#${id}sf" mask="url(#${id}m)"/><circle cx="${C}" cy="${C}" r="${R}" mask="url(#${id}m)" style="fill:var(--sky-mid);opacity:var(--moon-wash, 0)"/>` : ''}
+  </svg>`;
+}
+
 function renderDailyBits(date = nowForSky(), phase = document.documentElement.dataset.phase || 'nacht') {
   const age = moonAge(date);
   const illumination = moonIllumination(age);
   const phaseName = moonPhaseName(age);
+  const lockMoon = lockMoonSvgClassic(date);
   const moon = moonSvg(date);
 
-  // Der Mond auf der Sperrseite ist das Reci-mi-Symbol und zeigt die echte aktuelle Phase.
+  // Der Mond auf der Sperrseite bleibt in der ursprünglichen Reci-mi-Optik und zeigt trotzdem die echte aktuelle Phase.
   // Zunehmend = rechts hell, abnehmend = links hell.
-  els.lockMoon.innerHTML = moon;
+  els.lockMoon.innerHTML = lockMoon;
   els.lockMoon.dataset.moonPhase = phaseName;
   els.moonBtn.setAttribute('aria-label', `Mit Fingerabdruck entsperren. ${phaseName}, ${Math.round(illumination * 100)} Prozent beleuchtet.`);
 

@@ -69,11 +69,6 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .moon-btn::before { content: ""; position: absolute; inset: -36px; border-radius: 50%; background: radial-gradient(circle, var(--moon-glow), transparent 68%); }
 .moon-btn::after { content: ""; position: absolute; inset: -14px; border-radius: 50%; border: 1.5px solid var(--moon-glow); }
 .moon-btn .moon-art { position: absolute; inset: 0; }
-/* Nur auf der Sperrseite etwas mehr Kontrast: die aktuelle Phase und die
-   Schattenseite bleiben auch als großes Logo sofort erkennbar. */
-.moon-btn .lock-moon-live { --earthshine: .055; --glow-mul: 1.08; }
-.moon-btn .lock-moon-live svg { filter: drop-shadow(0 0 15px color-mix(in srgb, var(--moon-glow) 72%, transparent)); }
-.moon-btn .lock-moon-live::after { content: ""; position: absolute; inset: 7%; border-radius: 50%; box-shadow: inset -6px -8px 18px rgba(0,0,0,.08); pointer-events: none; }
 .moon-btn:active { transform: scale(.97); }
 .moon-btn.busy .moon-art { animation: breathe 1.4s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .6; } }

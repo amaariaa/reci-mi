@@ -209,6 +209,15 @@ dialog.sheet::backdrop { background: rgba(10, 12, 28, .55); }
 .sheet-item { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); padding: 17px 4px; font-size: 16px; cursor: pointer; }
 .sheet-item:last-child { border-bottom: 0; }
 .sheet-item.danger { color: var(--danger); }
+.archive-list, .marker-list { max-height: 52dvh; overflow-y: auto; margin: 8px 0 14px; }
+.archive-row, .marker-row { padding: 14px 2px; border-bottom: 1px solid var(--line); }
+.archive-row:last-child, .marker-row:last-child { border-bottom: 0; }
+.archive-row h3, .marker-row h3 { margin: 0; font: 500 17px/1.3 var(--serif); color: var(--ink); }
+.archive-row p, .marker-row p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.archive-actions, .marker-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.marker-jump { flex: 1 1 auto; text-align: left; border: 0; background: transparent; padding: 0; color: inherit; }
+.marker-delete { min-height: 36px; padding: 0 12px; }
+.merge-list { max-height: 52dvh; overflow-y: auto; }
 .sheet-text { margin: 4px 0 0; color: var(--muted); line-height: 1.5; }
 .sheet-note { margin: 4px 4px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .sheet-note.version { margin-top: 10px; opacity: .7; }
@@ -285,6 +294,7 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .weather-label { border: 0; background: none; padding: 4px 6px; color: inherit; font: inherit; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weather-label.link { text-decoration: underline; text-underline-offset: 3px; color: var(--hero-ink); }
+.place-clock { margin: 1px 0 0; text-align: center; color: var(--hero-muted); font-size: 11.5px; line-height: 1.25; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 
 .weather-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
 .weather-layer .clouds { position: absolute; inset: 0; opacity: var(--cloud-op, .6); }

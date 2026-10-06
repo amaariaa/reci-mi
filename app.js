@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.1.1';
+const APP_VERSION = '3.2';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -214,6 +214,28 @@ function instantOfSky(wall) {
   return guess;
 }
 
+function updatePlaceClock() {
+  const el = $('placeClock');
+  if (!el) return;
+  const p = getPlace();
+  if (!p) { el.classList.add('hidden'); el.textContent = ''; return; }
+  const real = new Date();
+  let dateText = '', timeText = '';
+  if (p.tz) {
+    try {
+      dateText = new Intl.DateTimeFormat('de-DE', { timeZone: p.tz, day: '2-digit', month: '2-digit', year: 'numeric' }).format(real);
+      timeText = new Intl.DateTimeFormat('de-DE', { timeZone: p.tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(real);
+    } catch {}
+  }
+  if (!dateText || !timeText) {
+    const wall = nowForSky();
+    dateText = `${String(wall.getDate()).padStart(2, '0')}.${String(wall.getMonth() + 1).padStart(2, '0')}.${wall.getFullYear()}`;
+    timeText = `${String(wall.getHours()).padStart(2, '0')}:${String(wall.getMinutes()).padStart(2, '0')}`;
+  }
+  el.textContent = `${p.name} · ${dateText} · ${timeText}`;
+  el.classList.remove('hidden');
+}
+
 function skyStateAt(date) {
   const minutes = date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
   const kf = dayKeyframes(date);
@@ -296,6 +318,7 @@ function applySky(fromWeather = false) {
 
   placeSun();
   placeMoon();
+  updatePlaceClock();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', top);
 
@@ -1739,7 +1762,8 @@ function closeAnySheet(silent = false) {
 function uid() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
-const activeTopics = () => state.topics.filter(t => !t.deletedAt);
+const activeTopics = () => state.topics.filter(t => !t.deletedAt && !t.archivedAt);
+const archivedTopics = () => state.topics.filter(t => !t.deletedAt && Boolean(t.archivedAt));
 const deletedTopics = () => state.topics.filter(t => Boolean(t.deletedAt));
 
 function formatDate(iso) {
@@ -2131,6 +2155,181 @@ async function saveTopicSheet() {
   }
 }
 
+/* ---------- Archiv ---------- */
+async function toggleArchiveTopic(id) {
+  const topic = state?.topics.find(t => t.id === id && !t.deletedAt);
+  if (!topic) return;
+  if (topic.locked && !openedProtected.has(id)) return requestProtectedAccess(id, 'archive');
+  const wasArchived = Boolean(topic.archivedAt);
+  topic.archivedAt = wasArchived ? null : new Date().toISOString();
+  await persistState(true);
+  if (openSheetEl === els.actionSheet) closeSheet(els.actionSheet);
+  if (!wasArchived && currentTopicId === id && els.editorScreen.classList.contains('active')) goHomeFromScreen();
+  else renderTopics();
+  showToast(wasArchived ? 'Aus dem Archiv geholt' : 'Archiviert');
+}
+
+function openArchive() {
+  renderArchive();
+  openSheet($('archiveSheet'));
+}
+
+function renderArchive() {
+  const box = $('archiveList');
+  const topics = archivedTopics().sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+  if (!topics.length) {
+    box.innerHTML = '<div class="empty-state small"><h2>Archiv ist leer</h2><p>Archivierte Themen erscheinen hier.</p></div>';
+    return;
+  }
+  box.innerHTML = topics.map(t => `<article class="archive-row" data-id="${escapeHtml(t.id)}">
+    <h3>${t.locked ? LOCK_ICON : ''}${escapeHtml(t.title)}</h3>
+    <p>${t.locked ? 'Geschützt.' : escapeHtml(excerpt(t.content, 110))}</p>
+    <div class="archive-actions">
+      <button class="btn btn-main btn-small archive-open" type="button">Öffnen</button>
+      <button class="btn btn-ghost btn-small archive-restore" type="button">Zurückholen</button>
+    </div>
+  </article>`).join('');
+  box.querySelectorAll('.archive-open').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.closest('.archive-row').dataset.id;
+    closeSheetAndReplace($('archiveSheet'), { rm: 'editor', id });
+    openTopic(id, { push: false });
+  }));
+  box.querySelectorAll('.archive-restore').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.closest('.archive-row').dataset.id;
+    const topic = state.topics.find(t => t.id === id);
+    if (!topic) return;
+    if (topic.locked && !openedProtected.has(id)) { closeSheet($('archiveSheet')); return requestProtectedAccess(id, 'archive'); }
+    topic.archivedAt = null;
+    topic.updatedAt = new Date().toISOString();
+    await persistState(true);
+    renderArchive(); renderTopics();
+    showToast('Aus dem Archiv geholt');
+  }));
+}
+
+/* ---------- Themen zusammenführen ---------- */
+let mergeSourceId = null;
+function openMergePicker(sourceId) {
+  const src = state?.topics.find(t => t.id === sourceId && !t.deletedAt && !t.archivedAt);
+  if (!src) return;
+  if (src.locked && !openedProtected.has(sourceId)) return requestProtectedAccess(sourceId, 'merge');
+  mergeSourceId = sourceId;
+  $('mergeText').textContent = `„${src.title}“ wird an das ausgewählte Thema angehängt. Das ursprüngliche Thema kommt danach ins Archiv.`;
+  const targets = activeTopics().filter(t => t.id !== sourceId && t.category !== QUICK_CATEGORY && (!t.locked || openedProtected.has(t.id)))
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.updatedAt) - new Date(a.updatedAt));
+  $('mergeList').innerHTML = targets.length
+    ? targets.map(t => `<button type="button" class="sheet-item merge-item" data-id="${escapeHtml(t.id)}">${dotHtml(catOf(t))}<span>${t.pinned ? PIN_ICON : ''}${escapeHtml(t.title)}</span></button>`).join('')
+    : '<p class="sheet-text">Es gibt kein geeignetes anderes Thema zum Zusammenführen.</p>';
+  $('mergeList').querySelectorAll('.merge-item').forEach(b => b.addEventListener('click', () => mergeIntoTopic(b.dataset.id)));
+  openSheet($('mergeSheet'));
+}
+
+async function mergeIntoTopic(targetId) {
+  const src = state?.topics.find(t => t.id === mergeSourceId && !t.deletedAt);
+  const target = state?.topics.find(t => t.id === targetId && !t.deletedAt && !t.archivedAt);
+  if (!src || !target || src.id === target.id) return;
+  await makeEmergencyCopy('Vor dem Zusammenführen zweier Themen');
+  const old = target.content || '';
+  const add = (src.content || '').trim();
+  pushVersion(target, old, 'Vor dem Zusammenführen');
+  const sep = !add || !old ? '' : old.endsWith('\n\n') ? '' : old.endsWith('\n') ? '\n' : '\n\n';
+  const offset = old.length + sep.length;
+  target.content = add ? old + sep + add : old;
+  if (src.sketches?.length) target.sketches = [...(target.sketches || []), ...src.sketches];
+  if (src.markers?.length) {
+    target.markers = [...(target.markers || []), ...src.markers.map(m => ({ ...m, id: uid(), pos: Math.max(0, offset + Number(m.pos || 0)) }))];
+  }
+  const now = new Date().toISOString();
+  target.updatedAt = now;
+  src.archivedAt = now;
+  src.updatedAt = now;
+  src.mergeTargetId = target.id;
+  await persistState(true);
+  closeSheet($('mergeSheet'));
+  renderTopics();
+  if (currentTopicId === src.id && els.editorScreen.classList.contains('active')) {
+    history.replaceState({ rm: 'editor', id: target.id }, '');
+    openTopic(target.id, { push: false });
+  }
+  showToast(`Mit „${target.title}“ zusammengeführt`);
+  mergeSourceId = null;
+}
+
+/* ---------- Markierungen in langen Texten ---------- */
+function topicMarkers(topic) {
+  if (!topic) return [];
+  if (!Array.isArray(topic.markers)) topic.markers = [];
+  return topic.markers;
+}
+function markerExcerpt(topic, pos) {
+  const text = topic?.content || '';
+  const p = Math.min(Math.max(0, Number(pos || 0)), text.length);
+  const start = Math.max(0, p - 34), end = Math.min(text.length, p + 70);
+  return text.slice(start, end).replace(/\s+/g, ' ').trim() || 'Leere Textstelle';
+}
+function renderMarkers() {
+  const topic = currentTopic();
+  const box = $('markerList');
+  if (!topic || !box) return;
+  const list = topicMarkers(topic).slice().sort((a, b) => a.pos - b.pos);
+  box.innerHTML = list.length ? list.map((m, i) => `<div class="marker-row" data-id="${escapeHtml(m.id)}">
+    <button type="button" class="marker-jump"><h3>${escapeHtml(m.label || `Markierung ${i + 1}`)}</h3><p>${escapeHtml(markerExcerpt(topic, m.pos))}</p></button>
+    <div class="marker-actions"><button type="button" class="btn btn-ghost btn-small marker-delete">Entfernen</button></div>
+  </div>`).join('') : '<p class="sheet-text">Noch keine Markierungen in diesem Thema.</p>';
+  box.querySelectorAll('.marker-jump').forEach(btn => btn.addEventListener('click', () => jumpToMarker(btn.closest('.marker-row').dataset.id)));
+  box.querySelectorAll('.marker-delete').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.closest('.marker-row').dataset.id;
+    topic.markers = topicMarkers(topic).filter(m => m.id !== id);
+    await persistState(true); renderMarkers(); showToast('Markierung entfernt');
+  }));
+}
+function openMarkers() {
+  if (!currentTopic()) return;
+  $('markerName').value = '';
+  renderMarkers();
+  openSheet($('markersSheet'));
+}
+async function addMarkerHere() {
+  const topic = currentTopic();
+  if (!topic) return;
+  const pos = Math.min(Number(els.topicText.selectionStart ?? topic.content.length), topic.content.length);
+  const label = $('markerName').value.trim() || `Markierung ${topicMarkers(topic).length + 1}`;
+  topicMarkers(topic).push({ id: uid(), label, pos, createdAt: new Date().toISOString() });
+  $('markerName').value = '';
+  await persistState(true); renderMarkers(); showToast('Markierung gesetzt');
+}
+function jumpToMarker(id) {
+  const topic = currentTopic();
+  const marker = topicMarkers(topic).find(m => m.id === id);
+  if (!topic || !marker) return;
+  const pos = Math.min(Math.max(0, Number(marker.pos || 0)), els.topicText.value.length);
+  closeSheet($('markersSheet'));
+  requestAnimationFrame(() => {
+    try { els.topicText.focus({ preventScroll: true }); els.topicText.setSelectionRange(pos, pos); } catch {}
+    const before = els.topicText.value.slice(0, pos);
+    const line = before.split('\n').length - 1;
+    const lineHeight = parseFloat(getComputedStyle(els.topicText).lineHeight) || 24;
+    const approx = Math.max(0, line * lineHeight - els.topicText.clientHeight * .35);
+    els.topicText.scrollTop = Math.min(approx, els.topicText.scrollHeight);
+    rememberEditorPosition(); syncEditSnapshotPosition();
+  });
+}
+function adjustMarkersForEdit(topic, oldText, newText) {
+  const list = topicMarkers(topic);
+  if (!list.length || oldText === newText) return;
+  let start = 0;
+  while (start < oldText.length && start < newText.length && oldText[start] === newText[start]) start++;
+  let oldTail = oldText.length, newTail = newText.length;
+  while (oldTail > start && newTail > start && oldText[oldTail - 1] === newText[newTail - 1]) { oldTail--; newTail--; }
+  const delta = (newTail - start) - (oldTail - start);
+  for (const m of list) {
+    const p = Number(m.pos || 0);
+    if (p > oldTail) m.pos = p + delta;
+    else if (p >= start) m.pos = newTail;
+    m.pos = Math.min(Math.max(0, m.pos), newText.length);
+  }
+}
+
 function openActionSheet(id) {
   const topic = state?.topics.find(t => t.id === id && !t.deletedAt);
   if (!topic) return;
@@ -2142,7 +2341,10 @@ function openActionSheet(id) {
   $('actionFindBtn').classList.toggle('hidden', !inEditor);
   $('actionVersionsBtn').classList.toggle('hidden', !inEditor);
   $('actionDrawBtn').classList.toggle('hidden', !inEditor);
+  $('actionMarkersBtn').classList.toggle('hidden', !inEditor);
   $('actionShareBtn').classList.toggle('hidden', topic.locked && !openedProtected.has(id));
+  $('actionMergeBtn').classList.toggle('hidden', topic.category === QUICK_CATEGORY || Boolean(topic.archivedAt));
+  $('actionArchiveBtn').textContent = topic.archivedAt ? 'Aus Archiv holen' : 'Archivieren';
   $('actionPinBtn').textContent = topic.pinned ? 'Nicht mehr anheften' : 'Oben anheften';
   $('actionAttachBtn').classList.toggle('hidden', topic.category !== 'Schnellnotizen');
   openSheet(els.actionSheet);
@@ -2158,7 +2360,9 @@ function requestProtectedAccess(id, purpose) {
     open: `Dieses Thema ist geschützt. Öffne es mit ${how}.`,
     unprotect: `Bestätige mit ${how}, um den Schutz aufzuheben.`,
     trash: `Bestätige mit ${how}, um das Thema in den Papierkorb zu legen.`,
-    purge: `Bestätige mit ${how}, um das Thema endgültig zu löschen.`
+    purge: `Bestätige mit ${how}, um das Thema endgültig zu löschen.`,
+    archive: `Bestätige mit ${how}, um das Thema zu archivieren oder zurückzuholen.`,
+    merge: `Bestätige mit ${how}, um dieses Thema mit einem anderen zusammenzuführen.`
   };
   $('protectTitle').textContent = topic.title;
   $('protectText').textContent = texts[purpose] || texts.open;
@@ -2225,6 +2429,15 @@ async function grantProtectedAccess() {
     await persistState(true);
     renderTrash();
     showToast('Endgültig gelöscht');
+  } else if (req.purpose === 'archive') {
+    closeSheet(sheet);
+    openedProtected.add(req.id);
+    await toggleArchiveTopic(req.id);
+    if ($('archiveSheet')?.open) renderArchive();
+  } else if (req.purpose === 'merge') {
+    closeSheet(sheet);
+    openedProtected.add(req.id);
+    openMergePicker(req.id);
   }
 }
 
@@ -2254,6 +2467,7 @@ async function moveTopicToTrash(id) {
   const topic = state?.topics.find(t => t.id === id && !t.deletedAt);
   if (!topic) return;
   topic.deletedAt = new Date().toISOString();
+  topic.archivedAt = null;
   topic.updatedAt = topic.deletedAt;
   await persistState(true);
   showToast('In den Papierkorb gelegt');
@@ -2306,6 +2520,7 @@ function renderTrash() {
     const t = state.topics.find(x => x.id === btn.dataset.id);
     if (!t) return;
     t.deletedAt = null;
+    t.archivedAt = null;
     t.updatedAt = new Date().toISOString();
     await persistState(true);
     renderTrash();
@@ -3775,6 +3990,9 @@ function wireEvents() {
     openTopic(id, { push: false });
   });
   els.actionRenameBtn.addEventListener('click', () => openTopicSheet('edit', actionTopicId));
+  $('actionArchiveBtn').addEventListener('click', () => toggleArchiveTopic(actionTopicId));
+  $('actionMergeBtn').addEventListener('click', () => openMergePicker(actionTopicId));
+  $('actionMarkersBtn').addEventListener('click', openMarkers);
   $('actionProtectBtn').addEventListener('click', () => toggleProtection(actionTopicId));
   $('protectForm').addEventListener('submit', e => { e.preventDefault(); protectWithPin(); });
   $('protectBioBtn').addEventListener('click', protectWithFingerprint);
@@ -3792,6 +4010,9 @@ function wireEvents() {
     moveTopicToTrash(id);
   });
   els.actionCancelBtn.addEventListener('click', () => closeSheet(els.actionSheet));
+  $('mergeCloseBtn').addEventListener('click', () => { mergeSourceId = null; closeSheet($('mergeSheet')); });
+  $('markerForm').addEventListener('submit', e => { e.preventDefault(); addMarkerHere(); });
+  $('markersCloseBtn').addEventListener('click', () => closeSheet($('markersSheet')));
 
   els.filterRow.addEventListener('click', e => {
     const chip = e.target.closest('.chip');
@@ -3822,8 +4043,10 @@ function wireEvents() {
   els.topicText.addEventListener('input', () => {
     const topic = currentTopic();
     if (!topic) return;
-    recordEditorChange(topic.content || '');
+    const previousContent = topic.content || '';
+    recordEditorChange(previousContent);
     versionOnInput(topic, els.topicText.value);
+    adjustMarkersForEdit(topic, previousContent, els.topicText.value);
     topic.content = els.topicText.value;
     topic.updatedAt = new Date().toISOString();
     if (findOpen) renderFind(false);
@@ -3841,6 +4064,8 @@ function wireEvents() {
   els.endBtn.addEventListener('click', goEditorEnd);
 
   els.menuBtn.addEventListener('click', () => { updateBiometricUi(); $('backupAge').textContent = backupAgeText(); updateEmergencyMenu(); openSheet(els.menuSheet); });
+  $('openArchiveBtn').addEventListener('click', openArchive);
+  $('archiveCloseBtn').addEventListener('click', () => closeSheet($('archiveSheet')));
   els.openTrashBtn.addEventListener('click', () => { closeSheetAndReplace(els.menuSheet, { rm: 'trash' }); openTrash({ push: false }); });
   els.biometricMenuBtn.addEventListener('click', async () => {
     if (hasBiometricConfig()) { disableBiometrics(); }
@@ -3889,7 +4114,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet'), $('archiveSheet'), $('mergeSheet'), $('markersSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });

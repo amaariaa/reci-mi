@@ -93,11 +93,11 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 
 /* ---------- Startseite ---------- */
 .hero { display: flex; flex-direction: column; min-height: calc(var(--safe-top) + 362px); padding: calc(var(--safe-top) + 14px) 22px 64px; background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) calc(100% - 64px), var(--sky-hor) calc(100% - 20px), var(--bg) 100%); }
-.hero-top { position: relative; display: flex; justify-content: space-between; align-items: center; }
+.hero-top { position: relative; display: flex; justify-content: flex-end; align-items: center; }
 .brand { font: italic 500 27px var(--serif); color: var(--hero-ink); }
 .hero-btn { background: color-mix(in srgb, var(--hero-ink) 12%, transparent); color: var(--hero-ink); }
-.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 8px; }
-.greeting { margin: 0; font: 500 24px/1.2 var(--serif); color: var(--hero-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: -2px; }
+.greeting { margin: 0; font: 500 26px/1.2 var(--serif); color: var(--hero-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hero-text { flex: 1; min-width: 0; }
 .hero-moon { width: 72px; height: 72px; flex: 0 0 auto; margin-right: 4px; }
 .daily-quote { position: relative; margin: 16px 0 0; font: italic 400 17px/1.5 var(--serif); color: var(--hero-ink); opacity: .92; max-width: 34em; text-wrap: pretty; }
@@ -307,14 +307,16 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 @keyframes sunTurn { to { transform: rotate(360deg); } }
 @keyframes sunBreathe { 50% { transform: scale(1.06); opacity: .92; } }
 
-.sun-row, .moon-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--hero-muted); }
+.sun-row, .moon-row { display: grid; grid-template-columns: minmax(78px, 1fr) minmax(0, 2.25fr) minmax(78px, 1fr); align-items: center; gap: 10px; font-size: 13px; line-height: 1.3; color: var(--hero-muted); }
 .sun-time, .moon-time { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sun-time:first-child, .moon-time:first-child { justify-self: start; }
+.sun-time:last-child, .moon-time:last-child { justify-self: end; }
 .sun-time .ui-icon, .moon-time .ui-icon { width: 17px; height: 17px; }
-.moon-phase-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.moon-phase-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; justify-self: center; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-.weather-label { border: 0; background: none; padding: 4px 6px; color: inherit; font: inherit; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weather-label { border: 0; background: none; padding: 4px 6px; color: inherit; font: inherit; text-align: center; justify-self: center; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weather-label.link { text-decoration: underline; text-underline-offset: 3px; color: var(--hero-ink); }
-.place-clock { margin: 1px 0 0; text-align: center; color: var(--hero-muted); font-size: 11.5px; line-height: 1.25; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.place-clock { margin: 10px 0 0; text-align: center; color: var(--hero-muted); font-size: 13px; line-height: 1.3; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 
 .weather-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
 .weather-layer .clouds { position: absolute; inset: 0; opacity: var(--cloud-op, .6); }

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.3.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -106,8 +106,8 @@ const PHASE_LABEL = {
   mittag: 'Mittag', nachmittag: 'Nachmittag', abenddaemmerung: 'Abenddämmerung', abend: 'Abend'
 };
 const GREETING = {
-  nacht: 'Schöne Nacht', daemmerung: 'Guten Morgen', morgen: 'Guten Morgen', vormittag: 'Schönen Vormittag',
-  mittag: 'Schönen Mittag', nachmittag: 'Schönen Nachmittag', abenddaemmerung: 'Guten Abend', abend: 'Guten Abend'
+  nacht: 'Gute Nacht', daemmerung: 'Guten Morgen', morgen: 'Guten Morgen', vormittag: 'Guten Tag',
+  mittag: 'Guten Tag', nachmittag: 'Guten Tag', abenddaemmerung: 'Guten Abend', abend: 'Guten Abend'
 };
 
 // Ungefähr Mitte Deutschlands – reicht für Sonnenauf- und -untergang auf ein paar Minuten genau
@@ -233,7 +233,7 @@ function updatePlaceClock() {
     dateText = `${String(wall.getDate()).padStart(2, '0')}.${String(wall.getMonth() + 1).padStart(2, '0')}.${wall.getFullYear()}`;
     timeText = `${String(wall.getHours()).padStart(2, '0')}:${String(wall.getMinutes()).padStart(2, '0')}`;
   }
-  el.textContent = `${p.name} · ${dateText} · ${timeText}`;
+  el.textContent = `${dateText} · ${timeText}`;
   el.classList.remove('hidden');
 }
 

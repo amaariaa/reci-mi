@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.4';
+const APP_VERSION = '3.5';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -322,6 +322,7 @@ function applySky(fromWeather = false) {
 
   placeSun();
   placeMoon();
+  placePlanets();
   updatePlaceClock();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', top);
@@ -794,6 +795,202 @@ function placeMoon() {
   if (moonOrb.dataset.key !== key) { moonOrb.dataset.key = key; moonOrb.innerHTML = moonDiscSvg(st, MOON_STYLE); }
 }
 
+
+/* ---------- V3.5: Planeten am gewählten Himmel ----------
+   Niedrigpräzise Bahnelemente für die visuelle Orientierung im Himmelsbereich.
+   Angezeigt werden die fünf klassischen, grundsätzlich freiäugig sichtbaren Planeten. */
+const PLANET_META = {
+  mercury: { name: 'Merkur' },
+  venus:   { name: 'Venus' },
+  mars:    { name: 'Mars' },
+  jupiter: { name: 'Jupiter' },
+  saturn:  { name: 'Saturn' }
+};
+let planetInfoTimer = null;
+
+function astroNorm360(x) { return ((x % 360) + 360) % 360; }
+function astroNorm180(x) { const n = astroNorm360(x); return n > 180 ? n - 360 : n; }
+function astroRad(x) { return x * Math.PI / 180; }
+function astroDeg(x) { return x * 180 / Math.PI; }
+
+function astroJulian(date) { return date.getTime() / 86400000 + 2440587.5; }
+
+function planetElements(key, d) {
+  const E = {
+    mercury: [48.3313 + 3.24587e-5*d, 7.0047 + 5.00e-8*d, 29.1241 + 1.01444e-5*d, 0.387098, 0.205635 + 5.59e-10*d, 168.6562 + 4.0923344368*d],
+    venus:   [76.6799 + 2.46590e-5*d, 3.3946 + 2.75e-8*d, 54.8910 + 1.38374e-5*d, 0.723330, 0.006773 - 1.302e-9*d, 48.0052 + 1.6021302244*d],
+    mars:    [49.5574 + 2.11081e-5*d, 1.8497 - 1.78e-8*d, 286.5016 + 2.92961e-5*d, 1.523688, 0.093405 + 2.516e-9*d, 18.6021 + 0.5240207766*d],
+    jupiter: [100.4542 + 2.76854e-5*d, 1.3030 - 1.557e-7*d, 273.8777 + 1.64505e-5*d, 5.20256, 0.048498 + 4.469e-9*d, 19.8950 + 0.0830853001*d],
+    saturn:  [113.6634 + 2.38980e-5*d, 2.4886 - 1.081e-7*d, 339.3939 + 2.97661e-5*d, 9.55475, 0.055546 - 9.499e-9*d, 316.9670 + 0.0334442282*d],
+    sun:     [0, 0, 282.9404 + 4.70935e-5*d, 1.0, 0.016709 - 1.151e-9*d, 356.0470 + 0.9856002585*d]
+  }[key];
+  if (!E) return null;
+  return { N:E[0], i:E[1], w:E[2], a:E[3], e:E[4], M:astroNorm360(E[5]) };
+}
+
+function solveKepler(Mdeg, e) {
+  const M = astroRad(Mdeg);
+  let E = M + e * Math.sin(M) * (1 + e * Math.cos(M));
+  for (let i = 0; i < 7; i++) {
+    const next = E - (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    if (Math.abs(next - E) < 1e-8) { E = next; break; }
+    E = next;
+  }
+  return E;
+}
+
+function orbitXYZ(el) {
+  const E = solveKepler(el.M, el.e);
+  const xv = el.a * (Math.cos(E) - el.e);
+  const yv = el.a * Math.sqrt(1 - el.e * el.e) * Math.sin(E);
+  const v = Math.atan2(yv, xv);
+  const r = Math.hypot(xv, yv);
+  const N = astroRad(el.N), i = astroRad(el.i), vw = v + astroRad(el.w);
+  return {
+    x: r * (Math.cos(N) * Math.cos(vw) - Math.sin(N) * Math.sin(vw) * Math.cos(i)),
+    y: r * (Math.sin(N) * Math.cos(vw) + Math.cos(N) * Math.sin(vw) * Math.cos(i)),
+    z: r * Math.sin(vw) * Math.sin(i), r
+  };
+}
+
+function sunGeoXYZ(d) {
+  const el = planetElements('sun', d);
+  const E = solveKepler(el.M, el.e);
+  const xv = Math.cos(E) - el.e;
+  const yv = Math.sqrt(1 - el.e * el.e) * Math.sin(E);
+  const v = Math.atan2(yv, xv);
+  const r = Math.hypot(xv, yv);
+  const lon = v + astroRad(el.w);
+  return { x:r*Math.cos(lon), y:r*Math.sin(lon), z:0, r };
+}
+
+function eclipticToRaDec(x, y, z, d) {
+  const obl = astroRad(23.4393 - 3.563e-7 * d);
+  const xe = x;
+  const ye = y * Math.cos(obl) - z * Math.sin(obl);
+  const ze = y * Math.sin(obl) + z * Math.cos(obl);
+  const ra = astroNorm360(astroDeg(Math.atan2(ye, xe)));
+  const dec = astroDeg(Math.atan2(ze, Math.hypot(xe, ye)));
+  return { ra, dec };
+}
+
+function horizontalFromRaDec(ra, dec, instant) {
+  const jd = astroJulian(instant);
+  const gmst = astroNorm360(280.46061837 + 360.98564736629 * (jd - 2451545.0));
+  const H = astroNorm180(gmst + GEO.lon - ra);
+  const hr = astroRad(H), dr = astroRad(dec), lr = astroRad(GEO.lat);
+  const sinAlt = Math.sin(lr)*Math.sin(dr) + Math.cos(lr)*Math.cos(dr)*Math.cos(hr);
+  const alt = astroDeg(Math.asin(Math.max(-1, Math.min(1, sinAlt))));
+  const az = astroNorm360(astroDeg(Math.atan2(Math.sin(hr), Math.cos(hr)*Math.sin(lr) - Math.tan(dr)*Math.cos(lr))) + 180);
+  return { alt, az, hourAngle:H };
+}
+
+function planetSkyState(key, instant) {
+  const d = astroJulian(instant) - 2451543.5;
+  const sun = sunGeoXYZ(d);
+  const el = planetElements(key, d);
+  if (!el) return null;
+  const h = orbitXYZ(el);
+  const eq = eclipticToRaDec(h.x + sun.x, h.y + sun.y, h.z, d);
+  return { ...eq, ...horizontalFromRaDec(eq.ra, eq.dec, instant) };
+}
+
+function sunSkyState(instant) {
+  const d = astroJulian(instant) - 2451543.5;
+  const s = sunGeoXYZ(d);
+  const eq = eclipticToRaDec(s.x, s.y, s.z, d);
+  return { ...eq, ...horizontalFromRaDec(eq.ra, eq.dec, instant) };
+}
+
+function planetDirection(az) {
+  const dirs = ['Norden','Nordosten','Osten','Südosten','Süden','Südwesten','Westen','Nordwesten'];
+  return dirs[Math.round(astroNorm360(az) / 45) % 8];
+}
+
+function planetVisibilityText(p, sunAlt) {
+  const fx = currentFx();
+  if (sunAlt > -2) return 'bei Tageslicht kaum sichtbar';
+  if (sunAlt > -7) return 'in der Dämmerung';
+  if (fx.clouds > .78 || fx.fog > .45 || fx.rain > .35 || fx.snow > .35) return 'astronomisch sichtbar, Wetter kann die Sicht verdecken';
+  if (p.alt < 8) return 'sehr tief über dem Horizont';
+  return 'bei dunklem Himmel sichtbar';
+}
+
+function planetPoint(hero, p) {
+  const arc = skyArc(hero);
+  const lat = astroRad(GEO.lat), dec = astroRad(p.dec);
+  let c = -Math.tan(lat) * Math.tan(dec);
+  let H0;
+  if (c <= -1) H0 = 180;
+  else if (c >= 1) H0 = 0;
+  else H0 = astroDeg(Math.acos(c));
+  const f = H0 > 0 ? Math.max(0, Math.min(1, (p.hourAngle + H0) / (2 * H0))) : .5;
+  const maxAlt = Math.max(8, 90 - Math.abs(GEO.lat - p.dec));
+  const altNorm = Math.max(0, Math.min(1, p.alt / maxAlt));
+  return {
+    x: arc.pad + f * (arc.W - 2 * arc.pad),
+    y: arc.horizon - (arc.horizon - arc.apex) * altNorm
+  };
+}
+
+function showPlanetInfo(btn, p, sunAlt) {
+  const hero = document.querySelector('.hero');
+  const info = $('planetInfo');
+  if (!hero || !info || !btn) return;
+  const name = PLANET_META[btn.dataset.planet]?.name || btn.dataset.planet;
+  const direction = planetDirection(p.az);
+  info.innerHTML = `<strong>${name}</strong><span>${direction} · ${Math.round(p.alt)}° über Horizont · ${planetVisibilityText(p, sunAlt)}</span>`;
+  info.classList.remove('hidden', 'below');
+  requestAnimationFrame(() => {
+    const hr = hero.getBoundingClientRect(), br = btn.getBoundingClientRect();
+    const x = Math.max(92, Math.min(hero.clientWidth - 92, br.left - hr.left + br.width / 2));
+    const by = br.top - hr.top;
+    info.style.left = `${x}px`;
+    if (by < 92) { info.classList.add('below'); info.style.top = `${Math.min(hero.clientHeight - 104, by + br.height + 8)}px`; }
+    else { info.style.top = `${by - 8}px`; }
+  });
+  clearTimeout(planetInfoTimer);
+  planetInfoTimer = setTimeout(() => info.classList.add('hidden'), 3600);
+}
+
+function placePlanets() {
+  const hero = document.querySelector('.hero');
+  const layer = $('planetLayer');
+  const info = $('planetInfo');
+  if (!hero || !layer) return;
+  if (info) info.classList.add('hidden');
+  clearTimeout(planetInfoTimer);
+  const instant = instantOfSky(nowForSky(skyDayOffset));
+  const sun = sunSkyState(instant);
+  const current = Object.keys(PLANET_META).map(key => {
+    const p = planetSkyState(key, instant);
+    return p ? { key, ...p } : null;
+  }).filter(p => p && p.alt > 2);
+
+  if (!current.length) {
+    layer.innerHTML = '';
+    if (info) info.classList.add('hidden');
+    return;
+  }
+
+  const oldFocus = document.activeElement?.closest?.('.planet-dot')?.dataset.planet || '';
+  layer.innerHTML = current.map(p => {
+    const pt = planetPoint(hero, p);
+    const dim = sun.alt > -4 ? ' dim' : '';
+    const name = PLANET_META[p.key].name;
+    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px" aria-label="${name} anzeigen"><span class="planet-disc" aria-hidden="true"></span></button>`;
+  }).join('');
+
+  layer.querySelectorAll('.planet-dot').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (skySwipeJustHappened) return;
+      const p = current.find(x => x.key === btn.dataset.planet);
+      if (p) showPlanetInfo(btn, p, sun.alt);
+    });
+  });
+  if (oldFocus) layer.querySelector(`[data-planet="${oldFocus}"]`)?.focus({ preventScroll:true });
+}
+
 function applyWeatherFx() {
   const fx = currentFx();
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
@@ -950,14 +1147,14 @@ function initSkySwipe() {
 function initSkyExtras() {
   const hero = document.querySelector('.hero');
   initSkySwipe();
-  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); fitGreeting(); }).observe(hero);
+  if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); placePlanets(); fitGreeting(); }).observe(hero);
   if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
-  window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); placeMoon(); });
+  window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); placeMoon(); placePlanets(); });
   applyPlaceGeo();
   refreshWeather();
   setInterval(() => { if (!document.hidden) refreshWeather(); }, 10 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshWeather(); startPrecip(); placeSun(); placeMoon(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshWeather(); startPrecip(); placeSun(); placeMoon(); placePlanets(); } });
 }
 
 /* ---------- Ort einstellen ---------- */

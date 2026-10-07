@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5';
+const APP_VERSION = '3.5.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -885,14 +885,32 @@ function horizontalFromRaDec(ra, dec, instant) {
   return { alt, az, hourAngle:H };
 }
 
+function planetApparentMagnitude(key, r, delta, phase) {
+  const a = Math.max(0, Math.min(180, phase));
+  const distanceTerm = 5 * Math.log10(Math.max(0.01, r * delta));
+  switch (key) {
+    case 'mercury': return -0.42 + distanceTerm + 0.0380*a - 0.000273*a*a + 0.000002*a*a*a;
+    case 'venus':   return -4.40 + distanceTerm + 0.0009*a + 0.000239*a*a - 0.00000065*a*a*a;
+    case 'mars':    return -1.52 + distanceTerm + 0.016*a;
+    case 'jupiter': return -9.40 + distanceTerm + 0.005*a;
+    case 'saturn':  return -8.88 + distanceTerm + 0.044*a;
+    default:        return 1;
+  }
+}
+
 function planetSkyState(key, instant) {
   const d = astroJulian(instant) - 2451543.5;
   const sun = sunGeoXYZ(d);
   const el = planetElements(key, d);
   if (!el) return null;
   const h = orbitXYZ(el);
-  const eq = eclipticToRaDec(h.x + sun.x, h.y + sun.y, h.z, d);
-  return { ...eq, ...horizontalFromRaDec(eq.ra, eq.dec, instant) };
+  const gx = h.x + sun.x, gy = h.y + sun.y, gz = h.z;
+  const delta = Math.hypot(gx, gy, gz);
+  const phaseCos = Math.max(-1, Math.min(1, (h.r*h.r + delta*delta - sun.r*sun.r) / Math.max(1e-6, 2*h.r*delta)));
+  const phaseAngle = astroDeg(Math.acos(phaseCos));
+  const magnitude = planetApparentMagnitude(key, h.r, delta, phaseAngle);
+  const eq = eclipticToRaDec(gx, gy, gz, d);
+  return { ...eq, ...horizontalFromRaDec(eq.ra, eq.dec, instant), magnitude, phaseAngle, distance:delta };
 }
 
 function sunSkyState(instant) {
@@ -914,6 +932,23 @@ function planetVisibilityText(p, sunAlt) {
   if (fx.clouds > .78 || fx.fog > .45 || fx.rain > .35 || fx.snow > .35) return 'astronomisch sichtbar, Wetter kann die Sicht verdecken';
   if (p.alt < 8) return 'sehr tief über dem Horizont';
   return 'bei dunklem Himmel sichtbar';
+}
+
+function planetVisualLight(p, sunAlt) {
+  const mag = Number.isFinite(p.magnitude) ? p.magnitude : 1;
+  const magLevel = Math.max(0.16, Math.min(1, (2.2 - mag) / 6.8));
+  const altitudeLevel = Math.max(0.28, Math.min(1, (p.alt + 1) / 18));
+  const fx = currentFx();
+  const weatherLevel = Math.max(0.18, 1 - (fx.clouds * .48 + fx.fog * .70 + fx.rain * .42 + fx.snow * .34));
+  const skyLevel = sunAlt > 0 ? .20 : sunAlt > -4 ? .36 : sunAlt > -8 ? .66 : 1;
+  const visibleLevel = Math.max(.06, Math.min(1, magLevel * altitudeLevel * weatherLevel * skyLevel));
+  const nightBoost = sunAlt <= -8 ? 1 : .88;
+  return {
+    opacity: Math.max(.26, Math.min(1, .25 + visibleLevel * .82)),
+    glow: (2.5 + 13 * magLevel * skyLevel * nightBoost).toFixed(1),
+    glowAlpha: Math.max(.10, Math.min(.86, .12 + magLevel * skyLevel * .72)).toFixed(2),
+    brightness: Math.max(.82, Math.min(1.38, .90 + magLevel * .48)).toFixed(2)
+  };
 }
 
 function planetPoint(hero, p) {
@@ -978,7 +1013,9 @@ function placePlanets() {
     const pt = planetPoint(hero, p);
     const dim = sun.alt > -4 ? ' dim' : '';
     const name = PLANET_META[p.key].name;
-    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px" aria-label="${name} anzeigen"><span class="planet-disc" aria-hidden="true"></span></button>`;
+    const light = planetVisualLight(p, sun.alt);
+    const style = `left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px;--planet-opacity:${light.opacity.toFixed(2)};--planet-glow:${light.glow}px;--planet-glow-alpha:${light.glowAlpha};--planet-brightness:${light.brightness}`;
+    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="${style}" aria-label="${name} anzeigen"><span class="planet-disc" aria-hidden="true"></span></button>`;
   }).join('');
 
   layer.querySelectorAll('.planet-dot').forEach(btn => {

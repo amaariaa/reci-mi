@@ -323,14 +323,19 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .planet-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
 .planet-dot { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--hero-ink); pointer-events: auto; display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
 .planet-dot:focus-visible { outline: 2px solid color-mix(in srgb, var(--hero-ink) 80%, transparent); outline-offset: 1px; }
-.planet-disc { position: relative; display: block; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 7px rgba(255,255,255,.42), 0 0 1px rgba(0,0,0,.55); transition: transform .18s ease, opacity .25s ease; }
+.planet-disc { position: relative; display: block; width: 12px; height: 12px; border-radius: 50%; opacity: var(--planet-opacity, .86); filter: brightness(var(--planet-brightness, 1)) drop-shadow(0 0 var(--planet-glow, 6px) rgba(var(--planet-glow-rgb, 255,255,255), var(--planet-glow-alpha, .38))); box-shadow: inset -1px -1px 2px rgba(0,0,0,.28), 0 0 1px rgba(0,0,0,.55); transition: transform .18s ease, opacity .25s ease, filter .25s ease; }
 .planet-dot:active .planet-disc { transform: scale(1.22); }
-.planet-dot.dim .planet-disc { opacity: .52; box-shadow: 0 0 3px rgba(255,255,255,.2); }
-.planet-mercury .planet-disc { width: 8px; height: 8px; background: radial-gradient(circle at 36% 30%, #eee 0 12%, #a9a8a4 35%, #656765 72%, #3f4141 100%); }
-.planet-venus .planet-disc { width: 13px; height: 13px; background: radial-gradient(circle at 35% 28%, #fff8dc 0 15%, #e9d49e 42%, #c4a873 75%, #8d744d 100%); box-shadow: 0 0 9px rgba(255,239,190,.7); }
-.planet-mars .planet-disc { width: 10px; height: 10px; background: radial-gradient(circle at 34% 28%, #f0a17e 0 12%, #c25d3f 42%, #8b3f31 72%, #552822 100%); }
-.planet-jupiter .planet-disc { width: 15px; height: 15px; background: repeating-linear-gradient(180deg, #ead5b5 0 2px, #b98561 2px 4px, #e7cba8 4px 6px, #9d725b 6px 8px); box-shadow: inset -3px -2px 4px rgba(60,45,35,.28), 0 0 8px rgba(255,234,205,.48); }
-.planet-saturn .planet-disc { width: 12px; height: 12px; background: radial-gradient(circle at 36% 30%, #f0ddb0, #c8a76d 68%, #876d49); }
+.planet-dot.dim .planet-disc { filter: brightness(calc(var(--planet-brightness, 1) * .92)) drop-shadow(0 0 min(4px, var(--planet-glow, 4px)) rgba(var(--planet-glow-rgb, 255,255,255), calc(var(--planet-glow-alpha, .25) * .55))); }
+.planet-mercury { --planet-glow-rgb: 220,226,232; }
+.planet-venus { --planet-glow-rgb: 255,241,196; }
+.planet-mars { --planet-glow-rgb: 231,116,77; }
+.planet-jupiter { --planet-glow-rgb: 255,225,190; }
+.planet-saturn { --planet-glow-rgb: 238,211,154; }
+.planet-mercury .planet-disc { width: 8px; height: 8px; background: radial-gradient(circle at 34% 28%, #f3f4f2 0 10%, #b9bab6 30%, #777875 62%, #444645 100%); }
+.planet-venus .planet-disc { width: 13px; height: 13px; background: radial-gradient(circle at 33% 26%, #fffdf3 0 13%, #f4e6bd 36%, #d4b97d 70%, #9a7d51 100%); }
+.planet-mars .planet-disc { width: 10px; height: 10px; background: radial-gradient(circle at 33% 27%, #f4b08a 0 10%, #cf6a47 38%, #943f2f 70%, #5b2823 100%); }
+.planet-jupiter .planet-disc { width: 15px; height: 15px; background: repeating-linear-gradient(180deg, #f1dec3 0 2px, #bd8c69 2px 4px, #ead0ad 4px 6px, #a6775d 6px 8px); box-shadow: inset -3px -2px 4px rgba(60,45,35,.30), inset 2px 1px 2px rgba(255,245,226,.22); }
+.planet-saturn .planet-disc { width: 12px; height: 12px; background: radial-gradient(circle at 34% 28%, #f5e6bb 0 12%, #d3b679 58%, #94764b 100%); }
 .planet-saturn .planet-disc::after { content: ""; position: absolute; left: 50%; top: 50%; width: 21px; height: 7px; border: 1.5px solid rgba(222,198,150,.9); border-left-color: rgba(222,198,150,.45); border-right-color: rgba(222,198,150,.45); border-radius: 50%; transform: translate(-50%, -50%) rotate(-13deg); box-shadow: 0 0 2px rgba(255,240,205,.22); }
 .planet-info { position: absolute; z-index: 4; transform: translate(-50%, -100%); width: max-content; max-width: min(270px, calc(100% - 36px)); padding: 8px 11px; border-radius: 13px; background: color-mix(in srgb, var(--sky-top) 78%, rgba(20,20,30,.72)); color: var(--hero-ink); border: 1px solid color-mix(in srgb, var(--hero-ink) 18%, transparent); backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); box-shadow: 0 7px 20px rgba(0,0,0,.18); pointer-events: none; text-align: left; }
 .planet-info.below { transform: translate(-50%, 0); }

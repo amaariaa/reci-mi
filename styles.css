@@ -500,3 +500,6 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .attach-item { display: flex; align-items: center; gap: 12px; }
 .attach-item .dot { width: 10px; height: 10px; }
 #pinSheet input { letter-spacing: 4px; font-size: 20px; }
+
+/* V3.4: Himmelsvorschau per Wischgeste, vertikales Scrollen bleibt normal */
+.hero { touch-action: pan-y; }

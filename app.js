@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.3.4';
+const APP_VERSION = '3.4';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -200,13 +200,14 @@ function placeOffsetMin(instant) {
   return Math.round(p.lon / 15) * 60;   // grobe Schätzung, wenn die Zeitzone unbekannt ist
 }
 // „Wanduhr“ des Ortes: ein Date, dessen lokale Felder die Ortszeit zeigen
-function nowForSky() {
+function nowForSky(dayOffset = 0) {
   const real = new Date();
   const off = placeOffsetMin(real);
   const sh = new Date(real.getTime() + off * 60000);
   const now = new Date(sh.getUTCFullYear(), sh.getUTCMonth(), sh.getUTCDate(), sh.getUTCHours(), sh.getUTCMinutes(), sh.getUTCSeconds());
   const p = previewMinutes();
   if (p !== null) now.setHours(Math.floor(p / 60), p % 60, 0, 0);
+  if (dayOffset) now.setDate(now.getDate() + dayOffset);
   return now;
 }
 // echter Zeitpunkt zu einer Ortszeit-Wanduhr
@@ -215,25 +216,27 @@ function instantOfSky(wall) {
   return guess;
 }
 
+const SKY_MAX_FUTURE_DAYS = 5;
+let skyDayOffset = 0;
+let skySwipeStart = null;
+let skySwipeJustHappened = false;
+
+function skyDayLabel(offset = skyDayOffset) {
+  if (offset === 0) return 'Heute';
+  if (offset === 1) return 'Morgen';
+  const d = nowForSky(offset);
+  return new Intl.DateTimeFormat('de-DE', { weekday: 'short' }).format(d).replace('.', '');
+}
+
 function updatePlaceClock() {
   const el = $('placeClock');
   if (!el) return;
   const p = getPlace();
   if (!p) { el.classList.add('hidden'); el.textContent = ''; return; }
-  const real = new Date();
-  let dateText = '', timeText = '';
-  if (p.tz) {
-    try {
-      dateText = new Intl.DateTimeFormat('de-DE', { timeZone: p.tz, day: '2-digit', month: '2-digit', year: 'numeric' }).format(real);
-      timeText = new Intl.DateTimeFormat('de-DE', { timeZone: p.tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(real);
-    } catch {}
-  }
-  if (!dateText || !timeText) {
-    const wall = nowForSky();
-    dateText = `${String(wall.getDate()).padStart(2, '0')}.${String(wall.getMonth() + 1).padStart(2, '0')}.${wall.getFullYear()}`;
-    timeText = `${String(wall.getHours()).padStart(2, '0')}:${String(wall.getMinutes()).padStart(2, '0')}`;
-  }
-  el.textContent = `${dateText} · ${timeText}`;
+  const wall = nowForSky(skyDayOffset);
+  const dateText = `${String(wall.getDate()).padStart(2, '0')}.${String(wall.getMonth() + 1).padStart(2, '0')}.${wall.getFullYear()}`;
+  const timeText = `${String(wall.getHours()).padStart(2, '0')}:${String(wall.getMinutes()).padStart(2, '0')}`;
+  el.textContent = `${skyDayLabel()} · ${dateText} · ${timeText}`;
   el.classList.remove('hidden');
 }
 
@@ -249,7 +252,7 @@ function skyStateAt(date) {
 
 let lastPhase = null;
 function applySky(fromWeather = false) {
-  const date = nowForSky();
+  const date = nowForSky(skyDayOffset);
   const { a, b, t, phase } = skyStateAt(date);
   const A = SKY[a], B = SKY[b];
   const root = document.documentElement.style;
@@ -347,6 +350,11 @@ function setPlace(p) {
     if (p) localStorage.setItem(LS_PLACE, JSON.stringify(p)); else localStorage.removeItem(LS_PLACE);
     localStorage.removeItem(LS_WEATHER);
   } catch {}
+  weatherCurrent = null;
+  weatherForecast = [];
+  weatherNow = null;
+  skyDayOffset = 0;
+  moonPassCache = null;
   applyPlaceGeo();
 }
 function applyPlaceGeo() {
@@ -390,33 +398,75 @@ function previewWeather() {
   return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' ? -4 : 12, name: 'Vorschau' };
 }
 
-let weatherNow = null;      // { code, cloud, temp, name, fx }
+let weatherNow = null;      // aktuell angezeigtes Wetter
+let weatherCurrent = null;  // echtes aktuelles Wetter des gewählten Ortes
+let weatherForecast = [];   // Tagesvorschau, Index 0 = heute
 function currentFx() { return weatherNow?.fx || describeWeather(0, 0, 10); }
+
+function weatherForView() {
+  const place = getPlace();
+  if (!place) return null;
+  if (skyDayOffset === 0) return weatherCurrent;
+  const f = weatherForecast[skyDayOffset];
+  if (!f) return { name: place.name, unavailable: true, fx: describeWeather(0, 0, 10) };
+  const tempMid = isFinite(f.max) && isFinite(f.min) ? (f.max + f.min) / 2 : (isFinite(f.max) ? f.max : 10);
+  return { ...f, name: place.name, temp: tempMid, forecast: true, fx: describeWeather(f.code, f.cloud ?? 0, tempMid) };
+}
+
+function applyWeatherForView() {
+  const prev = previewWeather();
+  if (prev) weatherNow = { ...prev, fx: describeWeather(prev.code, prev.cloud, prev.temp) };
+  else weatherNow = weatherForView();
+  applyWeatherFx();
+}
 
 async function refreshWeather(force = false) {
   const prev = previewWeather();
-  if (prev) { weatherNow = { ...prev, fx: describeWeather(prev.code, prev.cloud, prev.temp) }; applyWeatherFx(); return; }
+  if (prev) {
+    weatherCurrent = { ...prev, fx: describeWeather(prev.code, prev.cloud, prev.temp) };
+    weatherForecast = Array.from({ length: SKY_MAX_FUTURE_DAYS + 1 }, () => ({ code: prev.code, cloud: prev.cloud, max: prev.temp, min: prev.temp }));
+    applyWeatherForView();
+    return;
+  }
   const place = getPlace();
-  if (!place) { weatherNow = null; applyWeatherFx(); return; }
+  if (!place) {
+    weatherCurrent = null;
+    weatherForecast = [];
+    weatherNow = null;
+    applyWeatherFx();
+    return;
+  }
+  let cachedFresh = false;
   try {
     const cached = JSON.parse(localStorage.getItem(LS_WEATHER) || 'null');
     if (cached && cached.key === `${place.lat},${place.lon}`) {
-      weatherNow = { ...cached.w, name: place.name, fx: describeWeather(cached.w.code, cached.w.cloud, cached.w.temp) };
-      applyWeatherFx();
-      if (!force && Date.now() - cached.t < WEATHER_MAX_AGE) return;
+      if (cached.w) weatherCurrent = { ...cached.w, name: place.name, fx: describeWeather(cached.w.code, cached.w.cloud, cached.w.temp) };
+      weatherForecast = Array.isArray(cached.forecast) ? cached.forecast : [];
+      applyWeatherForView();
+      cachedFresh = Date.now() - cached.t < WEATHER_MAX_AGE;
+      if (!force && cachedFresh && weatherForecast.length >= SKY_MAX_FUTURE_DAYS + 1) return;
     }
   } catch {}
   if (!navigator.onLine) return;
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat.toFixed(3)}&longitude=${place.lon.toFixed(3)}&current=temperature_2m,weather_code,cloud_cover&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat.toFixed(3)}&longitude=${place.lon.toFixed(3)}&current=temperature_2m,weather_code,cloud_cover&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=${SKY_MAX_FUTURE_DAYS + 1}&timezone=auto`;
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
-    if (data.timezone && place.tz !== data.timezone) { try { localStorage.setItem(LS_PLACE, JSON.stringify({ ...place, tz: data.timezone })); } catch {} applySky(); placeSun(); placeMoon(); }
+    if (data.timezone && place.tz !== data.timezone) {
+      try { localStorage.setItem(LS_PLACE, JSON.stringify({ ...place, tz: data.timezone })); } catch {}
+      applyPlaceGeo();
+    }
     const w = { code: data.current.weather_code, cloud: data.current.cloud_cover, temp: data.current.temperature_2m };
-    localStorage.setItem(LS_WEATHER, JSON.stringify({ key: `${place.lat},${place.lon}`, t: Date.now(), w }));
-    weatherNow = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp) };
-    applyWeatherFx();
+    const times = data.daily?.time || [];
+    const codes = data.daily?.weather_code || [];
+    const maxs = data.daily?.temperature_2m_max || [];
+    const mins = data.daily?.temperature_2m_min || [];
+    const forecast = times.map((date, i) => ({ date, code: codes[i], max: maxs[i], min: mins[i], cloud: 0 }));
+    localStorage.setItem(LS_WEATHER, JSON.stringify({ key: `${place.lat},${place.lon}`, t: Date.now(), w, forecast }));
+    weatherCurrent = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp) };
+    weatherForecast = forecast;
+    applyWeatherForView();
   } catch { /* offline oder Dienst nicht erreichbar: alter Stand bleibt */ }
 }
 
@@ -442,7 +492,7 @@ function placeSun() {
   const hero = document.querySelector('.hero');
   const sun = $('sun');
   if (!hero || !sun) return;
-  const now = nowForSky();
+  const now = nowForSky(skyDayOffset);
   const { rise, set } = sunTimes(now);
   $('sunriseLabel').textContent = minutesToClock(rise);
   $('sunsetLabel').textContent = minutesToClock(set);
@@ -699,7 +749,7 @@ function placeMoon() {
   const hero = document.querySelector('.hero');
   const moonOrb = $('moonOrb');
   if (!hero || !moonOrb) return;
-  const wall = nowForSky();
+  const wall = nowForSky(skyDayOffset);
   const now = instantOfSky(wall);
   const t = now.getTime();
   if (!moonPassCache || moonPassCache.geo !== GEO.lat + ',' + GEO.lon || t < moonPassCache.from || t > moonPassCache.to) {
@@ -710,8 +760,16 @@ function placeMoon() {
   const { pass } = moonPassCache;
   const st = moonState(now);
   const clock = d => { if (!d) return '--:--'; const m = wrapMinutes(Math.round(d.getTime() / 60000) + placeOffsetMin(d)); return minutesToClock(m); };
-  if (els.moonriseLabel) els.moonriseLabel.textContent = clock(pass.rise);
-  if (els.moonsetLabel) els.moonsetLabel.textContent = clock(pass.set);
+  let labelRise = pass.rise, labelSet = pass.set;
+  if (skyDayOffset > 0) {
+    const dayStartWall = new Date(wall.getFullYear(), wall.getMonth(), wall.getDate(), 0, 0, 0, 0);
+    const dayEndWall = new Date(dayStartWall); dayEndWall.setDate(dayEndWall.getDate() + 1);
+    const ev = moonEvents(instantOfSky(dayStartWall), instantOfSky(dayEndWall));
+    labelRise = ev.find(e => e.type === 'rise')?.time || null;
+    labelSet = ev.find(e => e.type === 'set')?.time || null;
+  }
+  if (els.moonriseLabel) els.moonriseLabel.textContent = clock(labelRise);
+  if (els.moonsetLabel) els.moonsetLabel.textContent = clock(labelSet);
   if (els.moonPhaseLabel) els.moonPhaseLabel.textContent = `${moonPhaseName(st.age)} · ${Math.round(st.illum * 100)} %`;
   window.__moonDebug = { alt: st.alt, az: st.az, illum: st.illum, limb: st.limbAngle, rise: pass.rise && pass.rise.toString(), set: pass.set && pass.set.toString(), up: pass.up };
 
@@ -756,7 +814,13 @@ function applyWeatherFx() {
   const label = $('weatherLabel');
   if (label) {
     const place = getPlace();
-    if (weatherNow && place) {
+    if (weatherNow?.unavailable && place) {
+      label.textContent = `${place.name}, Vorschau nicht verfügbar`;
+      label.classList.remove('link');
+    } else if (weatherNow?.forecast && place) {
+      label.textContent = `${place.name}, ${Math.round(weatherNow.max)}°/${Math.round(weatherNow.min)}°, ${weatherNow.fx.label}`;
+      label.classList.remove('link');
+    } else if (weatherNow && place) {
       label.textContent = `${place.name}, ${Math.round(weatherNow.temp)}°, ${weatherNow.fx.label}`;
       label.classList.remove('link');
     } else if (weatherNow) {
@@ -845,8 +909,47 @@ function startPrecip() {
   precipAnim = requestAnimationFrame(loop);
 }
 
+function setSkyDayOffset(next) {
+  const clamped = Math.max(0, Math.min(SKY_MAX_FUTURE_DAYS, next));
+  if (clamped === skyDayOffset) return;
+  skyDayOffset = clamped;
+  moonPassCache = null;
+  skySwipeJustHappened = true;
+  setTimeout(() => { skySwipeJustHappened = false; }, 350);
+  applyWeatherForView();
+}
+
+function resetSkyDayOffset(render = true) {
+  skyDayOffset = 0;
+  moonPassCache = null;
+  weatherNow = previewWeather() ? { ...previewWeather(), fx: describeWeather(previewWeather().code, previewWeather().cloud, previewWeather().temp) } : weatherCurrent;
+  if (render) applyWeatherFx();
+}
+
+function initSkySwipe() {
+  const hero = document.querySelector('.hero');
+  if (!hero || hero.dataset.swipeReady) return;
+  hero.dataset.swipeReady = '1';
+  hero.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || e.target.closest('#menuBtn')) { skySwipeStart = null; return; }
+    const t = e.touches[0];
+    skySwipeStart = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+  hero.addEventListener('touchend', e => {
+    if (!skySwipeStart || !e.changedTouches.length) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - skySwipeStart.x;
+    const dy = t.clientY - skySwipeStart.y;
+    skySwipeStart = null;
+    if (Math.abs(dx) < 52 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+    if (dx < 0) setSkyDayOffset(skyDayOffset + 1);
+    else setSkyDayOffset(skyDayOffset - 1);
+  }, { passive: true });
+}
+
 function initSkyExtras() {
   const hero = document.querySelector('.hero');
+  initSkySwipe();
   if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); fitGreeting(); }).observe(hero);
   if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
@@ -1442,6 +1545,7 @@ function onVisible() {
 }
 
 function lockApp(message = '') {
+  resetSkyDayOffset(true);
   versionCheckpoint('leave');
   openedProtected.clear();
   stopRecognition();
@@ -1636,6 +1740,8 @@ function configureLockScreen() {
 }
 
 function showUnlocked(resume = { screen: 'home' }) {
+  resetSkyDayOffset(false);
+  applyWeatherForView();
   ensureInboxKeys().then(openInbox).then(n => {
     if (n) { renderTopics(); showToast(n === 1 ? 'Eine Schnellnotiz wurde einsortiert' : `${n} Schnellnotizen wurden einsortiert`, 3000); }
   }).catch(() => {});
@@ -4196,7 +4302,7 @@ function wireEvents() {
   $('placeGpsBtn').addEventListener('click', useMyLocation);
   $('placeOffBtn').addEventListener('click', () => choosePlace(null));
   $('placeCancelBtn').addEventListener('click', () => closeSheet($('placeSheet')));
-  $('weatherLabel').addEventListener('click', () => { if (!getPlace() && !previewWeather()) openPlaceSheet(); });
+  $('weatherLabel').addEventListener('click', () => { if (skySwipeJustHappened) return; if (!getPlace() && !previewWeather()) openPlaceSheet(); });
   els.nameMenuBtn.addEventListener('click', () => { els.nameInput.value = userName(); openSheet(els.nameSheet); setTimeout(() => els.nameInput.focus(), 80); });
   els.nameForm.addEventListener('submit', async e => {
     e.preventDefault();

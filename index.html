@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#141A36" />
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
-  <link rel="manifest" href="manifest.webmanifest?v=3.3.1" />
+  <link rel="manifest" href="manifest.webmanifest?v=3.3.2" />
   <link rel="icon" href="mond-192.png" />
   <link rel="apple-touch-icon" href="mond-192.png" />
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=3.3.1" />
+  <link rel="stylesheet" href="styles.css?v=3.3.2" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -76,7 +76,7 @@
             <span id="moonPhaseLabel" class="moon-phase-label"></span>
             <span class="moon-time" title="Monduntergang"><span class="sr">Monduntergang </span><span id="moonsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M12.6 9.2a5 5 0 1 0 2.7 8.8 4 4 0 0 1-2.7-8.8Z"/><path d="M18.5 5v7M16.2 9.7l2.3 2.3 2.3-2.3"/></svg></span>
           </div>
-          <p id="placeClock" class="place-clock hidden"></p>
+          <div class="place-row"><span aria-hidden="true"></span><p id="placeClock" class="place-clock hidden"></p><span aria-hidden="true"></span></div>
         </div>
       </header>
 
@@ -304,7 +304,7 @@
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 3.3.1</p>
+      <p class="sheet-note version">Version 3.3.2</p>
     </dialog>
 
     <!-- Blatt: Archiv -->
@@ -507,6 +507,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=3.3.1" defer></script>
+  <script src="app.js?v=3.3.2" defer></script>
 </body>
 </html>

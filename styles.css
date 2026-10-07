@@ -96,7 +96,7 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .hero-top { position: relative; display: flex; justify-content: flex-end; align-items: center; }
 .brand { font: italic 500 27px var(--serif); color: var(--hero-ink); }
 .hero-btn { background: color-mix(in srgb, var(--hero-ink) 12%, transparent); color: var(--hero-ink); }
-.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: -2px; }
+.hero-main { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: -20px; }
 .greeting { margin: 0; font: 500 26px/1.2 var(--serif); color: var(--hero-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hero-text { flex: 1; min-width: 0; }
 .hero-moon { width: 72px; height: 72px; flex: 0 0 auto; margin-right: 4px; }

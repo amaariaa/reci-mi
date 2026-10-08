@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.1';
+const APP_VERSION = '3.5.3';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -45,7 +45,7 @@ const $ = id => document.getElementById(id);
 const els = {};
 ['lockScreen', 'homeScreen', 'editorScreen', 'trashScreen',
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
- 'menuBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
+ 'menuBtn', 'quickLockHomeBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
  'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'textModeBtn', 'listModeBtn', 'textPane', 'topicText', 'checklistPane', 'checklistForm', 'checklistInput', 'checklistAddBtn', 'checklistList', 'checklistEmpty', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
@@ -807,6 +807,8 @@ const PLANET_META = {
   saturn:  { name: 'Saturn' }
 };
 let planetInfoTimer = null;
+let activePlanetInfoKey = '';
+let planetInfoDrag = null;
 
 function astroNorm360(x) { return ((x % 360) + 360) % 360; }
 function astroNorm180(x) { const n = astroNorm360(x); return n > 180 ? n - 360 : n; }
@@ -968,24 +970,116 @@ function planetPoint(hero, p) {
   };
 }
 
+function hidePlanetInfo() {
+  const info = $('planetInfo');
+  if (!info) return;
+  info.classList.add('hidden');
+  info.classList.remove('below', 'dragging');
+  activePlanetInfoKey = '';
+  planetInfoDrag = null;
+  clearTimeout(planetInfoTimer);
+}
+
+function clampPlanetInfoPosition(left, top) {
+  const hero = document.querySelector('.hero');
+  const info = $('planetInfo');
+  if (!hero || !info) return { left, top };
+  const edge = 12;
+  const maxLeft = Math.max(edge, hero.clientWidth - info.offsetWidth - edge);
+  const maxTop = Math.max(edge, hero.clientHeight - info.offsetHeight - edge);
+  return {
+    left: Math.max(edge, Math.min(maxLeft, left)),
+    top: Math.max(edge, Math.min(maxTop, top))
+  };
+}
+
 function showPlanetInfo(btn, p, sunAlt) {
   const hero = document.querySelector('.hero');
   const info = $('planetInfo');
   if (!hero || !info || !btn) return;
-  const name = PLANET_META[btn.dataset.planet]?.name || btn.dataset.planet;
+  const key = btn.dataset.planet || '';
+  const name = PLANET_META[key]?.name || key;
   const direction = planetDirection(p.az);
   info.innerHTML = `<strong>${name}</strong><span>${direction} · ${Math.round(p.alt)}° über Horizont · ${planetVisibilityText(p, sunAlt)}</span>`;
-  info.classList.remove('hidden', 'below');
-  requestAnimationFrame(() => {
-    const hr = hero.getBoundingClientRect(), br = btn.getBoundingClientRect();
-    const x = Math.max(92, Math.min(hero.clientWidth - 92, br.left - hr.left + br.width / 2));
-    const by = br.top - hr.top;
-    info.style.left = `${x}px`;
-    if (by < 92) { info.classList.add('below'); info.style.top = `${Math.min(hero.clientHeight - 104, by + br.height + 8)}px`; }
-    else { info.style.top = `${by - 8}px`; }
-  });
+  info.classList.remove('hidden', 'below', 'dragging');
+  activePlanetInfoKey = key;
   clearTimeout(planetInfoTimer);
-  planetInfoTimer = setTimeout(() => info.classList.add('hidden'), 3600);
+
+  requestAnimationFrame(() => {
+    const hr = hero.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    const edge = 12;
+    const gap = 8;
+    const iw = Math.min(info.offsetWidth, Math.max(0, hero.clientWidth - edge * 2));
+    const ih = info.offsetHeight;
+    const centerX = br.left - hr.left + br.width / 2;
+    const maxLeft = Math.max(edge, hero.clientWidth - iw - edge);
+    const left = Math.max(edge, Math.min(maxLeft, centerX - iw / 2));
+    const planetTop = br.top - hr.top;
+    const planetBottom = planetTop + br.height;
+    const above = planetTop - gap - ih;
+    const below = planetBottom + gap;
+    let top;
+
+    if (above >= edge) {
+      top = above;
+    } else if (below + ih <= hero.clientHeight - edge) {
+      top = below;
+      info.classList.add('below');
+    } else {
+      top = Math.max(edge, Math.min(hero.clientHeight - ih - edge, below));
+      info.classList.add('below');
+    }
+
+    const pos = clampPlanetInfoPosition(left, top);
+    info.style.left = `${pos.left}px`;
+    info.style.top = `${pos.top}px`;
+  });
+}
+
+function initPlanetInfoDrag() {
+  const info = $('planetInfo');
+  const hero = document.querySelector('.hero');
+  if (!info || !hero || info.dataset.dragReady) return;
+  info.dataset.dragReady = '1';
+
+  info.addEventListener('pointerdown', e => {
+    if (info.classList.contains('hidden') || e.button > 0) return;
+    const hr = hero.getBoundingClientRect();
+    const ir = info.getBoundingClientRect();
+    planetInfoDrag = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      left: ir.left - hr.left,
+      top: ir.top - hr.top,
+      moved: false
+    };
+    info.classList.add('dragging');
+    info.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+
+  info.addEventListener('pointermove', e => {
+    const drag = planetInfoDrag;
+    if (!drag || drag.id !== e.pointerId) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 3) drag.moved = true;
+    const pos = clampPlanetInfoPosition(drag.left + dx, drag.top + dy);
+    info.style.left = `${pos.left}px`;
+    info.style.top = `${pos.top}px`;
+    e.preventDefault();
+  });
+
+  const finish = e => {
+    if (!planetInfoDrag || planetInfoDrag.id !== e.pointerId) return;
+    info.releasePointerCapture?.(e.pointerId);
+    planetInfoDrag = null;
+    info.classList.remove('dragging');
+  };
+  info.addEventListener('pointerup', finish);
+  info.addEventListener('pointercancel', finish);
 }
 
 function placePlanets() {
@@ -993,8 +1087,7 @@ function placePlanets() {
   const layer = $('planetLayer');
   const info = $('planetInfo');
   if (!hero || !layer) return;
-  if (info) info.classList.add('hidden');
-  clearTimeout(planetInfoTimer);
+  const openPlanetKey = info && !info.classList.contains('hidden') ? activePlanetInfoKey : '';
   const instant = instantOfSky(nowForSky(skyDayOffset));
   const sun = sunSkyState(instant);
   const current = Object.keys(PLANET_META).map(key => {
@@ -1004,7 +1097,7 @@ function placePlanets() {
 
   if (!current.length) {
     layer.innerHTML = '';
-    if (info) info.classList.add('hidden');
+    if (info) hidePlanetInfo();
     return;
   }
 
@@ -1021,10 +1114,21 @@ function placePlanets() {
   layer.querySelectorAll('.planet-dot').forEach(btn => {
     btn.addEventListener('click', () => {
       if (skySwipeJustHappened) return;
-      const p = current.find(x => x.key === btn.dataset.planet);
+      const key = btn.dataset.planet;
+      if (activePlanetInfoKey === key && info && !info.classList.contains('hidden')) {
+        hidePlanetInfo();
+        return;
+      }
+      const p = current.find(x => x.key === key);
       if (p) showPlanetInfo(btn, p, sun.alt);
     });
   });
+  if (openPlanetKey) {
+    const btn = layer.querySelector(`[data-planet="${openPlanetKey}"]`);
+    const p = current.find(x => x.key === openPlanetKey);
+    if (btn && p && info && !info.classList.contains('hidden')) showPlanetInfo(btn, p, sun.alt);
+    else if (!p) hidePlanetInfo();
+  }
   if (oldFocus) layer.querySelector(`[data-planet="${oldFocus}"]`)?.focus({ preventScroll:true });
 }
 
@@ -1165,7 +1269,7 @@ function initSkySwipe() {
   if (!hero || hero.dataset.swipeReady) return;
   hero.dataset.swipeReady = '1';
   hero.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1 || e.target.closest('#menuBtn')) { skySwipeStart = null; return; }
+    if (e.touches.length !== 1 || e.target.closest('#menuBtn, #quickLockHomeBtn, #planetInfo, .planet-dot')) { skySwipeStart = null; return; }
     const t = e.touches[0];
     skySwipeStart = { x: t.clientX, y: t.clientY };
   }, { passive: true });
@@ -1184,6 +1288,7 @@ function initSkySwipe() {
 function initSkyExtras() {
   const hero = document.querySelector('.hero');
   initSkySwipe();
+  initPlanetInfoDrag();
   if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); placePlanets(); fitGreeting(); }).observe(hero);
   if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
@@ -4565,6 +4670,7 @@ function wireEvents() {
     if (file) importBackup(file);
   });
   els.lockBtn.addEventListener('click', () => lockApp('Reci mi ist gesperrt.'));
+  els.quickLockHomeBtn?.addEventListener('click', () => lockApp('Reci mi ist gesperrt.'));
 
   els.confirmCancelBtn.addEventListener('click', () => closeSheet(els.confirmSheet));
   els.confirmOkBtn.addEventListener('click', () => {

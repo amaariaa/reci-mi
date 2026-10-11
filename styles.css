@@ -528,3 +528,11 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 
 /* V3.4: Himmelsvorschau per Wischgeste, vertikales Scrollen bleibt normal */
 .hero { touch-action: pan-y; }
+
+
+/* V3.5.4: Himmelsobjekte bleiben auch hinter Texten antippbar, ohne die Optik zu verschieben. */
+.hero-main { pointer-events: none; }
+.hero-top { pointer-events: none; }
+.hero-top .hero-btn { pointer-events: auto; }
+.sky-rows { pointer-events: none; }
+.sky-rows #weatherLabel { pointer-events: auto; }

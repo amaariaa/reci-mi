@@ -530,9 +530,18 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .hero { touch-action: pan-y; }
 
 
-/* V3.5.4: Himmelsobjekte bleiben auch hinter Texten antippbar, ohne die Optik zu verschieben. */
+/* V3.5.5: Himmelsobjekte bleiben auch hinter Texten antippbar, ohne die Optik zu verschieben. */
 .hero-main { pointer-events: none; }
 .hero-top { pointer-events: none; }
 .hero-top .hero-btn { pointer-events: auto; }
 .sky-rows { pointer-events: none; }
 .sky-rows #weatherLabel { pointer-events: auto; }
+
+
+/* V3.5.5: Sonne und Mond antippbar, gemeinsame schwebende Himmelsinfo */
+.celestial-tap { position:absolute; z-index:1; transform:translate(-50%,-50%); border:0; padding:0; border-radius:50%; background:transparent; pointer-events:auto; -webkit-tap-highlight-color:transparent; }
+.sun-tap { width:64px; height:64px; }
+.moon-tap { width:58px; height:58px; }
+.celestial-tap:focus-visible { outline:2px solid color-mix(in srgb, var(--hero-ink) 80%, transparent); outline-offset:2px; }
+.planet-info .sky-info-link { display:inline-flex; align-items:center; min-height:32px; margin-top:7px; padding:4px 8px; border-radius:10px; color:var(--hero-ink); background:color-mix(in srgb, var(--hero-ink) 9%, transparent); text-decoration:none; font:600 11px/1.2 var(--sans); touch-action:manipulation; user-select:auto; -webkit-user-select:auto; }
+.planet-info .sky-info-link:focus-visible { outline:2px solid color-mix(in srgb, var(--hero-ink) 75%, transparent); outline-offset:1px; }

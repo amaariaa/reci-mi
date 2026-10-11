@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.4';
+const APP_VERSION = '3.5.5';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -45,7 +45,7 @@ const $ = id => document.getElementById(id);
 const els = {};
 ['lockScreen', 'homeScreen', 'editorScreen', 'trashScreen',
  'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
- 'menuBtn', 'quickLockHomeBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'moonOrb', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
+ 'menuBtn', 'quickLockHomeBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'sunTap', 'moonOrb', 'moonTap', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
  'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'textModeBtn', 'listModeBtn', 'textPane', 'topicText', 'checklistPane', 'checklistForm', 'checklistInput', 'checklistAddBtn', 'checklistList', 'checklistEmpty', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
  'editBtn', 'copyBtn', 'micBtn', 'readBtn', 'deleteBtn',
@@ -504,11 +504,13 @@ function placeSun() {
   const f = (minutes - rise) / (set - rise);
   const up = f > -0.03 && f < 1.03;
   sun.classList.toggle('hidden', !up);
-  if (!up) return;
+  if (els.sunTap) els.sunTap.classList.toggle('hidden', !up);
+  if (!up) { if (activePlanetInfoKey === 'sun') hidePlanetInfo(); return; }
   const p = arcPoint(arc, f);
   const alt = p.alt;                                   // 0 am Horizont, 1 mittags
   sun.style.left = `${p.x}px`;
   sun.style.top = `${p.y + (f < 0 || f > 1 ? 10 : 0)}px`;
+  if (els.sunTap) { els.sunTap.style.left = `${p.x}px`; els.sunTap.style.top = `${p.y + (f < 0 || f > 1 ? 10 : 0)}px`; }
   // tief = warm und größer, hoch = weißgelb
   sun.style.setProperty('--sun-core', mixHex('#FFB866', '#FFFBEA', Math.min(1, alt * 1.6)));
   sun.style.setProperty('--sun-halo', mixHex('#FF9A4D', '#FFF1C2', Math.min(1, alt * 1.4)));
@@ -776,7 +778,8 @@ function placeMoon() {
 
   const up = pass.up && pass.rise && pass.set;
   moonOrb.classList.toggle('hidden', !up);
-  if (!up) return;
+  if (els.moonTap) els.moonTap.classList.toggle('hidden', !up);
+  if (!up) { if (activePlanetInfoKey === 'moon') hidePlanetInfo(); return; }
   const arc = skyArc(hero);
   if (!arc.W || !arc.H) return;
   const f = (t - pass.rise.getTime()) / (pass.set.getTime() - pass.rise.getTime());
@@ -784,6 +787,7 @@ function placeMoon() {
   moonOrb.style.left = `${p.x}px`;
   moonOrb.style.top = `${p.y}px`;
   moonOrb.style.setProperty('--moon-size', `${Math.round(104 - p.alt * 8)}px`);
+  if (els.moonTap) { const hit = Math.round(62 - p.alt * 4); els.moonTap.style.left = `${p.x}px`; els.moonTap.style.top = `${p.y}px`; els.moonTap.style.width = `${hit}px`; els.moonTap.style.height = `${hit}px`; }
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   moonOrb.style.setProperty('--moon-earthshine', night ? '.1' : '.04');
   moonOrb.style.setProperty('--moon-wash', night ? '0' : '.28');
@@ -800,12 +804,95 @@ function placeMoon() {
    Niedrigpräzise Bahnelemente für die visuelle Orientierung im Himmelsbereich.
    Angezeigt werden die fünf klassischen, grundsätzlich freiäugig sichtbaren Planeten. */
 const PLANET_META = {
-  mercury: { name: 'Merkur' },
-  venus:   { name: 'Venus' },
-  mars:    { name: 'Mars' },
-  jupiter: { name: 'Jupiter' },
-  saturn:  { name: 'Saturn' }
+  mercury: { name: 'Merkur', url: 'https://de.wikipedia.org/wiki/Merkur_(Planet)' },
+  venus:   { name: 'Venus', url: 'https://de.wikipedia.org/wiki/Venus_(Planet)' },
+  mars:    { name: 'Mars', url: 'https://de.wikipedia.org/wiki/Mars_(Planet)' },
+  jupiter: { name: 'Jupiter', url: 'https://de.wikipedia.org/wiki/Jupiter_(Planet)' },
+  saturn:  { name: 'Saturn', url: 'https://de.wikipedia.org/wiki/Saturn_(Planet)' }
 };
+const CELESTIAL_URLS = {
+  sun: 'https://de.wikipedia.org/wiki/Sonne',
+  moon: 'https://de.wikipedia.org/wiki/Mond'
+};
+const AU_KM = 149597870.7;
+
+function formatDistanceKm(km) {
+  if (!Number.isFinite(km)) return '–';
+  if (km >= 10000000) return `${(km / 1000000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mio. km`;
+  return `${Math.round(km).toLocaleString('de-DE')} km`;
+}
+function formatDaylightMinutes(mins) {
+  const m = Math.max(0, Math.round(mins));
+  return `${Math.floor(m / 60)} Std. ${String(m % 60).padStart(2, '0')} Min.`;
+}
+function infoLink(url) {
+  return `<a class="sky-info-link" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="Mehr Informationen im Internet öffnen">ⓘ Mehr erfahren</a>`;
+}
+function setSkyInfoContent(html, key) {
+  const info = $('planetInfo');
+  if (!info) return;
+  info.innerHTML = html;
+  activePlanetInfoKey = key;
+}
+function positionSkyInfoNear(btn) {
+  const hero = document.querySelector('.hero');
+  const info = $('planetInfo');
+  if (!hero || !info || !btn) return;
+  info.classList.remove('hidden', 'below', 'dragging');
+  clearTimeout(planetInfoTimer);
+  requestAnimationFrame(() => {
+    const hr = hero.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    const edge = 12, gap = 8;
+    const iw = Math.min(info.offsetWidth, Math.max(0, hero.clientWidth - edge * 2));
+    const ih = info.offsetHeight;
+    const centerX = br.left - hr.left + br.width / 2;
+    const maxLeft = Math.max(edge, hero.clientWidth - iw - edge);
+    const left = Math.max(edge, Math.min(maxLeft, centerX - iw / 2));
+    const objectTop = br.top - hr.top;
+    const objectBottom = objectTop + br.height;
+    const above = objectTop - gap - ih;
+    const below = objectBottom + gap;
+    let top;
+    if (above >= edge) top = above;
+    else if (below + ih <= hero.clientHeight - edge) { top = below; info.classList.add('below'); }
+    else { top = Math.max(edge, Math.min(hero.clientHeight - ih - edge, below)); info.classList.add('below'); }
+    const pos = clampPlanetInfoPosition(left, top);
+    info.style.left = `${pos.left}px`;
+    info.style.top = `${pos.top}px`;
+  });
+}
+function showSunInfo(btn) {
+  const wall = nowForSky(skyDayOffset);
+  const instant = instantOfSky(wall);
+  const p = sunSkyState(instant);
+  const d = astroJulian(instant) - 2451543.5;
+  const distKm = sunGeoXYZ(d).r * AU_KM;
+  const { rise, set } = sunTimes(wall);
+  const dir = planetDirection(p.az);
+  const altitude = p.alt >= 0 ? `${Math.round(p.alt)}° über Horizont` : `${Math.abs(Math.round(p.alt))}° unter Horizont`;
+  const daylight = formatDaylightMinutes(set - rise);
+  setSkyInfoContent(`<strong>Sonne</strong><span>${dir} · ${altitude}</span><span>Entfernung: ${formatDistanceKm(distKm)}</span><span>Aufgang ${minutesToClock(rise)} · Untergang ${minutesToClock(set)}</span><span>Tageslänge: ${daylight}</span>${infoLink(CELESTIAL_URLS.sun)}`, 'sun');
+  positionSkyInfoNear(btn);
+}
+function showMoonInfo(btn) {
+  const wall = nowForSky(skyDayOffset);
+  const instant = instantOfSky(wall);
+  const st = moonState(instant);
+  const dir = planetDirection(st.az);
+  const altitude = st.alt >= 0 ? `${Math.round(st.alt)}° über Horizont` : `${Math.abs(Math.round(st.alt))}° unter Horizont`;
+  const rise = els.moonriseLabel?.textContent || '--:--';
+  const set = els.moonsetLabel?.textContent || '--:--';
+  setSkyInfoContent(`<strong>Mond</strong><span>${moonPhaseName(st.age)} · ${Math.round(st.illum * 100)} % beleuchtet</span><span>${dir} · ${altitude}</span><span>Entfernung: ${formatDistanceKm(st.distKm)}</span><span>Aufgang ${rise} · Untergang ${set}</span>${infoLink(CELESTIAL_URLS.moon)}`, 'moon');
+  positionSkyInfoNear(btn);
+}
+function toggleCelestialInfo(key, btn) {
+  const info = $('planetInfo');
+  if (activePlanetInfoKey === key && info && !info.classList.contains('hidden')) { hidePlanetInfo(); return; }
+  if (key === 'sun') showSunInfo(btn);
+  else if (key === 'moon') showMoonInfo(btn);
+}
+
 let planetInfoTimer = null;
 let activePlanetInfoKey = '';
 let planetInfoDrag = null;
@@ -994,47 +1081,16 @@ function clampPlanetInfoPosition(left, top) {
 }
 
 function showPlanetInfo(btn, p, sunAlt) {
-  const hero = document.querySelector('.hero');
   const info = $('planetInfo');
-  if (!hero || !info || !btn) return;
+  if (!info || !btn) return;
   const key = btn.dataset.planet || '';
-  const name = PLANET_META[key]?.name || key;
+  const meta = PLANET_META[key];
+  const name = meta?.name || key;
   const direction = planetDirection(p.az);
-  info.innerHTML = `<strong>${name}</strong><span>${direction} · ${Math.round(p.alt)}° über Horizont · ${planetVisibilityText(p, sunAlt)}</span>`;
-  info.classList.remove('hidden', 'below', 'dragging');
-  activePlanetInfoKey = key;
-  clearTimeout(planetInfoTimer);
-
-  requestAnimationFrame(() => {
-    const hr = hero.getBoundingClientRect();
-    const br = btn.getBoundingClientRect();
-    const edge = 12;
-    const gap = 8;
-    const iw = Math.min(info.offsetWidth, Math.max(0, hero.clientWidth - edge * 2));
-    const ih = info.offsetHeight;
-    const centerX = br.left - hr.left + br.width / 2;
-    const maxLeft = Math.max(edge, hero.clientWidth - iw - edge);
-    const left = Math.max(edge, Math.min(maxLeft, centerX - iw / 2));
-    const planetTop = br.top - hr.top;
-    const planetBottom = planetTop + br.height;
-    const above = planetTop - gap - ih;
-    const below = planetBottom + gap;
-    let top;
-
-    if (above >= edge) {
-      top = above;
-    } else if (below + ih <= hero.clientHeight - edge) {
-      top = below;
-      info.classList.add('below');
-    } else {
-      top = Math.max(edge, Math.min(hero.clientHeight - ih - edge, below));
-      info.classList.add('below');
-    }
-
-    const pos = clampPlanetInfoPosition(left, top);
-    info.style.left = `${pos.left}px`;
-    info.style.top = `${pos.top}px`;
-  });
+  const distKm = p.distance * AU_KM;
+  const mag = Number.isFinite(p.magnitude) ? p.magnitude.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '–';
+  setSkyInfoContent(`<strong>${name}</strong><span>${direction} · ${Math.round(p.alt)}° über Horizont · ${planetVisibilityText(p, sunAlt)}</span><span>Entfernung: ${formatDistanceKm(distKm)} · Helligkeit ${mag} mag</span>${meta?.url ? infoLink(meta.url) : ''}`, key);
+  positionSkyInfoNear(btn);
 }
 
 function initPlanetInfoDrag() {
@@ -1044,7 +1100,7 @@ function initPlanetInfoDrag() {
   info.dataset.dragReady = '1';
 
   info.addEventListener('pointerdown', e => {
-    if (info.classList.contains('hidden') || e.button > 0) return;
+    if (info.classList.contains('hidden') || e.button > 0 || e.target.closest('a, button')) return;
     const hr = hero.getBoundingClientRect();
     const ir = info.getBoundingClientRect();
     planetInfoDrag = {
@@ -1087,7 +1143,7 @@ function placePlanets() {
   const layer = $('planetLayer');
   const info = $('planetInfo');
   if (!hero || !layer) return;
-  const openPlanetKey = info && !info.classList.contains('hidden') ? activePlanetInfoKey : '';
+  const openPlanetKey = info && !info.classList.contains('hidden') && PLANET_META[activePlanetInfoKey] ? activePlanetInfoKey : '';
   const instant = instantOfSky(nowForSky(skyDayOffset));
   const sun = sunSkyState(instant);
   const current = Object.keys(PLANET_META).map(key => {
@@ -1097,7 +1153,7 @@ function placePlanets() {
 
   if (!current.length) {
     layer.innerHTML = '';
-    if (info) hidePlanetInfo();
+    if (info && PLANET_META[activePlanetInfoKey]) hidePlanetInfo();
     return;
   }
 
@@ -1251,6 +1307,7 @@ function setSkyDayOffset(next) {
   const clamped = Math.max(0, Math.min(SKY_MAX_FUTURE_DAYS, next));
   if (clamped === skyDayOffset) return;
   skyDayOffset = clamped;
+  if (activePlanetInfoKey === 'sun' || activePlanetInfoKey === 'moon') hidePlanetInfo();
   moonPassCache = null;
   skySwipeJustHappened = true;
   setTimeout(() => { skySwipeJustHappened = false; }, 350);
@@ -1269,7 +1326,7 @@ function initSkySwipe() {
   if (!hero || hero.dataset.swipeReady) return;
   hero.dataset.swipeReady = '1';
   hero.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1 || e.target.closest('#menuBtn, #quickLockHomeBtn, #planetInfo, .planet-dot')) { skySwipeStart = null; return; }
+    if (e.touches.length !== 1 || e.target.closest('#menuBtn, #quickLockHomeBtn, #planetInfo, .planet-dot, .celestial-tap')) { skySwipeStart = null; return; }
     const t = e.touches[0];
     skySwipeStart = { x: t.clientX, y: t.clientY };
   }, { passive: true });
@@ -1289,6 +1346,8 @@ function initSkyExtras() {
   const hero = document.querySelector('.hero');
   initSkySwipe();
   initPlanetInfoDrag();
+  if (els.sunTap && !els.sunTap.dataset.infoReady) { els.sunTap.dataset.infoReady = '1'; els.sunTap.addEventListener('click', () => { if (!skySwipeJustHappened) toggleCelestialInfo('sun', els.sunTap); }); }
+  if (els.moonTap && !els.moonTap.dataset.infoReady) { els.moonTap.dataset.infoReady = '1'; els.moonTap.addEventListener('click', () => { if (!skySwipeJustHappened) toggleCelestialInfo('moon', els.moonTap); }); }
   if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); placePlanets(); fitGreeting(); }).observe(hero);
   if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
   document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.5';
+const APP_VERSION = '3.5.6';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -2110,8 +2110,10 @@ async function maybeShowBioCard() {
    ===================================================================== */
 
 function showScreen(screen) {
-  if (screen === els.homeScreen) requestAnimationFrame(() => { placeSun(); placeMoon(); });
   [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen')].forEach(el => el.classList.toggle('active', el === screen));
+  // Der Himmel braucht die echte Größe der sichtbaren Startseite. Zwei Frames warten,
+  // damit Sonne, Mond und Planeten nicht erst mit 0 px berechnet und danach neu gezeichnet werden.
+  if (screen === els.homeScreen) requestAnimationFrame(() => requestAnimationFrame(() => applySky(true)));
   window.scrollTo(0, 0);
 }
 

@@ -1,3 +1,0 @@
-# Reci mi ist eine private App und soll nicht in Suchmaschinen erscheinen.
-User-agent: *
-Disallow: /

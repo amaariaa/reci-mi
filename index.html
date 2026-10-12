@@ -1,519 +1,547 @@
 <!doctype html>
-<html lang="de" data-mode="dark">
+<html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#141A36" />
-  <meta name="robots" content="noindex, nofollow, noarchive" />
-  <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
-  <link rel="manifest" href="manifest.webmanifest?v=3.5.5" />
-  <link rel="icon" href="mond-192.png" />
-  <link rel="apple-touch-icon" href="mond-192.png" />
-  <link rel="preload" href="moon.webp" as="image" />
-  <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
-  <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=3.5.5" />
-  <title>Reci mi</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#143c39">
+  <meta name="description" content="Meine Stempeluhr: Zeitkonto, ATOSS-Vergleich, Pausen, Urlaub und lokale Datensicherung.">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <title>Meine Stempeluhr</title>
+<link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div id="app" class="app-shell">
-
-    <!-- Sperrbildschirm -->
-    <section id="lockScreen" class="screen lock-screen sky active" aria-labelledby="lockTitle">
-      <div class="stars" aria-hidden="true"></div>
-      <div class="weather-layer" aria-hidden="true"><div class="clouds"></div><div class="fog-layer"></div><canvas class="precip"></canvas><div class="frost"></div><div class="flash"></div></div>
-      <div class="lock-inner">
-        <button id="moonBtn" class="moon-btn" type="button" aria-label="Mit Fingerabdruck entsperren">
-          <span id="lockMoon" class="moon-art"></span>
-          <span id="fpBadge" class="fp-badge hidden" aria-hidden="true">
-            <svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 20c1.1-2.1 1.8-4.5 1.8-7a2 2 0 0 1 4 0c0 2.4-.5 4.6-1.3 6.6"/><path d="M5.8 18.7C7.1 16.6 8 14.3 8 12a4 4 0 0 1 8 0c0 2.2-.3 4.3-.9 6.2"/><path d="M4 15.5V12a8 8 0 0 1 16 0c0 1.7-.1 3.3-.4 4.8"/><path d="M6 8.2A7 7 0 0 1 18.6 9"/></svg>
-          </span>
-        </button>
-        <h1 id="lockTitle" class="wordmark">Reci mi</h1>
-        <p id="lockSubtitle" class="lock-text">Erzähl mir, was dich bewegt.</p>
-
-        <form id="pinForm" class="pin-form" autocomplete="off">
-          <label id="pinLabel" for="pinInput">PIN</label>
-          <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="Deine PIN" autocomplete="new-password" required />
-          <input id="pinConfirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="PIN wiederholen" autocomplete="new-password" />
-          <button id="pinSubmit" class="btn btn-main" type="submit">Entsperren</button>
-        </form>
-        <button id="showPinBtn" class="btn btn-ghost hidden" type="button">Mit PIN entsperren</button>
-        <button id="quickLockBtn" class="quick-lock-btn hidden" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>Schnell notieren</button>
-        <p id="lockHint" class="hint" role="status"></p>
-      </div>
-      <p id="lockPhase" class="lock-phase"></p>
-    </section>
-
-    <!-- Startseite -->
-    <section id="homeScreen" class="screen home-screen">
-      <header class="hero sky">
-        <div class="stars" aria-hidden="true"></div>
-        <div id="sun" class="sun hidden" aria-hidden="true"><span class="sun-rays"></span><span class="sun-core"></span></div>
-        <button id="sunTap" class="celestial-tap sun-tap hidden" type="button" aria-label="Informationen zur Sonne"></button>
-        <div id="moonOrb" class="moon-orb hidden" aria-hidden="true"></div>
-        <button id="moonTap" class="celestial-tap moon-tap hidden" type="button" aria-label="Informationen zum Mond"></button>
-        <div id="planetLayer" class="planet-layer" aria-label="Planeten am Himmel"></div>
-        <div id="planetInfo" class="planet-info hidden" role="status" aria-live="polite"></div>
-        <div class="weather-layer" aria-hidden="true"><div class="clouds"></div><div class="fog-layer"></div><canvas class="precip"></canvas><div class="frost"></div><div class="flash"></div></div>
-        <div class="hero-top">
-          <button id="quickLockHomeBtn" class="icon-btn hero-btn" type="button" aria-label="Reci mi sofort sperren" title="Sofort sperren">
-            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-          </button>
-          <button id="menuBtn" class="icon-btn hero-btn" type="button" aria-label="Menü öffnen">
-            <svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
-          </button>
-        </div>
-        <div class="hero-main">
-          <div class="hero-text">
-            <h1 id="greeting" class="greeting">Hallo</h1>
-          </div>
-          <div id="heroMoon" class="hero-moon moon-art hidden" aria-hidden="true"></div>
-        </div>
-        <p id="dailyQuote" class="daily-quote hidden"></p>
-        <p id="moonLine" class="moon-line hidden"></p>
-        <div class="sky-rows">
-          <div class="sun-row">
-            <span class="sun-time" title="Sonnenaufgang"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 4v5M9.5 6.5 12 4l2.5 2.5"/></svg><span class="sr">Sonnenaufgang </span><span id="sunriseLabel">--:--</span></span>
-            <button type="button" id="weatherLabel" class="weather-label"></button>
-            <span class="sun-time" title="Sonnenuntergang"><span class="sr">Sonnenuntergang </span><span id="sunsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 9V4M9.5 6.5 12 9l2.5-2.5"/></svg></span>
-          </div>
-          <div class="moon-row">
-            <span class="moon-time" title="Mondaufgang"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M12.6 9.2a5 5 0 1 0 2.7 8.8 4 4 0 0 1-2.7-8.8Z"/><path d="M18.5 12V5M16.2 7.3 18.5 5l2.3 2.3"/></svg><span class="sr">Mondaufgang </span><span id="moonriseLabel">--:--</span></span>
-            <span id="moonPhaseLabel" class="moon-phase-label"></span>
-            <span class="moon-time" title="Monduntergang"><span class="sr">Monduntergang </span><span id="moonsetLabel">--:--</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M12.6 9.2a5 5 0 1 0 2.7 8.8 4 4 0 0 1-2.7-8.8Z"/><path d="M18.5 5v7M16.2 9.7l2.3 2.3 2.3-2.3"/></svg></span>
-          </div>
-          <div class="place-row"><span aria-hidden="true"></span><p id="placeClock" class="place-clock hidden"></p><span aria-hidden="true"></span></div>
-        </div>
-      </header>
-
-      <div class="home-body">
-        <label class="search">
-          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-          <input id="searchInput" type="search" placeholder="Themen und Texte durchsuchen" aria-label="Suchen" />
-        </label>
-
-        <div class="chips" id="filterRow" role="tablist"></div>
-
-        <div id="bioCard" class="bio-card hidden">
-          <p><strong>Schneller rein mit Fingerabdruck?</strong> Dann reicht beim Öffnen ein Fingertipp statt der PIN.</p>
-          <div class="bio-card-actions">
-            <button id="bioCardLater" class="btn btn-ghost btn-small" type="button">Nicht jetzt</button>
-            <button id="bioCardSetup" class="btn btn-main btn-small" type="button">Einrichten</button>
-          </div>
-        </div>
-
-        <div id="backupCard" class="bio-card hidden">
-          <p><strong>Zeit für eine Sicherung?</strong><span id="backupCardText"></span> Deine Notizen liegen nur auf diesem Handy. Mit einer Sicherung gehen sie nicht verloren.</p>
-          <div class="bio-card-actions">
-            <button id="backupLater" class="btn btn-ghost btn-small" type="button">Später</button>
-            <button id="backupNow" class="btn btn-main btn-small" type="button">Jetzt sichern</button>
-          </div>
-        </div>
-
-        <div id="topicList" class="topic-list"></div>
-        <div id="emptyState" class="empty-state hidden">
-          <h2>Noch kein Thema</h2>
-          <p>Tippe unten auf „Neues Thema“ und sammle darin deine Gedanken.</p>
-        </div>
-        <p id="noResults" class="empty-state small hidden">Nichts gefunden.</p>
-      </div>
-
-      <button id="newTopicBtn" class="fab" type="button">
-        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        Neues Thema
-      </button>
-    </section>
-
-    <!-- Thema -->
-    <section id="editorScreen" class="screen editor-screen">
-      <header class="editor-head">
-        <div class="head-left">
-          <button id="backBtn" class="icon-btn" type="button" aria-label="Zurück">
-            <svg class="ui-icon" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
-          </button>
-          <button id="editorHomeBtn" class="icon-btn" type="button" aria-label="Startseite">
-            <svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9 20v-6h6v6"/></svg>
-          </button>
-        </div>
-        <button id="editorMenuBtn" class="icon-btn" type="button" aria-label="Weitere Optionen">
-          <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
-        </button>
-      </header>
-      <div class="editor-title">
-        <h1 id="editorTitle">Thema</h1>
-        <div class="meta"><span id="editorTag" class="tag"></span><span id="dateLine"></span></div>
-      </div>
-      <div id="findBar" class="find-bar hidden">
-        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-        <input id="findInput" type="search" placeholder="Im Text suchen" aria-label="Im Text suchen" autocomplete="off" />
-        <span id="findCount" class="find-count"></span>
-        <button id="findPrev" class="find-btn" type="button" aria-label="Vorherige Stelle"><svg class="ui-icon" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
-        <button id="findNext" class="find-btn" type="button" aria-label="Nächste Stelle"><svg class="ui-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
-        <button id="findClose" class="find-btn" type="button" aria-label="Suche schließen"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-      </div>
-      <main class="page">
-        <div id="sketchStrip" class="sketch-strip hidden"></div>
-        <div class="editor-mode" role="tablist" aria-label="Notizmodus">
-          <button id="textModeBtn" class="editor-mode-btn active" type="button" role="tab" aria-selected="true">Text</button>
-          <button id="listModeBtn" class="editor-mode-btn" type="button" role="tab" aria-selected="false">Liste</button>
-        </div>
-        <div id="textPane" class="ta-wrap">
-          <div id="hlLayer" class="hl-layer hidden" aria-hidden="true"></div>
-          <textarea id="topicText" spellcheck="true" placeholder="Schreib hier oder tippe auf das Mikrofon …"></textarea>
-        </div>
-        <div id="checklistPane" class="checklist-pane hidden">
-          <form id="checklistForm" class="checklist-add">
-            <input id="checklistInput" maxlength="240" autocomplete="off" placeholder="Neuer Punkt …" aria-label="Neuer Listenpunkt" />
-            <button id="checklistAddBtn" class="checklist-add-btn" type="submit" aria-label="Listenpunkt hinzufügen">+</button>
-          </form>
-          <div id="checklistList" class="checklist-list"></div>
-          <p id="checklistEmpty" class="checklist-empty">Noch keine Punkte. Schreib etwas oder sprich es über das Mikrofon ein.</p>
-        </div>
-        <div class="editor-foot">
-          <div class="edit-history" aria-label="Bearbeitung">
-            <button id="undoBtn" class="edit-mini" type="button" aria-label="Rückgängig" disabled>
-              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
-            </button>
-            <button id="redoBtn" class="edit-mini" type="button" aria-label="Wiederholen" disabled>
-              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>
-            </button>
-            <button id="endBtn" class="end-mini" type="button">Ans Ende</button>
-          </div>
-          <div id="saveState" class="save-state">Gespeichert</div>
-        </div>
-      </main>
-      <nav class="toolbar" aria-label="Textfunktionen">
-        <button id="editBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg><span>Bearbeiten</span></button>
-        <button id="copyBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg><span>Kopieren</span></button>
-        <span class="mic-slot"><button id="micBtn" class="mic" type="button" aria-label="Spracheingabe starten"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></span>
-        <button id="readBtn" class="tb" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M11 5 7 9H4v6h3l4 4V5Z"/><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/></svg><span>Vorlesen</span></button>
-        <button id="deleteBtn" class="tb danger" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Löschen</span></button>
-      </nav>
-    </section>
-
-    <!-- Schnellnotiz -->
-    <section id="quickScreen" class="screen quick-screen" aria-labelledby="quickTitle">
-      <header class="quick-head">
-        <button id="quickCloseBtn" class="icon-btn" type="button" aria-label="Verwerfen">
-          <svg class="ui-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
-        </button>
-        <h1 id="quickTitle">Schnellnotiz</h1>
-        <button id="quickSaveBtn" class="btn btn-main btn-small" type="button">Speichern</button>
-      </header>
-      <div id="quickTabs" class="quick-tabs" role="tablist">
-        <button type="button" data-tab="write" class="active">Schreiben</button>
-        <button type="button" data-tab="draw">Zeichnen</button>
-      </div>
-      <div id="quickWrite" class="quick-write">
-        <textarea id="quickText" placeholder="Schnell notieren … mit Tastatur, Handschrift-Tastatur, S Pen oder Mikrofon" spellcheck="true"></textarea>
-        <button id="quickMicBtn" class="mic quick-mic" type="button" aria-label="Spracheingabe starten"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-      </div>
-      <div id="quickDraw" class="quick-draw hidden">
-        <canvas id="padCanvas" class="pad" aria-label="Zeichenfläche"></canvas>
-        <div class="pad-tools">
-          <button id="padUndo" class="btn btn-ghost btn-small" type="button" disabled>Rückgängig</button>
-          <button id="padClear" class="btn btn-ghost btn-small" type="button" disabled>Leeren</button>
-        </div>
-      </div>
-      <p id="quickNote" class="quick-note"></p>
-    </section>
-
-    <!-- Papierkorb -->
-    <section id="trashScreen" class="screen trash-screen">
-      <header class="editor-head">
-        <div class="head-left">
-          <button id="trashBackBtn" class="icon-btn" type="button" aria-label="Zurück">
-            <svg class="ui-icon" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
-          </button>
-          <button id="trashHomeBtn" class="icon-btn" type="button" aria-label="Startseite">
-            <svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9 20v-6h6v6"/></svg>
-          </button>
-        </div>
-      </header>
-      <div class="editor-title"><h1>Papierkorb</h1>
-        <p class="sub">Gelöschte Themen kannst du hier zurückholen oder endgültig entfernen.</p></div>
-      <div id="trashList" class="topic-list trash-list"></div>
-    </section>
-
-    <!-- Blatt: Neues Thema / Umbenennen -->
-    <dialog id="topicSheet" class="sheet">
-      <form id="topicForm" method="dialog">
-        <div class="grab" aria-hidden="true"></div>
-        <h2 id="topicSheetTitle">Neues Thema</h2>
-        <label for="topicName" class="lbl">Name</label>
-        <input id="topicName" maxlength="60" placeholder="Wie soll das Thema heißen?" required autocomplete="off" />
-        <span class="lbl">Bereich</span>
-        <div class="cats" id="catPicker"></div>
-        <label id="protectRow" class="switch-row">
-          <span><strong>Extra schützen</strong><small>Öffnen nur mit Fingerabdruck oder PIN</small></span>
-          <input id="protectToggle" type="checkbox" class="switch" />
-        </label>
-        <div class="actions">
-          <button type="button" id="cancelTopicBtn" class="btn btn-ghost">Abbrechen</button>
-          <button type="submit" id="saveTopicBtn" class="btn btn-main">Thema anlegen</button>
-        </div>
-      </form>
-    </dialog>
-
-    <!-- Blatt: Aktionen für ein Thema -->
-    <dialog id="actionSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2 id="actionTitle">Thema</h2>
-      <div class="sheet-list">
-        <button type="button" id="actionOpenBtn" class="sheet-item">Öffnen</button>
-        <button type="button" id="actionAttachBtn" class="sheet-item">Zu Thema hinzufügen</button>
-        <button type="button" id="actionFindBtn" class="sheet-item">Im Text suchen</button>
-        <button type="button" id="actionShareBtn" class="sheet-item">Teilen</button>
-        <button type="button" id="actionVersionsBtn" class="sheet-item">Frühere Versionen</button>
-        <button type="button" id="actionMarkersBtn" class="sheet-item">Markierungen</button>
-        <button type="button" id="actionMergeBtn" class="sheet-item">Mit anderem Thema zusammenführen</button>
-        <button type="button" id="actionArchiveBtn" class="sheet-item">Archivieren</button>
-        <button type="button" id="actionPinBtn" class="sheet-item">Oben anheften</button>
-        <button type="button" id="actionRenameBtn" class="sheet-item">Umbenennen oder Bereich ändern</button>
-        <button type="button" id="actionDrawBtn" class="sheet-item">Zeichnung hinzufügen</button>
-        <button type="button" id="actionProtectBtn" class="sheet-item">Extra schützen (Fingerabdruck oder PIN)</button>
-        <button type="button" id="actionTrashBtn" class="sheet-item danger">In den Papierkorb</button>
-      </div>
-      <button type="button" id="actionCancelBtn" class="btn btn-ghost wide">Abbrechen</button>
-    </dialog>
-
-    <!-- Blatt: Bereiche verwalten -->
-    <dialog id="categorySheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Bereiche verwalten</h2>
-      <p class="sheet-text">Bücher, Apps, Privat und Sonstiges bleiben erhalten. Eigene Bereiche kannst du hier hinzufügen, umbenennen oder löschen.</p>
-      <form id="categoryForm" class="category-form">
-        <input id="categoryName" maxlength="28" placeholder="Neuer Bereich" autocomplete="off" required />
-        <button id="categorySaveBtn" class="btn btn-main btn-small" type="submit">Hinzufügen</button>
-      </form>
-      <div id="categoryManageList" class="category-manage-list"></div>
-      <button type="button" id="categoryCloseBtn" class="btn btn-ghost wide">Fertig</button>
-    </dialog>
-
-    <!-- Blatt: Menü -->
-    <dialog id="menuSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Reci mi</h2>
-      <div class="sheet-list">
-        <button type="button" id="biometricMenuBtn" class="sheet-item">Fingerabdruck einrichten</button>
-        <button type="button" id="placeMenuBtn" class="sheet-item">Ort für Sonne und Wetter</button>
-        <button type="button" id="nameMenuBtn" class="sheet-item">Wie soll ich dich nennen?</button>
-        <button type="button" id="manageCategoriesBtn" class="sheet-item">Bereiche verwalten</button>
-        <button type="button" id="openArchiveBtn" class="sheet-item">Archiv</button>
-        <button type="button" id="openTrashBtn" class="sheet-item">Papierkorb</button>
-        <button type="button" id="exportBtn" class="sheet-item">Sicherung speichern<small id="backupAge" class="item-sub"></small></button>
-        <label class="sheet-item">Sicherung prüfen<input id="checkBackupInput" type="file" accept="application/json,.json" hidden /></label>
-        <label class="sheet-item">Sicherung laden<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
-        <button type="button" id="installBtn" class="sheet-item hidden">App installieren</button>
-        <button type="button" id="pinMenuBtn" class="sheet-item">PIN ändern</button>
-        <button type="button" id="emergencyBtn" class="sheet-item hidden">Notfallkopie zurückholen<small id="emergencyAge" class="item-sub"></small></button>
-        <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
-      </div>
-      <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 3.5.5</p>
-    </dialog>
-
-    <!-- Blatt: Archiv -->
-    <dialog id="archiveSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Archiv</h2>
-      <p class="sheet-text">Hier bleiben erledigte Themen erhalten, ohne die Startseite zu füllen.</p>
-      <div id="archiveList" class="archive-list"></div>
-      <button type="button" id="archiveCloseBtn" class="btn btn-ghost wide">Schließen</button>
-    </dialog>
-
-    <!-- Blatt: Themen zusammenführen -->
-    <dialog id="mergeSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Zusammenführen</h2>
-      <p id="mergeText" class="sheet-text"></p>
-      <div id="mergeList" class="sheet-list merge-list"></div>
-      <button type="button" id="mergeCloseBtn" class="btn btn-ghost wide">Abbrechen</button>
-    </dialog>
-
-    <!-- Blatt: Markierungen -->
-    <dialog id="markersSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Markierungen</h2>
-      <p class="sheet-text">Setze an der aktuellen Textstelle eine Markierung. Der Text selbst bleibt unverändert.</p>
-      <form id="markerForm" class="category-form">
-        <input id="markerName" maxlength="45" placeholder="z. B. Adam Enthüllung" autocomplete="off" />
-        <button id="markerAddBtn" class="btn btn-main btn-small" type="submit">Hier markieren</button>
-      </form>
-      <div id="markerList" class="marker-list"></div>
-      <button type="button" id="markersCloseBtn" class="btn btn-ghost wide">Fertig</button>
-    </dialog>
-
-    <!-- Blatt: Sicherung prüfen -->
-    <dialog id="backupCheckSheet" class="sheet">
-      <form id="backupCheckForm" autocomplete="off">
-        <div class="grab" aria-hidden="true"></div>
-        <h2>Sicherung prüfen</h2>
-        <p id="backupCheckMeta" class="sheet-text"></p>
-        <label for="backupCheckPin" class="lbl">PIN der Sicherung</label>
-        <input id="backupCheckPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="PIN eingeben" />
-        <p id="backupCheckHint" class="sheet-hint" role="status"></p>
-        <div class="actions">
-          <button type="button" id="backupCheckClose" class="btn btn-ghost">Schließen</button>
-          <button type="submit" id="backupCheckOk" class="btn btn-main">PIN prüfen</button>
-        </div>
-      </form>
-    </dialog>
-
-    <!-- Blatt: Name -->
-    <dialog id="nameSheet" class="sheet">
-      <form id="nameForm" method="dialog">
-        <div class="grab" aria-hidden="true"></div>
-        <h2>Wie soll ich dich nennen?</h2>
-        <label for="nameInput" class="lbl">Dein Name für die Begrüßung</label>
-        <input id="nameInput" maxlength="30" autocomplete="off" />
-        <div class="actions">
-          <button type="button" id="nameCancelBtn" class="btn btn-ghost">Abbrechen</button>
-          <button type="submit" class="btn btn-main">Speichern</button>
-        </div>
-      </form>
-    </dialog>
-
-    <!-- Blatt: Geschütztes Thema öffnen -->
-    <dialog id="protectSheet" class="sheet">
-      <form id="protectForm" method="dialog" autocomplete="off">
-        <div class="grab" aria-hidden="true"></div>
-        <div class="protect-head">
-          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-          <h2 id="protectTitle">Geschütztes Thema</h2>
-        </div>
-        <p id="protectText" class="sheet-text"></p>
-        <button type="button" id="protectBioBtn" class="btn btn-main wide protect-bio">
-          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 20c1.1-2.1 1.8-4.5 1.8-7a2 2 0 0 1 4 0c0 2.4-.5 4.6-1.3 6.6"/><path d="M5.8 18.7C7.1 16.6 8 14.3 8 12a4 4 0 0 1 8 0c0 2.2-.3 4.3-.9 6.2"/><path d="M4 15.5V12a8 8 0 0 1 16 0c0 1.7-.1 3.3-.4 4.8"/><path d="M6 8.2A7 7 0 0 1 18.6 9"/></svg>
-          Mit Fingerabdruck öffnen
-        </button>
-        <p id="protectOr" class="or-line">oder mit PIN</p>
-        <input id="protectPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Deine PIN" aria-label="PIN" />
-        <p id="protectHint" class="sheet-hint" role="status"></p>
-        <div class="actions">
-          <button type="button" id="protectCancelBtn" class="btn btn-ghost">Abbrechen</button>
-          <button type="submit" id="protectOkBtn" class="btn btn-main">Mit PIN öffnen</button>
-        </div>
-      </form>
-    </dialog>
-
-    <!-- Blatt: Ort -->
-    <dialog id="placeSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Ort für Sonne und Wetter</h2>
-      <p class="sheet-text">Gib deine Stadt ein. Dann zeigt der Himmel in Reci mi Sonnenaufgang, Sonnenuntergang und das Wetter dort.</p>
-      <p id="placeCurrent" class="sheet-note"></p>
-      <form id="placeForm" class="place-form" autocomplete="off">
-        <input id="placeInput" placeholder="z. B. Augsburg" aria-label="Stadt" />
-        <button type="submit" class="btn btn-main">Suchen</button>
-      </form>
-      <p id="placeHint" class="sheet-hint" role="status"></p>
-      <div id="placeResults" class="sheet-list"></div>
-      <button type="button" id="placeGpsBtn" class="btn btn-ghost wide">Meinen Standort verwenden</button>
-      <div class="sheet-list">
-        <button type="button" id="placeOffBtn" class="sheet-item">Ohne Wetter, nur Tageszeit</button>
-      </div>
-      <p class="sheet-note">Das Wetter kommt vom freien Dienst Open-Meteo. Dafür wird nur der Ort übertragen, nie deine Notizen.</p>
-      <button type="button" id="placeCancelBtn" class="btn btn-ghost wide" style="margin-top:14px">Schließen</button>
-    </dialog>
-
-    <!-- Blatt: Zeichnung ansehen -->
-    <dialog id="sketchSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <img id="sketchBig" class="sketch-big" alt="Zeichnung" />
-      <div class="actions">
-        <button type="button" id="sketchDeleteBtn" class="btn btn-ghost">Löschen</button>
-        <button type="button" id="sketchCloseBtn" class="btn btn-main">Schließen</button>
-      </div>
-    </dialog>
-
-    <!-- Blatt: Bestätigen -->
-    <dialog id="confirmSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2 id="confirmTitle">Wirklich löschen?</h2>
-      <p id="confirmText" class="sheet-text"></p>
-      <div class="actions">
-        <button type="button" id="confirmCancelBtn" class="btn btn-ghost">Abbrechen</button>
-        <button type="button" id="confirmOkBtn" class="btn btn-danger">Löschen</button>
-      </div>
-    </dialog>
-
-    <div id="dictation" class="dictation hidden" role="status" aria-live="polite">
-        <div class="dict-head"><span class="dict-dot"></span><span id="dictHead">Ich höre zu. Tippe auf das Mikrofon zum Beenden.</span></div>
-        <div id="dictText" class="dict-text"></div>
-      </div>
-    <div id="player" class="player hidden" role="region" aria-label="Vorlesen">
-      <div class="player-top">
-        <span id="playerInfo"></span>
-        <button id="playerClose" class="find-btn" type="button" aria-label="Vorlesen beenden"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-      </div>
-      <div class="player-row">
-        <button id="playerSpeed" class="player-chip" type="button" aria-label="Tempo">1×</button>
-        <div class="player-controls">
-          <button id="playerPrev" class="find-btn" type="button" aria-label="Satz zurück"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M6 5v14M18 6 9 12l9 6V6Z"/></svg></button>
-          <button id="playerPlay" class="player-play" type="button" aria-label="Pause">
-            <svg class="ui-icon i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
-            <svg class="ui-icon i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7L8 5Z"/></svg>
-          </button>
-          <button id="playerNext" class="find-btn" type="button" aria-label="Satz vor"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M18 5v14M6 6l9 6-9 6V6Z"/></svg></button>
-        </div>
-        <select id="playerVoice" class="player-chip player-voice" aria-label="Stimme"></select>
-      </div>
-    </div>
-
-    <dialog id="versionsSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2 id="versionsTitle">Frühere Versionen</h2>
-      <div id="versionsList" class="sheet-list"></div>
-      <button type="button" id="versionsCloseBtn" class="btn btn-ghost wide">Schließen</button>
-    </dialog>
-
-    <dialog id="versionViewSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2 id="versionViewTitle">Version</h2>
-      <div id="versionViewText" class="version-text"></div>
-      <div class="actions">
-        <button type="button" id="versionBackBtn" class="btn btn-ghost">Zurück</button>
-        <button type="button" id="versionRestoreBtn" class="btn btn-main">Wiederherstellen</button>
-      </div>
-    </dialog>
-
-    <button id="dictUndo" class="dict-undo hidden" type="button">
-      <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
-      Letztes rückgängig
-    </button>
-
-    <dialog id="attachSheet" class="sheet">
-      <div class="grab" aria-hidden="true"></div>
-      <h2>Zu welchem Thema?</h2>
-      <p class="sheet-text">Die Schnellnotiz wird unten an das Thema angehängt und verschwindet dann aus den Schnellnotizen.</p>
-      <div id="attachList" class="sheet-list attach-list"></div>
-      <button type="button" id="attachCancelBtn" class="btn btn-ghost wide">Abbrechen</button>
-    </dialog>
-
-    <dialog id="pinSheet" class="sheet">
-      <form id="pinChangeForm" method="dialog" autocomplete="off">
-        <div class="grab" aria-hidden="true"></div>
-        <h2>PIN ändern</h2>
-        <p class="sheet-text">Die neue PIN hat 6 Ziffern. Im Alltag reicht weiter dein Fingerabdruck.</p>
-        <label class="lbl" for="pinOld">Jetzige PIN</label>
-        <input id="pinOld" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
-        <label class="lbl" for="pinNew">Neue PIN (6 Ziffern)</label>
-        <input id="pinNew" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
-        <label class="lbl" for="pinNew2">Neue PIN wiederholen</label>
-        <input id="pinNew2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
-        <p id="pinChangeHint" class="sheet-hint" role="status"></p>
-        <div class="actions">
-          <button type="button" id="pinChangeCancel" class="btn btn-ghost">Abbrechen</button>
-          <button type="submit" id="pinChangeOk" class="btn btn-main">PIN speichern</button>
-        </div>
-      </form>
-    </dialog>
-
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div class="app">
+<header class="header" id="start">
+  <div class="brand">
+    <div class="logo" aria-hidden="true"><svg viewBox="0 0 42 42" fill="none"><path d="M21 5.5a15.5 15.5 0 1 0 15.5 15.5" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M21 11v11l7 4" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="34" cy="8" r="3.5" fill="#C5F2D7"/></svg></div>
+    <div><div class="brand-kicker">ZEIT, DIE DIR GEHÖRT</div><h1>Meine Stempeluhr<span class="brand-period">.</span></h1><span class="brand-version">VERSION 1.4.1</span></div>
   </div>
+  <nav class="top-nav" aria-label="Bereiche">
+    <a href="#dashboard">Übersicht</a><a href="#monat">Monat</a><a href="#urlaubsplaner">Kalender & Urlaub</a><a href="#edit-card">Einträge</a>
+  </nav>
+  <div class="header-right"><span class="secure-dot"></span> Lokal gespeichert <span class="header-date" id="header-date"></span></div>
+</header>
+<main class="grid-main">
+<section class="stack">
+  <div class="hero" id="dashboard">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="hero-header"><div class="hero-header-top"><span class="hero-eyebrow">DEIN ARBEITSTAG</span><span class="hero-date" id="hero-date">Heute</span></div><div class="status off" id="punch-status"><span class="dot"></span><span>Aktuell nicht eingestempelt</span></div></div>
+    <div class="hero-main">
+      <div class="projection" id="projection" aria-live="polite"><div class="projection-lead">FEIERABEND OHNE MINUS</div><div class="projection-time">––:––</div><div class="projection-sub">Sollzeit und Pausen werden automatisch berücksichtigt.</div></div>
+      <div class="time-ring" id="time-ring" style="--ring:0%"><div class="time-ring-inside"><span class="ring-label">HEUTE NETTO</span><span class="ring-value" id="live-net">0:00 <span>Std.</span></span><span class="ring-caption" id="ring-caption">von 7:42 Std.</span></div></div>
+    </div>
+    <div class="hero-targets" id="hero-targets" aria-label="Feierabendziele"><div class="hero-target"><span>Reguläres Soll</span><strong id="target-regular">––:––</strong></div><div class="hero-target"><span>Dein Wunschziel</span><strong id="target-personal">––:––</strong></div></div>
+    <div class="hero-foot"><span class="hero-range" id="live-range">Noch keine Zeit erfasst</span><span class="hero-now" id="live-now"> </span></div>
+    <div class="hero-actions"><button class="btn btn-primary" id="punch-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Einstempeln</button><button class="btn btn-hero-alt" id="punch-out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> Ausstempeln</button></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div><div class="section-eyebrow">AUF EINEN BLICK</div><h2>Dein Zeitkonto</h2></div><span class="chip" id="tracking-badge">Stand heute</span></div>
+    <div class="stats">
+      <div class="stat"><div class="label">Heute netto</div><div class="num" id="stat-today">0:00</div><div class="hint" id="today-plan">Sollzeit: 7:42 Std.</div></div>
+      <div class="stat"><div class="label">Diese Woche</div><div class="num" id="stat-week">0:00</div><div class="hint" id="week-plan">Soll bis heute: 0:00 Std.</div><div class="progress"><span id="week-progress" style="width:0%"></span></div></div>
+      <div class="stat"><div class="label">Dieser Monat</div><div class="num" id="stat-month">0:00</div><div class="hint" id="month-plan">Soll bis heute: 0:00 Std.</div><div class="progress"><span id="month-progress" style="width:0%"></span></div></div>
+      <div class="stat"><div class="label">Gesamtes Zeitkonto</div><div class="num" id="stat-balance">±0:00</div><div class="hint" id="balance-hint">Plus- oder Minusstunden seit Beginn</div></div>
+    </div>
+    <p class="notice" id="calculation-note">Dein Zeitkonto berechnet Plus- und Minusstunden aus der vertraglichen Wochenarbeitszeit. Dein persönliches 8-Stunden-Ziel ist ein zweiter Feierabendwert. Automatische Pausen sind eine Annahme: Maßgeblich sind deine tatsächlichen Pausen und die offiziellen ATOSS-Buchungen.</p>
+  </div>
+  <div class="card week-card" id="woche">
+    <div class="card-title"><div><div class="section-eyebrow">DEIN RHYTHMUS</div><h2>Diese Woche</h2></div><span class="chip">Mo – So</span></div>
+    <div class="week-chart" id="week-chart" aria-label="Arbeitszeit der aktuellen Woche"></div>
+    <p class="week-explainer">Jeder Balken zeigt deine erfasste Arbeitszeit im Verhältnis zum Tagesziel. Tippe auf einen Tag zum Bearbeiten.</p>
+  </div>
+  <div class="card" id="edit-card">
+    <div class="card-title"><div><div class="section-eyebrow">DEINE EINTRÄGE</div><h2>Arbeitstag erfassen</h2></div><button class="mini-btn" id="go-today">Heute</button></div>
+    <div class="field-grid">
+      <div class="field"><label for="edit-date">Datum</label><input type="date" id="edit-date"></div>
+      <div class="field"><label for="edit-type">Art des Tages</label><select id="edit-type"><option value="work">Arbeit</option><option value="vacation">Urlaub</option><option value="sick">Krank</option><option value="holiday">Feiertag</option><option value="free">Dienstfrei (kein Soll)</option></select></div>
+      <div class="field work-only"><label for="edit-start">Arbeitsbeginn</label><input type="time" id="edit-start" step="60"></div>
+      <div class="field work-only"><label for="edit-end">Feierabend</label><input type="time" id="edit-end" step="60"></div>
+      <div class="field work-only"><label for="edit-pause-mode">Pause</label><select id="edit-pause-mode"><option value="auto">Automatisch</option><option value="manual">Selbst eingeben</option></select></div>
+      <div class="field work-only" id="manual-pause-field"><label for="edit-pause">Pause in Minuten</label><input type="number" id="edit-pause" min="0" max="240" step="1" value="30"></div>
+      <div class="field field-wide"><label for="edit-note">Notiz (optional)</label><textarea id="edit-note" rows="2" placeholder="Zum Beispiel: früher Feierabend, Arzttermin ..."></textarea></div>
+    </div>
+    <div class="inline-actions"><button class="btn btn-primary" id="save-day">Tag speichern</button><button class="btn btn-danger" id="delete-day">Eintrag löschen</button></div>
+    <p class="helper" id="edit-preview">Deine Nettoarbeitszeit wird automatisch berechnet.</p><p class="helper">Automatische Pausenregel: bis 6 Stunden Anwesenheit kein Abzug, über 6 Stunden 30 Minuten Pause und ab mehr als 8 Stunden Anwesenheit 45 Minuten Pause. Diese Automatik ersetzt keine echte Pausenerfassung. Abweichende oder tatsächlich genommene Pausen bitte manuell eintragen.</p>
+  </div>
+</section>
+<section class="stack">
+  <div class="card" id="monat">
+    <div class="card-title"><div><div class="section-eyebrow">DEIN MONAT</div><h2>Monatsübersicht</h2></div><div class="monthnav"><button id="prev-month" aria-label="Voriger Monat">‹</button><strong id="month-label"></strong><button id="next-month" aria-label="Nächster Monat">›</button></div></div>
+    <div class="yearstat" id="month-summary"></div>
+    <div class="tablewrap" style="margin-top:15px"><table><thead><tr><th>Tag</th><th>Zeiten / Status</th><th>Netto</th><th>Saldo</th></tr></thead><tbody id="month-rows"></tbody></table></div>
+    <p class="legend">Tippe auf einen Tag, um ihn zu bearbeiten. Nettozeiten, Salden und die Monatssumme verwenden dieselbe vertragliche Sollzeit. Künftige Tage erzeugen noch kein Minus.</p>
+  </div>
+  <div class="card atoss-card" id="atoss-card">
+    <div class="card-title"><div><div class="section-eyebrow">DEIN ORIGINALAUSDRUCK</div><h2>ATOSS-Abgleich</h2></div><span class="chip">Oktober 2026</span></div>
+    <p class="section-intro">Vergleiche die sechs gut lesbaren Arbeitstage vom Foto mit deinen Einträgen. Bereits gespeicherte Daten werden niemals automatisch überschrieben.</p>
+    <div class="atoss-summary" id="atoss-summary"></div>
+    <div class="atoss-records" id="atoss-records"></div>
+    <button type="button" class="btn btn-primary atoss-action" id="atoss-import">Fehlende Tage vom Ausdruck übernehmen</button>
+    <p class="helper atoss-footnote">Referenz: 1., 2., 5., 6., 7. und 8. Oktober 2026. Der Eintrag vom 9. Oktober ist auf dem Foto noch nicht abgeschlossen und wird bewusst ausgelassen.</p>
+  </div>
+  <section class="planner-card" id="urlaubsplaner" aria-label="Kalender und Urlaubsplaner">
+    <div class="planner-cover">
+      <div class="planner-eyebrow">DEINE AUSZEITEN IM BLICK</div>
+      <h2>Kalender <span>& Urlaub.</span></h2>
+      <p>Feiertage erkennen, Brückentage nutzen und deinen Urlaub planen, ohne die Stempeluhr aus dem Blick zu verlieren.</p>
+      <div class="planner-highlight"><span class="planner-highlight-icon">✦</span><span>Dein Urlaub 2027 lässt sich in zwei Varianten vergleichen.</span></div>
+    </div>
+    <div class="planner-body">
+      <div class="planner-control-grid">
+        <div class="field"><label for="planner-year">Kalenderjahr</label><select id="planner-year"></select></div>
+        <div class="field"><label for="planner-region">Arbeitsort / Bundesland</label><select id="planner-region">
+          <option value="augsburg">Augsburg (Stadt)</option><option value="BY">Bayern (andere Gemeinde)</option><option value="BW">Baden-Württemberg</option><option value="BE">Berlin</option><option value="BB">Brandenburg</option><option value="HB">Bremen</option><option value="HH">Hamburg</option><option value="HE">Hessen</option><option value="MV">Mecklenburg-Vorpommern</option><option value="NI">Niedersachsen</option><option value="NW">Nordrhein-Westfalen</option><option value="RP">Rheinland-Pfalz</option><option value="SL">Saarland</option><option value="SN">Sachsen</option><option value="ST">Sachsen-Anhalt</option><option value="SH">Schleswig-Holstein</option><option value="TH">Thüringen</option>
+        </select></div>
+      </div>
+      <label class="planner-option" id="planner-maria-wrap"><input type="checkbox" id="planner-maria"> Mariä Himmelfahrt ist an meinem Arbeitsort Feiertag</label>
+      <p class="planner-region-note" id="planner-region-note"></p>
+      <div class="planner-divider"></div>
+      <div class="planner-balance">
+        <div><span>Urlaubsanspruch <strong id="planner-allowance-year">2027</strong></span><div class="planner-allowance-control"><input type="number" min="0" max="365" id="planner-allowance" aria-label="Urlaubsanspruch" value="30"><small>Tage</small><button class="planner-save-small" id="planner-allowance-save" type="button">Speichern</button></div></div>
+        <div><span>Bereits eingetragen</span><strong class="planner-metric" id="planner-used">0 <small>Tage</small></strong></div>
+        <div><span>Noch verfügbar</span><strong class="planner-metric planner-metric-green" id="planner-left">30 <small>Tage</small></strong></div>
+      </div>
+      <div class="planner-divider"></div>
+      <div class="planner-heading"><div><div class="section-eyebrow">DEINE MÖGLICHKEITEN</div><h3>Urlaubsvarianten vergleichen</h3></div><span class="planner-badge" id="planner-preset-badge">2027</span></div>
+      <p class="planner-help">Die Vorschläge sind zunächst unverbindlich. Du entscheidest selbst, ob du Tage übernehmen möchtest.</p>
+      <div class="planner-options" id="planner-options"></div>
+      <div class="planner-selection" id="planner-selection"></div>
+      <div class="planner-action-row"><button type="button" class="btn btn-primary" id="planner-apply">Ausgewählten Urlaub eintragen</button><button type="button" class="btn" id="planner-clear-preview">Vorschau ausblenden</button></div>
+      <div class="planner-divider"></div>
+      <div class="planner-heading"><div><div class="section-eyebrow">AUCH FÜR ANDERE JAHRE</div><h3>Automatische Brückentag-Tipps</h3></div><span class="planner-badge">1 Urlaubstag</span></div>
+      <p class="planner-help">Die App findet jedes Jahr Möglichkeiten für vier oder mehr freie Tage mit nur einem Urlaubstag.</p>
+      <div class="planner-bridge-tips" id="planner-bridge-tips"></div>
+      <div class="planner-divider"></div>
+      <div class="planner-heading"><div><div class="section-eyebrow">FREIE TAGE AUF EINEN BLICK</div><h3>Jahreskalender</h3></div><div class="planner-month-nav"><button type="button" id="planner-month-prev" aria-label="Voriger Monat">‹</button><strong id="planner-month-name">Mai 2027</strong><button type="button" id="planner-month-next" aria-label="Nächster Monat">›</button></div></div>
+      <div class="planner-calendar" id="planner-calendar" aria-label="Kalender mit Urlaub und Feiertagen"></div>
+      <div class="planner-legend"><span><i class="legend-vacation"></i> Eingetragener Urlaub</span><span><i class="legend-draft"></i> Planvorschlag</span><span><i class="legend-holiday"></i> Feiertag</span><span><i class="legend-weekend"></i> Wochenende</span></div>
+      <div class="planner-holiday-list" id="planner-holidays"></div>
+      <p class="planner-smallprint">Maßgeblich ist dein Arbeitsort. Regionale Ausnahmen (z. B. einzelne Gemeinden) bitte prüfen. 24. und 31. Dezember gelten ohne abweichende Betriebsregelung als normale Arbeitstage. Vorschläge begründen keinen Urlaubsanspruch.</p>
+    </div>
+  </section>
+  <div class="card" id="abwesenheit">
+    <div class="section-eyebrow">GUT ZU WISSEN</div><h2>Urlaub &amp; Abwesenheit</h2>
+    <p class="section-intro">Trage einen oder mehrere Tage ein. Die geplanten Stunden werden gutgeschrieben, damit kein Minus entsteht.</p>
+    <div class="field-grid">
+      <div class="field"><label for="absence-from">Von</label><input type="date" id="absence-from"></div>
+      <div class="field"><label for="absence-to">Bis</label><input type="date" id="absence-to"></div>
+      <div class="field field-wide"><label for="absence-type">Abwesenheit</label><select id="absence-type"><option value="vacation">Urlaub</option><option value="sick">Krank</option><option value="holiday">Feiertag</option><option value="free">Dienstfrei (kein Soll)</option></select></div>
+    </div>
+    <button class="btn btn-primary" id="save-absence" style="width:100%;margin-top:13px">Zeitraum eintragen</button>
+    <div class="yearstat" id="vacation-stat" style="margin-top:15px"></div>
+  </div>
+  <details class="card" id="settings-panel">
+    <summary><span class="settings-icon">⚙</span><span>Einstellungen &amp; Sicherung</span></summary>
+    <div class="setting-body">
+      <p class="section-intro">Die vertragliche Sollzeit bestimmt dein Arbeitszeitkonto. Bei 38,5 Wochenstunden und fünf Arbeitstagen sind das 7:42 Stunden pro Tag. Das persönliche Ziel von 8 Stunden wird zusätzlich als Feierabend-Uhrzeit angezeigt, ändert aber keine Plus- und Minusstunden.</p>
+      <div class="field-grid">
+        <div class="field"><label for="setting-weekly">Wochenarbeitszeit (Std.)</label><input type="text" inputmode="decimal" id="setting-weekly" value="38,5"></div>
+        <div class="field"><label for="setting-daygoal">Persönliches Tagesziel (Std.)</label><input type="text" inputmode="decimal" id="setting-daygoal" value="8"></div>
+        <div class="field"><label for="setting-break">Standardpause manuell/bei 30-Min.-Tagen (Min.)</label><input type="number" id="setting-break" min="0" max="180" value="30"></div>
+        <div class="field"><label for="setting-start">Erfassung beginnt am</label><input type="date" id="setting-start"></div>
+        <div class="field field-wide"><label for="setting-vacation">Urlaubsanspruch pro Kalenderjahr (Tage, optional)</label><input type="number" id="setting-vacation" min="0" max="365" placeholder="Nicht festgelegt"></div>
+        <div class="field field-wide"><label>Reguläre Arbeitstage</label><div class="workdays" id="settings-workdays"></div><div class="field-help">Die Wochenstunden werden auf deine gewählten Arbeitstage verteilt. Auf dieser Grundlage berechnet die App die täglichen ATOSS-ähnlichen Salden.</div></div>
+      </div>
+      <button class="btn btn-primary" id="save-settings" style="width:100%;margin-top:15px">Einstellungen speichern</button>
+      <hr class="divider"><h3>Datensicherung</h3>
+      <p class="helper">Alle Zeiten liegen ausschließlich in diesem Browser auf diesem Gerät. Sichere sie regelmäßig als Datei. Das Löschen von Browserdaten kann die Einträge entfernen.</p>
+      <div class="inline-actions"><button class="btn" id="export-json">Sicherung als JSON</button><button class="btn" id="export-csv">Tabelle als CSV</button></div>
+      <div class="inline-actions"><button class="btn" id="import-button">Sicherung wiederherstellen</button><input class="hidden" id="import-file" type="file" accept="application/json,.json"></div>
+      <hr class="divider"><button class="btn btn-danger" id="reset-all">Alle Daten zurücksetzen</button>
+    </div>
+  </details>
+</section>
+</main>
+<footer class="footer">Meine Stempeluhr <span class="footer-dot">●</span> Auf deinem Gerät gespeichert <span class="footer-dot">●</span> Version 1.4</footer>
+</div>
+<nav class="mobile-dock" aria-label="Schnellnavigation">
+ <a href="#dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>Heute</span></a>
+ <a href="#monat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 10h18M8 14h2M14 14h2"/></svg><span>Monat</span></a>
+ <a href="#urlaubsplaner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18m-11 5h2m4 0h2"/></svg><span>Urlaub</span></a>
+ <a href="#edit-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/><circle cx="12" cy="12" r="10"/></svg><span>Eintrag</span></a>
+ <a href="#settings-panel" id="dock-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.1l2-1.6-2-3.4-2.3.9a7 7 0 0 0-1.9-1.1L14.3 3h-4.6l-.4 2.7a7 7 0 0 0-1.9 1.1l-2.3-.9-2 3.4 2 1.6a7 7 0 0 0 0 2.2l-2 1.6 2 3.4 2.3-.9a7 7 0 0 0 1.9 1.1l.4 2.7h4.6l.4-2.7a7 7 0 0 0 1.9-1.1l2.3.9 2-3.4-2-1.6A7 7 0 0 0 19 12Z"/></svg><span>Mehr</span></a>
+</nav>
+<div role="status" aria-live="polite" class="toast" id="toast"></div>
+<script>
+(function(){'use strict';
+const STORAGE='meine-stempeluhr-v1';
+const DAY_NAMES=['So','Mo','Di','Mi','Do','Fr','Sa'];
+const WEEKDAY_NAMES=['Mo','Di','Mi','Do','Fr','Sa','So'];
+const TYPE_LABELS={work:'Arbeit',vacation:'Urlaub',sick:'Krank',holiday:'Feiertag',free:'Dienstfrei'};
+const REGIONS={BY:'Bayern',BW:'Baden-Württemberg',BE:'Berlin',BB:'Brandenburg',HB:'Bremen',HH:'Hamburg',HE:'Hessen',MV:'Mecklenburg-Vorpommern',NI:'Niedersachsen',NW:'Nordrhein-Westfalen',RP:'Rheinland-Pfalz',SL:'Saarland',SN:'Sachsen',ST:'Sachsen-Anhalt',SH:'Schleswig-Holstein',TH:'Thüringen'};
+const $=(id)=>document.getElementById(id);
+const pad=(n)=>String(n).padStart(2,'0');
+const localISO=(d)=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseDate=(s)=>new Date(`${s}T12:00:00`);
+const todayISO=()=>localISO(new Date());
+const today=()=>parseDate(todayISO());
+const addDays=(iso,n)=>{const d=parseDate(iso);d.setDate(d.getDate()+n);return localISO(d)};
+const isoCompare=(a,b)=>a.localeCompare(b);
+const mtime=(s)=>{if(!/^\d\d:\d\d$/.test(s||''))return null;const [h,m]=s.split(':').map(Number);return h<24&&m<60?h*60+m:null};
+const timetxt=(m)=>`${pad(Math.floor(((m%1440)+1440)%1440/60))}:${pad(((m%60)+60)%60)}`;
+const duration=(m)=>{const a=Math.round(Math.abs(m));return `${m<0?'-':''}${Math.floor(a/60)}:${pad(a%60)}`};
+const signed=(m)=>`${m>0?'+':m<0?'−':'±'}${duration(Math.abs(m))}`;
+const valNum=(v)=>Number(String(v).replace(',','.').trim());
+const safe=(s)=>String(s??'').replace(/[&<>"']/g,(x)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+function defaultState(){return {version:1,settings:{weekly:2310,dayGoal:480,workdays:[1,2,3,4,5],trackingStart:todayISO().slice(0,7)+'-01',defaultBreak:30,vacationAllowance:null,vacationAllowances:{'2027':30},region:'augsburg',mariaHoliday:true},entries:{}}}
+function validateSettings(settings,base){const o={...base};if(Number.isInteger(settings.weekly)&&settings.weekly>=60&&settings.weekly<=4800)o.weekly=settings.weekly;if(Number.isInteger(settings.dayGoal)&&settings.dayGoal>=60&&settings.dayGoal<=960)o.dayGoal=settings.dayGoal;if(Number.isInteger(settings.defaultBreak)&&settings.defaultBreak>=0&&settings.defaultBreak<=180)o.defaultBreak=settings.defaultBreak;if(/^\d{4}-\d\d-\d\d$/.test(settings.trackingStart||'')&&!isNaN(parseDate(settings.trackingStart)))o.trackingStart=settings.trackingStart;if(settings.vacationAllowance===null||(Number.isInteger(settings.vacationAllowance)&&settings.vacationAllowance>=0&&settings.vacationAllowance<=365))o.vacationAllowance=settings.vacationAllowance;if(settings.region==='augsburg'||REGIONS[settings.region])o.region=settings.region;if(typeof settings.mariaHoliday==='boolean')o.mariaHoliday=settings.mariaHoliday;if(settings.vacationAllowances&&typeof settings.vacationAllowances==='object'&&!Array.isArray(settings.vacationAllowances)){o.vacationAllowances={...o.vacationAllowances};for(const [y,n] of Object.entries(settings.vacationAllowances)){if(/^20\d{2}$/.test(y)&&Number.isInteger(n)&&n>=0&&n<=365)o.vacationAllowances[y]=n}}if(Array.isArray(settings.workdays)){const arr=[...new Set(settings.workdays)].filter(x=>Number.isInteger(x)&&x>=0&&x<=6).sort((a,b)=>(a+6)%7-(b+6)%7);if(arr.length)o.workdays=arr}return o;}
+function load(){const baseline=defaultState();try{const raw=JSON.parse(localStorage.getItem(STORAGE));if(raw&&raw.version===1){baseline.settings=validateSettings(raw.settings||{},baseline.settings);if(raw.entries&&typeof raw.entries==='object'&&!Array.isArray(raw.entries)){for(const [key,e] of Object.entries(raw.entries)){if(!/^\d{4}-\d\d-\d\d$/.test(key)||!e||!TYPE_LABELS[e.type])continue;baseline.entries[key]={type:e.type,start:mtime(e.start)!==null?e.start:'',end:mtime(e.end)!==null?e.end:'',pauseMode:e.pauseMode==='manual'?'manual':'auto',pause:Number.isInteger(e.pause)?Math.min(240,Math.max(0,e.pause)):30,running:e.running===true,note:String(e.note||'').slice(0,500)}}}}}catch(err){console.warn('Speicherdatei nicht lesbar',err)}const earliest=Object.keys(baseline.entries).sort()[0];if(earliest&&earliest<baseline.settings.trackingStart){baseline.settings.trackingStart=earliest;try{localStorage.setItem(STORAGE,JSON.stringify(baseline))}catch(_){}}return baseline}
+let state=load();let selected=todayISO();let monthCursor=todayISO().slice(0,7);let timer=null;
+function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(state));return true}catch(err){toast('Speichern fehlgeschlagen. Bitte Speicherplatz prüfen.');return false}}
+function toast(message){const e=$('toast');e.textContent=message;e.classList.add('show');clearTimeout(timer);timer=setTimeout(()=>e.classList.remove('show'),3300)}
+function plan(iso){if(isoCompare(iso,state.settings.trackingStart)<0||getHoliday(iso))return 0;const day=parseDate(iso).getDay();const days=state.settings.workdays;if(!days.includes(day))return 0;const e=state.entries[iso];if(e&&e.type==='free')return 0;const idx=days.indexOf(day),base=Math.floor(state.settings.weekly/days.length),extra=state.settings.weekly%days.length;return base+(idx<extra?1:0)}
+function pause(raw,e){
+ if(e.pauseMode==='manual')return Math.max(0,Math.min(raw,e.pause||0));
+ // Firmenregel der Nutzerin: bis 6 Stunden Anwesenheit keine Pause,
+ // über 6 Stunden 30 Minuten, ab mehr als 8 Stunden Anwesenheit 45 Minuten.
+ if(raw<=360)return 0;
+ if(raw>480)return Math.min(raw,45);
+ const usual=Math.max(0,state.settings.defaultBreak||30);
+ return Math.min(raw,Math.max(30,usual));
+}
+function rawMinutes(iso,e){const start=mtime(e.start),end=mtime(e.end);if(start===null)return null;if(end!==null)return end>=start?end-start:null;if(e.running&&iso===todayISO()){const n=new Date();return Math.max(0,n.getHours()*60+n.getMinutes()-start)}return null}
+function worked(iso,e){if(!e||e.type!=='work')return 0;const raw=rawMinutes(iso,e);if(raw===null)return 0;return Math.max(0,raw-pause(raw,e))}
+function credit(iso){const e=state.entries[iso];if(!e)return 0;return e.type==='work'?worked(iso,e):e.type==='free'?0:plan(iso)}
+function dayTarget(iso){if(isoCompare(iso,state.settings.trackingStart)<0||getHoliday(iso))return 0;const e=state.entries[iso];if(e&&e.type==='free')return 0;if(!state.settings.workdays.includes(parseDate(iso).getDay()))return 0;return plan(iso)}
+function dayBalance(iso){const e=state.entries[iso];if(e&&e.type!=='work')return 0;return credit(iso)-dayTarget(iso)}
+function dayClass(n){return n<0?'bad':'good'}
+function sumRange(start,end,throughToday=true){let a=0,p=0,days=0;if(isoCompare(start,state.settings.trackingStart)<0)start=state.settings.trackingStart;if(throughToday&&isoCompare(end,todayISO())>0)end=todayISO();if(isoCompare(start,end)>0)return {actual:0,expected:0,balance:0,days:0};let cursor=start;while(isoCompare(cursor,end)<=0&&days<20000){a+=credit(cursor);p+=plan(cursor);days++;cursor=addDays(cursor,1)}return {actual:a,expected:p,balance:a-p,days}}
+function weekMonday(iso){const day=parseDate(iso).getDay();return addDays(iso,-((day+6)%7))}
+function monthBounds(ym){const first=ym+'-01';const d=parseDate(first);d.setMonth(d.getMonth()+1);d.setDate(0);return [first,localISO(d)]}
+function periodChange(ym,change){const d=parseDate(ym+'-01');d.setMonth(d.getMonth()+change);return localISO(d).slice(0,7)}
+function formatDate(iso,format){return new Intl.DateTimeFormat('de-DE',format||{day:'numeric',month:'long',year:'numeric'}).format(parseDate(iso))}
+function calcEnd(start,net,e){
+ const n=mtime(start);if(n===null||!Number.isFinite(net))return null;
+ if(net<=0)return timetxt(n);
+ if(e?.pauseMode==='manual')return timetxt(n+net+Math.max(0,e.pause||0));
+ // Find earliest attendance duration that fulfils net target after auto break.
+ for(let raw=0;raw<=1440;raw++)if(raw-pause(raw,{pauseMode:'auto'})>=net)return timetxt(n+raw);
+ return null;
+}
+function refreshClock(){
+ const now=new Date(),iso=todayISO(),entry=state.entries[iso],live=entry?worked(iso,entry):0;
+ const running=!!(entry&&entry.type==='work'&&entry.running&&!entry.end);
+ const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+ const required=plan(iso),personal=state.settings.dayGoal;
+ $('hero-date').textContent=formatDate(iso,{weekday:'long',day:'numeric',month:'long'});
+ $('header-date').textContent=new Intl.DateTimeFormat('de-DE',{day:'2-digit',month:'short',year:'numeric'}).format(now);
+ $('punch-status').classList.toggle('off',!running);
+ $('punch-status').lastElementChild.textContent=running?'Arbeitszeit läuft':entry?.end?'Für heute ausgestempelt':'Aktuell nicht eingestempelt';
+ $('live-net').innerHTML=`${duration(live)} <span>Std.</span>`;
+ $('time-ring').style.setProperty('--ring',Math.min(100,Math.max(0,100*live/(required||personal))).toFixed(1)+'%');
+ $('ring-caption').textContent=`von ${duration(required||personal)} Std.`;
+ $('live-range').textContent=entry?.type==='work'&&entry.start?`${entry.start} Uhr ${entry.end?'bis '+entry.end+' Uhr':running?'bis jetzt':'· noch offen'}`:'Noch keine Zeit erfasst';
+ $('live-now').textContent=hhmm+' Uhr';
+ $('punch-in').disabled=!!(entry&&(entry.type!=='work'||entry.start));$('punch-out').disabled=!running;
+ const start=entry?.type==='work'?entry.start:'';
+ const regularEnd=start&&required?calcEnd(start,required,entry):null;
+ const personalEnd=start?calcEnd(start,personal,entry):null;
+ $('target-regular').textContent=regularEnd?regularEnd+' Uhr':required?'Nach Einstempeln':'Heute frei';
+ $('target-personal').textContent=personalEnd?personalEnd+' Uhr':'Nach Einstempeln';
+ const targetEnd=regularEnd;
+ const diff=live-required;
+ const target=required?duration(required):'0:00';
+ const breakPlanned=entry?.pauseMode==='manual'?Math.max(0,entry.pause||0):state.settings.defaultBreak;
+ const info=start?`Soll ${target} Std. netto · Beginn ${safe(start)} Uhr`:`Sollzeit ${target} Std. · Regelpause: über 6 Std. = 30 Min., ab 8 Std. = 45 Min.`;
+ let message='';
+ if(start&&required){
+   if(running&&targetEnd){const left=mtime(targetEnd)-mtime(hhmm);message=`<div class="${left<=0?'projection-overtime':'projection-sub'}">${left>0?'Noch '+duration(left)+' Std. bis Feierabend':'Soll erfüllt · '+duration(-left)+' Std. danach'}</div>`}
+   else if(entry?.end){message=`<div class="${diff>=0?'projection-overtime':'projection-alert'}">${diff===0?'Sollzeit genau erreicht':diff>0?`Plus heute: ${signed(diff)} Std.`:`Minus heute: ${signed(diff)} Std.`}</div>`}
+ }
+ const raw=entry?.type==='work'?rawMinutes(iso,entry):null;
+ const realPause=raw!==null?pause(raw,entry):0;
+ const warning=raw!==null&&raw-realPause>540&&realPause<45?'<div class="projection-alert">Ab mehr als 8 Stunden Anwesenheit rechnet die App automatisch mit 45 Minuten Pause. Tatsächliche Pause bei Bedarf manuell eintragen.</div>':'';
+ const label=required?'FEIERABEND OHNE MINUS':'HEUTE KEINE SOLLZEIT';
+ const mainTime=targetEnd?targetEnd+' Uhr':required?'--:--':'Heute frei';
+ const displayInfo=required?info:'Keine reguläre Arbeitszeit geplant';
+ $('projection').innerHTML=`<div class="projection-lead">${label}</div><div class="projection-time ${required?'':'projection-off'}">${mainTime}</div><div class="projection-sub">${displayInfo}</div>${message}${warning}`;
+}
+function refreshStats(){const iso=todayISO(),wstart=weekMonday(iso),mstart=iso.slice(0,7)+'-01';const w=sumRange(wstart,iso),m=sumRange(mstart,iso),all=sumRange(state.settings.trackingStart,iso);const current=credit(iso),p=plan(iso),dayDelta=dayBalance(iso);
+ $('stat-today').textContent=duration(current);$('stat-today').className='num '+(dayDelta>=0?'good':'bad');$('today-plan').innerHTML=`Sollzeit: ${duration(dayTarget(iso))} Std. · <span class="${dayClass(dayDelta)}">${signed(dayDelta)} Std.</span>`;
+ $('stat-week').textContent=duration(w.actual);$('week-plan').innerHTML=`Soll bis heute: ${duration(w.expected)} Std. · <span class="${dayClass(w.balance)}">${signed(w.balance)}</span>`;
+ $('stat-month').textContent=duration(m.actual);$('month-plan').innerHTML=`Soll bis heute: ${duration(m.expected)} Std. · <span class="${dayClass(m.balance)}">${signed(m.balance)}</span>`;
+ $('stat-balance').textContent=signed(all.balance);$('stat-balance').className='num '+dayClass(all.balance);
+ $('week-progress').style.width=`${w.expected?Math.min(100,100*w.actual/w.expected):0}%`;
+ $('month-progress').style.width=`${m.expected?Math.min(100,100*m.actual/m.expected):0}%`;
+ $('balance-hint').textContent=`Seit ${formatDate(state.settings.trackingStart)} · ${duration(all.expected)} Std. Soll`;
+ $('tracking-badge').textContent='Bis heute';
+}
+function displayMonth(){const ym=monthCursor,[from,to]=monthBounds(ym),past=sumRange(from,to),full=sumRange(from,to,false);
+ $('month-label').textContent=new Intl.DateTimeFormat('de-DE',{month:'long',year:'numeric'}).format(parseDate(from));
+ const curMonth=isoCompare(ym,todayISO().slice(0,7))===0;
+ const remainder=Math.max(0,full.expected-past.expected);
+ $('month-summary').innerHTML=`<span>Ist/Gutschrift: <strong>${duration(past.actual)} Std.</strong></span><span>Soll bis heute: <strong>${duration(past.expected)} Std.</strong></span><span>Saldo: <strong class="${dayClass(past.balance)}">${signed(past.balance)} Std.</strong></span><span>${curMonth?'Noch geplant':'Gesamtes Monatssoll'}: <strong>${duration(curMonth?remainder:full.expected)} Std.</strong></span>`;
+ const rows=[];for(let iso=from;isoCompare(iso,to)<=0;iso=addDays(iso,1)){const future=isoCompare(iso,todayISO())>0, e=state.entries[iso],p=dayTarget(iso),c=future?0:credit(iso),bal=dayBalance(iso);let status='';
+ if(e&&e.type!=='work'){status=`<span class="tag ${e.type==='vacation'?'leave':e.type==='sick'?'ill':'rest'}">${TYPE_LABELS[e.type]}</span>`}
+ else if(e&&e.type==='work'&&e.start){status=`${safe(e.start)} ${e.end?'– '+safe(e.end):e.running&&iso===todayISO()?'· läuft':'· offen'}`}
+ else if(getHoliday(iso)){status=`<span class="tag holiday">${safe(getHoliday(iso))}</span>`}else status=`<span class="${future||!p?'norecord':'bad'}">${future?'Geplant':p?'Nicht erfasst':'Frei'}</span>`;
+ if(e?.type==='work'&&e.start&&e.end){const raw=rawMinutes(iso,e);status+=`<small class="month-pause">${pause(raw,e)} Min. Pause</small>`}
+ const d=parseDate(iso);const day=`${DAY_NAMES[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth()+1)}.`;
+ const saldo=future?'–':p===0&&c===0?'±0:00':signed(bal);
+ rows.push(`<tr class="entry" data-date="${iso}" tabindex="0" aria-label="${safe(formatDate(iso))} bearbeiten"><td><strong>${day}</strong></td><td class="cell-time">${status}</td><td class="cell-net">${future?'–':duration(c)}</td><td class="cell-saldo ${future?'':dayClass(bal)}">${saldo}</td></tr>`);
+ }
+ $('month-rows').innerHTML=rows.join('');
+ $('month-rows').querySelectorAll('tr').forEach(tr=>{const f=()=>{selected=tr.dataset.date;fillEditor();$('edit-card').scrollIntoView({behavior:'smooth',block:'start'})};tr.addEventListener('click',f);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();f()}})});
+}
+/* Kalender & Urlaub, v1.3. Feiertage am Arbeitsort, keine externen Dienste. */
+const YEAR_PLANS={
+  verteilt:{name:'Über das Jahr verteilt',sub:'Viele kurze Auszeiten und Urlaub zum Jahresende',blocks:[
+    ['2027-01-01','2027-01-10','Jahresbeginn'],
+    ['2027-03-20','2027-04-04','Ostern'],
+    ['2027-05-06','2027-05-09','Christi Himmelfahrt'],
+    ['2027-05-14','2027-05-17','Pfingsten'],
+    ['2027-05-27','2027-05-30','Fronleichnam'],
+    ['2027-09-18','2027-09-26','September'],
+    ['2027-10-29','2027-11-07','Allerheiligen'],
+    ['2027-12-25','2028-01-02','Jahreswechsel']
+  ]},
+  sommer:{name:'Langer Septemberurlaub',sub:'16 Tage im September und dafür kein Weihnachtsurlaub',blocks:[
+    ['2027-01-01','2027-01-10','Jahresbeginn'],
+    ['2027-03-20','2027-04-04','Ostern'],
+    ['2027-05-06','2027-05-09','Christi Himmelfahrt'],
+    ['2027-05-14','2027-05-17','Pfingsten'],
+    ['2027-05-27','2027-05-30','Fronleichnam'],
+    ['2027-09-18','2027-10-03','Langer September'],
+    ['2027-10-29','2027-11-07','Allerheiligen']
+  ]}
+};
+let plannerYear=2027,plannerMonth=5,chosenPlan='verteilt';
+const mnames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function dateRun(a,b){const result=[];for(let d=a;d<=b;d=addDays(d,1))result.push(d);return result}
+function easter(year){const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k+7)%7,m=Math.floor((a+11*h+22*l)/451),month=Math.floor((h+l-7*m+114)/31),day=(h+l-7*m+114)%31+1;return `${year}-${pad(month)}-${pad(day)}`}
+function holidaysForYear(year){
+  const region=state.settings.region||'augsburg',by=region==='BY'||region==='augsburg';
+  const map={},fixed=(md,name)=>{map[`${year}-${md}`]=name},move=(delta,name)=>{map[addDays(easter(year),delta)]=name};
+  fixed('01-01','Neujahr');fixed('05-01','Tag der Arbeit');fixed('10-03','Tag der Deutschen Einheit');fixed('12-25','1. Weihnachtstag');fixed('12-26','2. Weihnachtstag');
+  move(-2,'Karfreitag');move(1,'Ostermontag');move(39,'Christi Himmelfahrt');move(50,'Pfingstmontag');
+  if(by||['BW','ST'].includes(region))fixed('01-06','Heilige Drei Könige');
+  if(by||['BW','HE','NW','RP','SL'].includes(region))move(60,'Fronleichnam');
+  if(['BE','MV'].includes(region))fixed('03-08','Internationaler Frauentag');
+  if(['BB','HB','HH','MV','NI','SN','ST','SH','TH'].includes(region))fixed('10-31','Reformationstag');
+  if(['BW','NW','RP','SL'].includes(region)||by)fixed('11-01','Allerheiligen');
+  if(region==='SL'||(by&&(region==='augsburg'||state.settings.mariaHoliday)))fixed('08-15','Mariä Himmelfahrt');
+  if(region==='augsburg')fixed('08-08','Augsburger Friedensfest');
+  if(region==='TH')fixed('09-20','Weltkindertag');
+  if(region==='SN'){const nov=localISO(new Date(year,10,23,12,0,0));let d=nov;while(parseDate(d).getDay()!==3)d=addDays(d,-1);map[d]='Buß- und Bettag'}
+  if(region==='BB'){move(0,'Ostersonntag');move(49,'Pfingstsonntag')}
+  return map
+}
+const holidayCache=new Map();
+function getHoliday(iso){
+  if(!/^\d{4}-\d\d-\d\d$/.test(iso))return null;
+  const year=Number(iso.slice(0,4)),r=state.settings.region||'augsburg',key=`${year}:${r}:${state.settings.mariaHoliday}`;
+  if(!holidayCache.has(key))holidayCache.set(key,holidaysForYear(year));
+  return holidayCache.get(key)[iso]||null
+}
+function isWorkingVacationDay(iso){return state.settings.workdays.includes(parseDate(iso).getDay())&&!getHoliday(iso)}
+function presetDates(key){const plan=YEAR_PLANS[key];if(!plan)return[];const seen=new Set();for(const [from,to]of plan.blocks)for(const iso of dateRun(from,to))if(isWorkingVacationDay(iso))seen.add(iso);return[...seen].sort()}
+function usedVacation(year){return Object.keys(state.entries).filter(iso=>iso.startsWith(String(year))&&state.entries[iso].type==='vacation'&&isWorkingVacationDay(iso)).length}
+function getAnnualAllowance(year){return state.settings.vacationAllowances?.[String(year)]??state.settings.vacationAllowance}
+function fmtShort(iso){return `${iso.slice(8,10)}.${iso.slice(5,7)}.${iso.slice(0,4)}`}
+function formatBlock(from,to){return `${fmtShort(from)} – ${fmtShort(to)}`}
+function availablePreset(){return plannerYear===2027&&['BY','augsburg'].includes(state.settings.region)}
+function chosenDates(){return availablePreset()&&chosenPlan?presetDates(chosenPlan):[]}
+function initPlanner(){
+  $('planner-year').innerHTML=Array.from({length:14},(_,i)=>2025+i).map(y=>`<option value="${y}">${y}</option>`).join('');
+  $('planner-year').value=String(plannerYear);
+  $('planner-region').value=state.settings.region||'augsburg';
+  $('planner-maria').checked=state.settings.mariaHoliday!==false;
+}
+function renderPlanner(){
+  if(!$('planner-year'))return;
+  $('planner-year').value=String(plannerYear);
+  $('planner-region').value=state.settings.region||'augsburg';
+  $('planner-maria').checked=state.settings.mariaHoliday!==false;
+  const reg=state.settings.region||'augsburg',by=reg==='BY'||reg==='augsburg';
+  $('planner-maria-wrap').classList.toggle('hidden',reg!=='BY');
+  $('planner-region-note').textContent=reg==='augsburg'?'Stadt Augsburg: Friedensfest (8. August) und Mariä Himmelfahrt sind berücksichtigt.':reg==='BY'?'Bei Mariä Himmelfahrt entscheidet die genaue Gemeinde. Prüfe die Auswahl für deinen Arbeitsort.': 'Gesetzliche Feiertage des Bundeslandes. Örtliche Sonderregelungen sind möglicherweise nicht vollständig enthalten.';
+  $('planner-allowance-year').textContent=plannerYear;
+  const allowed=getAnnualAllowance(plannerYear),used=usedVacation(plannerYear),left=allowed===null?null:allowed-used;
+  $('planner-allowance').value=allowed===null?'':allowed;
+  $('planner-used').innerHTML=`${used} <small>Tage</small>`;
+  $('planner-left').innerHTML=left===null?'Noch offen':`${left} <small>Tage</small>`;
+  $('planner-left').classList.toggle('planner-metric-red',left!==null&&left<0);
+  $('planner-preset-badge').textContent=plannerYear;
+  if(availablePreset()){
+    $('planner-options').innerHTML=Object.entries(YEAR_PLANS).map(([key,item])=>{
+      const days=presetDates(key),total=item.blocks.reduce((sum,[a,b])=>sum+dateRun(a,b).length,0),newDays=days.filter(d=>state.entries[d]?.type!=='vacation').length;
+      return `<button type="button" class="planner-choice ${chosenPlan===key?'is-selected':''}" data-plan="${key}" aria-pressed="${chosenPlan===key?'true':'false'}"><span class="planner-choice-top"><span class="planner-choice-radio"></span><span class="planner-choice-title">${item.name}</span></span><span class="planner-choice-sub">${item.sub}</span><span class="planner-choice-stats"><strong>${total} <small>Tage frei</small></strong><strong>${days.length} <small>Urlaubstage</small></strong></span><span class="planner-choice-foot">${item.blocks.length} Auszeiten · ${newDays} Tage noch nicht eingetragen</span></button>`;
+    }).join('');
+    $('planner-options').querySelectorAll('[data-plan]').forEach(b=>b.addEventListener('click',()=>{chosenPlan=b.dataset.plan;renderPlanner()}));
+  }else{
+    $('planner-options').innerHTML=`<div class="planner-empty">Die zwei ausgearbeiteten Musterpläne gelten für <strong>2027 in Bayern / Augsburg</strong>. Für ${plannerYear} zeigt der Kalender automatisch die Feiertage deiner Region. Wähle 2027 und Bayern oder Augsburg, um die Varianten zu vergleichen.</div>`;
+  }
+  renderPlanDetails();renderBridgeTips();renderPlannerCalendar();renderHolidayList();
+}
+function renderPlanDetails(){
+  const box=$('planner-selection'),on=availablePreset()&&chosenPlan;
+  $('planner-apply').disabled=!on;
+  $('planner-clear-preview').disabled=!on;
+  if(!on){box.innerHTML='';return}
+  const item=YEAR_PLANS[chosenPlan],days=presetDates(chosenPlan),used=usedVacation(plannerYear),newDates=days.filter(iso=>state.entries[iso]?.type!=='vacation'&&!state.entries[iso]),conflict=days.filter(iso=>state.entries[iso]&&state.entries[iso].type!=='vacation');
+  const allowance=getAnnualAllowance(plannerYear),otherUsed=Object.keys(state.entries).filter(iso=>iso.startsWith('2027')&&state.entries[iso].type==='vacation'&&!days.includes(iso)&&isWorkingVacationDay(iso)).length;
+  const after=allowance===null?null:allowance-otherUsed-days.length;
+  box.innerHTML=`<div class="planner-planhead"><span>VORSCHAU · ${safe(item.name)}</span><strong>${days.length} Urlaubstage</strong></div>
+    <div class="planner-blocks">${item.blocks.map(([a,b,n])=>{const cnt=dateRun(a,b).filter(isWorkingVacationDay).length;return `<div class="planner-block"><span>${safe(n)}<small>${formatBlock(a,b)}</small></span><strong>${cnt} Urlaubst.</strong></div>`}).join('')}</div>
+    <div class="planner-planbottom"><span>Neuer Eintrag: <strong>${newDates.length} Tage</strong>${conflict.length?` · ${conflict.length} bereits anders belegt`:''}</span><span>Rest nach dieser Variante: <strong class="${after!==null&&after<0?'bad':'good'}">${after===null?'nicht festgelegt':after+' Tage'}</strong></span></div>`;
+}
+function oneDayBridgeTips(year){
+  const from=`${year}-01-01`,to=`${year}-12-31`,results=[];
+  const off=(date,extra)=>date===extra||!state.settings.workdays.includes(parseDate(date).getDay())||!!getHoliday(date)||state.entries[date]?.type==='vacation';
+  for(let d=from;d<=to;d=addDays(d,1)){
+    if(!isWorkingVacationDay(d)||state.entries[d])continue;
+    let a=d,b=d;
+    for(let i=0;i<35&&off(addDays(a,-1),d);i++)a=addDays(a,-1);
+    for(let i=0;i<35&&off(addDays(b,1),d);i++)b=addDays(b,1);
+    const n=dateRun(a,b).length;
+    if(n>=4)results.push({date:d,from:a,to:b,free:n});
+  }
+  return results.sort((a,b)=>b.free-a.free||a.date.localeCompare(b.date)).slice(0,6)
+}
+function renderBridgeTips(){
+  const box=$('planner-bridge-tips'),tips=oneDayBridgeTips(plannerYear);
+  box.innerHTML=tips.length?tips.map(t=>`<div class="planner-bridge"><div><span class="planner-bridge-date">${fmtShort(t.date)}</span><strong>${t.free} Tage am Stück frei</strong><small>${formatBlock(t.from,t.to)}</small></div><button type="button" data-bridge="${t.date}" aria-label="Urlaub am ${fmtShort(t.date)} eintragen">Eintragen</button></div>`).join(''):'<div class="planner-holidays-empty">Für dieses Jahr wurden keine passenden Brückentage mit nur einem Urlaubstag gefunden.</div>';
+  box.querySelectorAll('button[data-bridge]').forEach(b=>b.addEventListener('click',()=>{
+    const d=b.dataset.bridge;
+    if(state.entries[d])return toast('Dieser Tag ist bereits eingetragen.');
+    const allowance=getAnnualAllowance(plannerYear);
+    if(allowance!==null&&usedVacation(plannerYear)+1>allowance)return toast('Dein Urlaubskonto reicht für diesen Tag nicht.');
+    if(!confirm(`Den ${fmtShort(d)} als Urlaubstag eintragen?`))return;
+    if(d<state.settings.trackingStart)return toast('Das Datum liegt vor deinem Erfassungsbeginn.');
+    state.entries[d]={type:'vacation',start:'',end:'',pauseMode:'auto',pause:state.settings.defaultBreak,running:false,note:'Brückentag aus dem Urlaubsplaner'};
+    persist();refresh();toast(`Urlaub am ${fmtShort(d)} eingetragen.`);
+  }));
+}
+function renderPlannerCalendar(){
+  const month=`${plannerYear}-${pad(plannerMonth)}`,first=`${month}-01`,[a,b]=monthBounds(month),offset=(parseDate(a).getDay()+6)%7,
+     planned=new Set(chosenDates()),existing=state.entries;
+  $('planner-month-name').textContent=`${mnames[plannerMonth-1]} ${plannerYear}`;
+  $('planner-month-prev').disabled=plannerMonth===1;
+  $('planner-month-next').disabled=plannerMonth===12;
+  let html=['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<span class="planner-weeklabel">${d}</span>`).join('');
+  for(let i=0;i<offset;i++)html+='<span class="planner-blank"></span>';
+  for(let d=a;d<=b;d=addDays(d,1)){
+    const entry=existing[d],holiday=getHoliday(d),vac=entry?.type==='vacation'&&isWorkingVacationDay(d),draft=planned.has(d)&&!vac,weekend=[0,6].includes(parseDate(d).getDay()),day=Number(d.slice(-2));
+    const kinds=[vac?'pl-vac':'',holiday?'pl-holiday':'',draft?'pl-draft':'',weekend?'pl-weekend':'',d===todayISO()?'pl-today':''].filter(Boolean).join(' ');
+    const tip=holiday|| (vac?'Urlaub eingetragen':draft?'Urlaubsvorschlag':entry?TYPE_LABELS[entry.type]:'Tag bearbeiten');
+    html+=`<button type="button" class="planner-date ${kinds}" data-date="${d}" title="${safe(tip)}" aria-label="${safe(formatDate(d))}: ${safe(tip)}"><span>${day}</span>${holiday?'<i class="planner-dot"></i>':vac?'<i class="planner-dot"></i>':draft?'<i class="planner-dot"></i>':''}</button>`;
+  }
+  $('planner-calendar').innerHTML=html;
+  $('planner-calendar').querySelectorAll('button[data-date]').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.date;monthCursor=selected.slice(0,7);fillEditor();displayMonth();$('edit-card').scrollIntoView({behavior:'smooth',block:'start'})}));
+}
+function renderHolidayList(){
+  const year=plannerYear,items=Object.entries(holidaysForYear(year)).filter(([day])=>day.startsWith(`${year}-${pad(plannerMonth)}`)).sort(([a],[b])=>a.localeCompare(b));
+  $('planner-holidays').innerHTML=items.length?`<div class="planner-holidays-title">Feiertage im ${mnames[plannerMonth-1]}</div>`+items.map(([d,n])=>`<div class="planner-holiday-row"><span>${fmtShort(d)}</span><strong>${safe(n)}</strong><small>${state.settings.workdays.includes(parseDate(d).getDay())?'Arbeitsfrei':'Wochenende / arbeitsfrei'}</small></div>`).join(''):`<div class="planner-holidays-empty">In diesem Monat gibt es keine gesetzlichen Feiertage für den gewählten Arbeitsort.</div>`;
+}
+function attachPlanner(){
+  $('planner-year').addEventListener('change',()=>{plannerYear=Number($('planner-year').value);plannerMonth=5;chosenPlan=plannerYear===2027?'verteilt':null;renderPlanner()});
+  $('planner-region').addEventListener('change',()=>{state.settings.region=$('planner-region').value;holidayCache.clear();persist();refresh();fillEditor()});
+  $('planner-maria').addEventListener('change',()=>{state.settings.mariaHoliday=$('planner-maria').checked;holidayCache.clear();persist();refresh();fillEditor()});
+  $('planner-allowance-save').addEventListener('click',()=>{const v=$('planner-allowance').value.trim();if(v===''||!Number.isInteger(Number(v))||Number(v)<0||Number(v)>365)return toast('Bitte eine gültige Anzahl Urlaubstage eingeben.');state.settings.vacationAllowances={...(state.settings.vacationAllowances||{}),[String(plannerYear)]:Number(v)};persist();refresh();toast(`${v} Urlaubstage für ${plannerYear} gespeichert.`)});
+  $('planner-month-prev').addEventListener('click',()=>{plannerMonth=Math.max(1,plannerMonth-1);renderPlannerCalendar();renderHolidayList()});
+  $('planner-month-next').addEventListener('click',()=>{plannerMonth=Math.min(12,plannerMonth+1);renderPlannerCalendar();renderHolidayList()});
+  $('planner-clear-preview').addEventListener('click',()=>{chosenPlan=null;renderPlanner()});
+  $('planner-apply').addEventListener('click',()=>{
+    if(!availablePreset()||!chosenPlan)return;
+    const dates=presetDates(chosenPlan),already=dates.filter(d=>state.entries[d]?.type==='vacation').length,other=dates.filter(d=>state.entries[d]&&state.entries[d].type!=='vacation');
+    const fresh=dates.filter(d=>!state.entries[d]&&d>=state.settings.trackingStart),blockedByStart=dates.filter(d=>d<state.settings.trackingStart);
+    const allowed=getAnnualAllowance(plannerYear),used=usedVacation(plannerYear);
+    if(allowed!==null&&used+fresh.length>allowed)return toast(`Dein Urlaub reicht nicht: ${used+fresh.length} von ${allowed} Tagen wären belegt. Bitte zunächst anpassen.`);
+    if(!fresh.length)return toast('Keine neuen freien Urlaubstage zum Eintragen vorhanden.');
+    const msg=`${YEAR_PLANS[chosenPlan].name}: ${fresh.length} neue Urlaubstage für 2027 eintragen?\n\n${already} sind schon als Urlaub erfasst. ${other.length} anders belegte Tage und ${blockedByStart.length} Tage vor Erfassungsbeginn werden nicht überschrieben.\n\nDie Zeiten werden lokal gespeichert.`;
+    if(!confirm(msg))return;
+    for(const d of fresh)state.entries[d]={type:'vacation',start:'',end:'',pauseMode:'auto',pause:state.settings.defaultBreak,running:false,note:'Aus dem Urlaubsplaner 2027'};
+    persist();refresh();toast(`${fresh.length} Urlaubstage eingetragen. Sicherung empfohlen.`);
+  });
+}
 
-  <script src="app.js?v=3.5.5" defer></script>
-</body>
-</html>
+function vacationYear(){const year=todayISO().slice(0,4);let count=0;for(const [iso,e] of Object.entries(state.entries)){if(iso.startsWith(year)&&e.type==='vacation'&&plan(iso)>0)count++}const allowance=state.settings.vacationAllowances?.[year]??state.settings.vacationAllowance;const rest=allowance===null?'':` · Rest: <strong>${allowance-count} Tage</strong>`;$('vacation-stat').innerHTML=`Urlaub ${year}: <strong>${count} Arbeitstage eingetragen</strong>${rest}`;}
+function toggleEditor(){const t=$('edit-type').value;document.querySelectorAll('.work-only').forEach(x=>x.classList.toggle('hidden',t!=='work'));$('manual-pause-field').classList.toggle('hidden',t!=='work'||$('edit-pause-mode').value!=='manual');previewEditor()}
+function fillEditor(){const e=state.entries[selected]||{type:'work',start:'',end:'',pauseMode:'auto',pause:state.settings.defaultBreak,note:''};$('edit-date').value=selected;$('edit-type').value=e.type;$('edit-start').value=e.start||'';$('edit-end').value=e.end||'';$('edit-pause-mode').value=e.pauseMode||'auto';$('edit-pause').value=e.pause??state.settings.defaultBreak;$('edit-note').value=e.note||'';toggleEditor()}
+function previewEditor(){let text='';const type=$('edit-type').value,iso=$('edit-date').value||selected,p=dayTarget(iso);
+ if(type!=='work'){text=`${TYPE_LABELS[type]}: ${type==='free'?'kein Soll und keine Zeitgutschrift':duration(plan(iso))+' Std. Zeitgutschrift'} am Arbeitstag.`}
+ else{const a=mtime($('edit-start').value),b=mtime($('edit-end').value);if(a!==null&&b!==null&&b>=a){const raw=b-a,e={pauseMode:$('edit-pause-mode').value,pause:Number($('edit-pause').value)||0};const ps=pause(raw,e);text=`Anwesenheit: ${duration(raw)} Std. · Pause: ${ps} Min. · Netto: ${duration(raw-ps)} Std. · Tagessaldo: ${signed(raw-ps-p)} Std.${raw>480&&ps<45?' · Achtung: Ab mehr als 8 Std. Anwesenheit sollten 45 Min. Pause erfasst werden.':''}`}
+ else if(a!==null){text=`Feierabend für ${duration(state.settings.dayGoal)} Std. netto: ${calcEnd($('edit-start').value,state.settings.dayGoal,{pauseMode:$('edit-pause-mode').value,pause:Number($('edit-pause').value)||0})} Uhr · reguläres Tagesziel: ${p?calcEnd($('edit-start').value,p,{pauseMode:$('edit-pause-mode').value,pause:Number($('edit-pause').value)||0})+' Uhr':'kein Soll'}.`}
+ else text=`Geplante Tagesarbeitszeit: ${duration(p)} Std.`}
+ $('edit-preview').textContent=text;}
+function renderWeek(){const start=weekMonday(todayISO());const bars=[];
+ for(let i=0;i<7;i++){const iso=addDays(start,i),e=state.entries[iso],isToday=iso===todayISO(),isFuture=iso>todayISO(),isWork=state.settings.workdays.includes(parseDate(iso).getDay()),goal=dayTarget(iso),net=credit(iso),hasRecord=!!e;
+ const ratio=goal>0?Math.min(100,net/goal*100):0;const height=goal>0?Math.max(7,Math.round(ratio)):hasRecord&&net>0?100:4;
+ const status=isFuture?'future':!isWork?'rest':e&&e.type!=='work'?'absence':net>=goal?'fulfilled':hasRecord?'missing':'empty';
+ const short=DAY_NAMES[parseDate(iso).getDay()];const current=isToday?' current':'';
+ bars.push(`<button type="button" class="week-day ${status}${current}" data-week-date="${iso}" aria-label="${safe(formatDate(iso))}, ${duration(net)} Stunden">
+ <span class="bar-value">${isFuture?'':net?duration(net):'·'}</span><span class="bar-track"><span class="bar-fill" style="height:${height}%"></span></span><span class="bar-day">${short}</span><span class="bar-daynum">${Number(iso.slice(-2))}</span></button>`);
+ }
+ $('week-chart').innerHTML=bars.join('');$('week-chart').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.weekDate;fillEditor();$('edit-card').scrollIntoView({behavior:'smooth',block:'start'});}));
+}
+const ATOSS_REFERENCE=[
+ ['2026-10-01','10:57','15:11',0,254,-208],
+ ['2026-10-02','08:50','13:46',0,296,-166],
+ ['2026-10-05','07:46','15:25',30,429,-33],
+ ['2026-10-06','07:44','15:23',30,429,-33],
+ ['2026-10-07','07:22','15:39',30,467,5],
+ ['2026-10-08','07:25','16:24',30,509,47]
+];
+function renderATOSS(){
+ const box=$('atoss-records');if(!box)return;
+ let matches=0,recorded=0,total=0;
+ box.innerHTML=ATOSS_REFERENCE.map(([iso,start,end,minutes,net,saldo])=>{
+   const e=state.entries[iso];let label='Nicht erfasst',status='pending';
+   const raw=e?.type==='work'?rawMinutes(iso,e):null;
+   if(raw!==null&&e.end){
+     recorded++;
+     const calculated=worked(iso,e),actualBalance=calculated-plan(iso);
+     const same=calculated===net&&actualBalance===saldo&&pause(raw,e)===minutes&&e.start===start&&e.end===end;
+     if(same){matches++;label='Stimmt';status='match'}
+     else{label=`Abweichung ${signed(calculated-net)} netto`;status='mismatch'}
+   }else if(e){label='Abweichender Eintrag';status='mismatch'}
+   total+=saldo;
+   return `<div class="atoss-record"><div><strong>${fmtShort(iso)}</strong><span>${start}–${end} · ${minutes} Min. Pause</span></div><div class="atoss-hours"><strong>${duration(net)} Std.</strong><span class="${dayClass(saldo)}">${signed(saldo)} Saldo</span></div><span class="atoss-status ${status}">${safe(label)}</span></div>`;
+ }).join('');
+ $('atoss-summary').innerHTML=`<div><span>ATOSS-Saldo (6 Tage)</span><strong class="bad">${signed(total)} Std.</strong></div><div><span>Übereinstimmung</span><strong>${matches} von ${ATOSS_REFERENCE.length} Tagen</strong><small>${recorded} vollständige eigene Einträge</small></div>`;
+ $('atoss-import').disabled=ATOSS_REFERENCE.every(([d])=>!!state.entries[d]);
+ $('atoss-import').textContent=$('atoss-import').disabled?'Alle sechs Tage sind erfasst':'Fehlende Tage vom Ausdruck übernehmen';
+}
+function importATOSS(){
+ const missing=ATOSS_REFERENCE.filter(([d])=>!state.entries[d]);
+ if(!missing.length)return toast('Alle sechs Tage sind bereits erfasst.');
+ if(!confirm(`${missing.length} fehlende Tage aus dem ATOSS-Ausdruck vom Oktober 2026 übernehmen? Vorhandene Einträge bleiben unverändert.`))return;
+ for(const [iso,start,end,minutes] of missing)state.entries[iso]={type:'work',start,end,pauseMode:'manual',pause:minutes,running:false,note:'Übernommen aus ATOSS-Ausdruck Oktober 2026'};
+ const earliest=missing[0][0];if(earliest<state.settings.trackingStart)state.settings.trackingStart=earliest;
+ monthCursor='2026-10';persist();fillSettings();refresh();toast(`${missing.length} Tage aus ATOSS übernommen.`);
+}
+function refresh(){refreshClock();refreshStats();renderWeek();displayMonth();vacationYear();renderPlanner();renderATOSS();}
+function stampIn(){const iso=todayISO(),old=state.entries[iso];if(old&&old.start)return toast('Für heute ist bereits ein Arbeitsbeginn vorhanden.');if(old&&old.type!=='work')return toast('Der heutige Tag ist bereits als Abwesenheit eingetragen.');const d=new Date();state.entries[iso]={type:'work',start:`${pad(d.getHours())}:${pad(d.getMinutes())}`,end:'',pauseMode:'auto',pause:state.settings.defaultBreak,running:true,note:old?.note||''};persist();selected=iso;fillEditor();refresh();toast('Arbeitsbeginn gespeichert.');}
+function stampOut(){const iso=todayISO(),e=state.entries[iso];if(!e||!e.running)return;const d=new Date(),v=`${pad(d.getHours())}:${pad(d.getMinutes())}`;if(mtime(v)<mtime(e.start))return toast('Feierabend liegt vor dem Arbeitsbeginn. Bitte manuell korrigieren.');e.end=v;e.running=false;persist();selected=iso;fillEditor();refresh();toast('Feierabend gespeichert.');}
+function saveDay(){const iso=$('edit-date').value,type=$('edit-type').value,start=$('edit-start').value,end=$('edit-end').value;if(!/^\d{4}-\d\d-\d\d$/.test(iso)||isNaN(parseDate(iso)))return toast('Bitte gültiges Datum wählen.');if(type==='work'&&end&&!start)return toast('Bitte zuerst den Arbeitsbeginn eingeben.');if(type==='work'&&start&&end&&mtime(end)<mtime(start))return toast('Feierabend darf nicht vor dem Beginn liegen.');const p=Number($('edit-pause').value);if($('edit-pause-mode').value==='manual'&&(!Number.isInteger(p)||p<0||p>240))return toast('Bitte eine Pause zwischen 0 und 240 Minuten eingeben.');const e={type,start:type==='work'?start:'',end:type==='work'?end:'',pauseMode:$('edit-pause-mode').value,pause:$('edit-pause-mode').value==='manual'?p:state.settings.defaultBreak,running:!!(type==='work'&&start&&!end&&iso===todayISO()),note:$('edit-note').value.trim().slice(0,500)};if(iso!==todayISO())e.running=false;state.entries[iso]=e;if(iso<state.settings.trackingStart)state.settings.trackingStart=iso;persist();selected=iso;fillSettings();refresh();fillEditor();toast('Arbeitstag gespeichert.');}
+function deleteDay(){const iso=$('edit-date').value;if(!state.entries[iso])return toast('Für diesen Tag gibt es keinen Eintrag.');if(!confirm(`Eintrag vom ${formatDate(iso)} wirklich löschen?`))return;delete state.entries[iso];persist();selected=iso;fillEditor();refresh();toast('Eintrag gelöscht.');}
+function absence(){const from=$('absence-from').value,to=$('absence-to').value,type=$('absence-type').value;if(!from||!to||isoCompare(from,to)>0)return toast('Bitte einen gültigen Zeitraum wählen.');if((parseDate(to)-parseDate(from))/86400000>366)return toast('Bitte höchstens ein Jahr auf einmal eintragen.');let wrote=0,skipped=0;for(let d=from;isoCompare(d,to)<=0;d=addDays(d,1)){if(isoCompare(d,state.settings.trackingStart)<0){skipped++;continue}const old=state.entries[d];if((type==='vacation'&&(!state.settings.workdays.includes(parseDate(d).getDay())||getHoliday(d)))||(old&&old.type==='work'&&old.start)){skipped++;continue}state.entries[d]={type,start:'',end:'',pauseMode:'auto',pause:state.settings.defaultBreak,running:false,note:old?.note||''};wrote++}persist();monthCursor=from.slice(0,7);refresh();toast(`${wrote} Tage eingetragen${skipped?', '+skipped+' vorhandene Arbeitstage/ältere Tage übersprungen':''}.`);}
+function fillSettings(){const s=state.settings;$('setting-weekly').value=String(s.weekly/60).replace('.',',');$('setting-daygoal').value=String(s.dayGoal/60).replace('.',',');$('setting-break').value=s.defaultBreak;$('setting-start').value=s.trackingStart;$('setting-vacation').value=s.vacationAllowance===null?'':s.vacationAllowance;
+ $('settings-workdays').innerHTML=WEEKDAY_NAMES.map((t,i)=>{const wd=(i+1)%7;return `<label><input type="checkbox" value="${wd}" ${s.workdays.includes(wd)?'checked':''}>${t}</label>`}).join('');}
+function saveSettings(){const weekly=valNum($('setting-weekly').value),daily=valNum($('setting-daygoal').value),br=Number($('setting-break').value),days=[...$('settings-workdays').querySelectorAll('input:checked')].map(x=>Number(x.value)),start=$('setting-start').value,allow=$('setting-vacation').value;
+ if(!Number.isFinite(weekly)||weekly<1||weekly>80||!Number.isInteger(Math.round(weekly*60))||Math.abs(weekly*60-Math.round(weekly*60))>.001)return toast('Bitte Wochenstunden in ganzen Minuten eingeben (z. B. 38,5).');
+ if(!Number.isFinite(daily)||daily<1||daily>16||Math.abs(daily*60-Math.round(daily*60))>.001)return toast('Bitte gültiges Tagesziel eingeben.');
+ if(!Number.isInteger(br)||br<0||br>180)return toast('Bitte gültige Pausenlänge angeben.');if(!days.length)return toast('Bitte mindestens einen Arbeitstag auswählen.');if(!start||isNaN(parseDate(start)))return toast('Bitte gültiges Startdatum eingeben.');if(allow!==''&&(!Number.isInteger(Number(allow))||Number(allow)<0||Number(allow)>365))return toast('Bitte gültigen Urlaubsanspruch eingeben.');
+ const old=state.settings.trackingStart;if(old!==start&&Object.keys(state.entries).some(k=>isoCompare(k,start)<0)&&!confirm('Einige Einträge liegen vor dem neuen Erfassungsbeginn und zählen dann nicht ins Zeitkonto. Fortfahren?'))return;
+ state.settings={...state.settings,weekly:Math.round(weekly*60),dayGoal:Math.round(daily*60),defaultBreak:br,workdays:days.sort((a,b)=>(a+6)%7-(b+6)%7),trackingStart:start,vacationAllowance:allow===''?null:Number(allow)};persist();refresh();fillEditor();toast('Einstellungen gespeichert.');}
+function download(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function exportJSON(){download(`stempeluhr-sicherung-${todayISO()}.json`,JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'application/json');toast('Sicherung als JSON erstellt.');}
+function exportCSV(){const header=['Datum','Tag','Art','Beginn','Ende','Pause Minuten','Netto Minuten','Wochensoll-Anteil Minuten','Wochenkonto-Differenz Minuten','Tagessoll Minuten','Tagessaldo Minuten','Notiz'];const list=Object.keys(state.entries).sort();const lines=[header];for(const iso of list){const e=state.entries[iso],r=rawMinutes(iso,e),ps=e.type==='work'&&r!==null?pause(r,e):0,net=credit(iso),p=plan(iso);lines.push([iso,DAY_NAMES[parseDate(iso).getDay()],TYPE_LABELS[e.type],e.start||'',e.end||'',ps,net,p,net-p,dayTarget(iso),dayBalance(iso),e.note||''])}
+ const csv=lines.map(row=>row.map(v=>{let s=String(v);if(/^[=+@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}).join(';')).join('\r\n');download(`stempeluhr-zeiten-${todayISO()}.csv`,'\ufeff'+csv,'text/csv;charset=utf-8');toast('CSV-Tabelle erstellt.');}
+async function importJSON(file){if(!file)return;let parsed;try{parsed=JSON.parse(await file.text())}catch{return toast('Datei ist keine gültige JSON-Sicherung.')}if(parsed.version!==1||!parsed.settings||!parsed.entries||Array.isArray(parsed.entries))return toast('Diese Sicherung hat kein unterstütztes Format.');if(!confirm('Sicherung wiederherstellen? Deine bisherigen Einträge werden vollständig ersetzt.'))return;const clean=defaultState();clean.settings=validateSettings(parsed.settings,clean.settings);
+ for(const [iso,e] of Object.entries(parsed.entries)){if(!/^\d{4}-\d\d-\d\d$/.test(iso)||isNaN(parseDate(iso))||!e||!TYPE_LABELS[e.type])continue;clean.entries[iso]={type:e.type,start:mtime(e.start)!==null?e.start:'',end:mtime(e.end)!==null?e.end:'',pauseMode:e.pauseMode==='manual'?'manual':'auto',pause:Number.isInteger(e.pause)?Math.max(0,Math.min(240,e.pause)):30,running:e.running===true,note:String(e.note||'').slice(0,500)}}state=clean;persist();selected=todayISO();monthCursor=selected.slice(0,7);fillSettings();fillEditor();holidayCache.clear();refresh();toast('Sicherung wiederhergestellt.');}
+function attach(){ $('atoss-import').addEventListener('click',importATOSS); $('dock-settings').addEventListener('click',()=>{$('settings-panel').open=true}); $('punch-in').addEventListener('click',stampIn);$('punch-out').addEventListener('click',stampOut);
+ $('prev-month').addEventListener('click',()=>{monthCursor=periodChange(monthCursor,-1);displayMonth()});$('next-month').addEventListener('click',()=>{monthCursor=periodChange(monthCursor,1);displayMonth()});
+ $('go-today').addEventListener('click',()=>{selected=todayISO();monthCursor=selected.slice(0,7);fillEditor();displayMonth()});
+ $('edit-date').addEventListener('change',()=>{selected=$('edit-date').value||todayISO();fillEditor()});$('edit-type').addEventListener('change',toggleEditor);$('edit-pause-mode').addEventListener('change',toggleEditor);['edit-start','edit-end','edit-pause'].forEach(id=>$(id).addEventListener('input',previewEditor));
+ $('save-day').addEventListener('click',saveDay);$('delete-day').addEventListener('click',deleteDay);$('save-absence').addEventListener('click',absence);attachPlanner();$('save-settings').addEventListener('click',saveSettings);
+ $('export-json').addEventListener('click',exportJSON);$('export-csv').addEventListener('click',exportCSV);$('import-button').addEventListener('click',()=>$('import-file').click());$('import-file').addEventListener('change',async(e)=>{await importJSON(e.target.files[0]);e.target.value=''});
+ $('reset-all').addEventListener('click',()=>{if(!confirm('Wirklich alle gespeicherten Zeiten und Einstellungen löschen? Dies kann nicht rückgängig gemacht werden.'))return;state=defaultState();persist();selected=todayISO();monthCursor=selected.slice(0,7);fillSettings();fillEditor();holidayCache.clear();refresh();toast('Daten zurückgesetzt.');});
+ setInterval(()=>{if(todayISO()!==lastDay){lastDay=todayISO();selected=todayISO();monthCursor=selected.slice(0,7);fillEditor();}refreshClock();refreshStats();if(new Date().getSeconds()<3){renderWeek();displayMonth();}},15000);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});}
+let lastDay=todayISO();$('absence-from').value=todayISO();$('absence-to').value=todayISO();fillSettings();fillEditor();initPlanner();attach();refresh();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('Offline-Modus nicht verfügbar',err));
+})();
+</script>
+</body></html>

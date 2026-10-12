@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.6';
+const APP_VERSION = '3.5.7';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -694,7 +694,7 @@ function skyArc(hero) {
   const W = hero.clientWidth, H = hero.clientHeight;
   const rows = hero.querySelector('.sky-rows');
   const horizon = rows ? rows.offsetTop - 14 : H - 46;
-  return { W, H, pad: 26, horizon, apex: 46 };
+  return { W, H, pad: 26, horizon, apex: 104 };
 }
 function arcPoint(arc, f) {
   const ff = Math.min(1, Math.max(0, f));

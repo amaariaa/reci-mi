@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.6.0';
+const APP_VERSION = '3.7.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -4750,7 +4750,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet'), $('archiveSheet'), $('mergeSheet'), $('markersSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet'), $('archiveSheet'), $('mergeSheet'), $('markersSheet'), $('thoughtAiSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });
@@ -4813,11 +4813,11 @@ async function boot() {
 
 
 /* =====================================================================
-   Reci mi 3.6 · Gedankenwelt (erste lokale Ausbaustufe)
+   Reci mi 3.7 · Gedankenwelt mit optionaler KI-Verbindung
    - vorhandener Tresor bleibt unverändert (DB, PIN, Verschlüsselung)
    - alle Originalaussagen bleiben im Gespräch
    - regelbasierte Aufteilung, erkennbar als vorläufige Zuordnung
-   - keine externe KI-API, keine versteckten Übertragungen
+   - KI nur nach bewusster Verbindung, transparent mit Kontext-Freigabe
    ===================================================================== */
 let thoughtView = 'talk';
 let thoughtProjectFilter = 'Alle';
@@ -4843,6 +4843,11 @@ function ensureThoughtMemory() {
   if (!Array.isArray(state.memory.messages)) state.memory.messages = [];
   if (!Array.isArray(state.memory.entries)) state.memory.entries = [];
   if (typeof state.memory.draft !== 'string') state.memory.draft = '';
+  if (!state.memory.ai || typeof state.memory.ai !== 'object') state.memory.ai = { endpoint:'', accessCode:'', allowNotes:false };
+  if (typeof state.memory.ai.endpoint !== 'string') state.memory.ai.endpoint = '';
+  if (typeof state.memory.ai.accessCode !== 'string') state.memory.ai.accessCode = '';
+  if (typeof state.memory.ai.allowNotes !== 'boolean') state.memory.ai.allowNotes = false;
+  if (!state.memory.aiUsage || typeof state.memory.aiUsage !== 'object') state.memory.aiUsage = {input:0, output:0, calls:0};
 }
 function thoughtNorm(s) {
   return String(s||'').toLocaleLowerCase('de').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
@@ -4893,6 +4898,7 @@ function openThoughtWorld({push=true}={}) {
   if (push) history.pushState({rm:'thought'}, '');
   $('thoughtInput').value = state.memory.draft;
   thoughtSetView(thoughtView);
+  thoughtUpdateAiStatus();
   showScreen($('thoughtScreen'));
   if (thoughtView==='talk') thoughtToBottom();
 }
@@ -4911,7 +4917,7 @@ function thoughtSetView(view) {
 function thoughtRenderChat() {
   if (!state) return;
   const arr=state.memory.messages;
-  const welcome=`<div class="thought-welcome"><span class="thought-spark" aria-hidden="true">✦</span><h2>Hier beginnt dein Raum.</h2><p>Sprich oder schreib, wie es dir einfällt. Ich bewahre den Wortlaut auf und sortiere erkennbare Ideen. Für offene Gespräche mit einer richtigen KI erweitern wir die App später.</p></div>`;
+  const welcome=arr.length ? '' : `<div class="thought-welcome"><h2>Erzähl mir, was dir einfällt.</h2><p>Ich bewahre deine Gedanken auf. Für echte KI-Antworten verbindest du Reci mi einmalig unter „KI verbinden“.</p></div>`;
   $('thoughtThread').innerHTML = welcome + arr.slice(-100).map(m=>`<article class="thought-message ${m.role==='user'?'from-user':'from-reci'}"><span class="thought-msg-name">${m.role==='user'?'Du':'Reci mi'}</span><p>${escapeHtml(m.text)}</p><time>${escapeHtml(formatDate(m.at))}</time></article>`).join('');
 }
 function thoughtFind(query, limit=15) {
@@ -4919,6 +4925,7 @@ function thoughtFind(query, limit=15) {
   if (!keys.length) return [];
   const corpus=[];
   for (const x of (state?.memory?.entries||[])) corpus.push({type:'gedanke',id:x.id,title:x.title,text:x.text,project:x.project,at:x.at});
+  for (const x of (state?.memory?.messages||[])) corpus.push({type:'gespraech',id:x.id,title:x.role==='user'?'Deine Aussage':'Antwort von Reci mi',text:x.text,project:'Gespräch',at:x.at});
   for (const t of (state?.topics||[])) {
     if (t.deletedAt) continue;
     corpus.push({type:'notiz',id:t.id,title:t.title,text:t.locked?'':combinedTopicText(t),project:catOf(t),at:t.updatedAt,locked:!!t.locked});
@@ -4941,40 +4948,182 @@ function thoughtIsQuery(input) {
   return /^(was|wann|wie|wo|welche[rsn]?|wer|finde|such[e]?|zeig[e]?|erinnerst du dich|weißt du noch|haben wir|wozu|woran)\b/i.test(input.trim()) && /\?|finde|suche|zeig|erinner|weißt|haben wir/i.test(input);
 }
 let thoughtSending=false;
+function thoughtAiConnected() {
+  const ai=state?.memory?.ai;
+  return Boolean(ai?.endpoint && ai?.accessCode);
+}
+function thoughtUpdateAiStatus(message='') {
+  const connected=thoughtAiConnected();
+  const chip=$('thoughtAiBadge');
+  if (chip) { chip.textContent=connected?'KI eingerichtet':'KI verbinden'; chip.classList.toggle('connected',connected); }
+  const info=$('thoughtStatus');
+  if (info) info.textContent=message || (connected
+    ? 'KI aktiv. Für eine Antwort werden Gesprächsausschnitte über deine Verbindung an den KI-Dienst gesendet. Lokale Daten bleiben verschlüsselt.'
+    : 'Lokal und verschlüsselt gespeichert. Für echte Gespräche: oben „KI verbinden“ wählen.');
+}
+function thoughtOpenAiSettings() {
+  if (!cryptoKey || !state) return;
+  ensureThoughtMemory();
+  $('thoughtAiEndpoint').value=state.memory.ai.endpoint;
+  $('thoughtAiAccess').value=state.memory.ai.accessCode;
+  $('thoughtAiNotes').checked=state.memory.ai.allowNotes;
+  const usage=state.memory.aiUsage;
+  $('thoughtAiUsage').textContent=usage.calls
+    ? `${usage.calls} erfolgreiche KI-Anfragen, ${Number(usage.input||0).toLocaleString('de-DE')} Eingabe-Tokens, ${Number(usage.output||0).toLocaleString('de-DE')} Ausgabe-Tokens (seit Verbindung; keine Euro-Abrechnung).`
+    : 'Bisher keine erfolgreichen KI-Anfragen erfasst.';
+  $('thoughtAiFeedback').textContent='';
+  openSheet($('thoughtAiSheet'));
+}
+function thoughtCleanEndpoint(value) {
+  const url=new URL(value.trim());
+  if (url.protocol!=='https:' || url.username || url.password || url.search || url.hash || url.port) throw new Error('Bitte eine HTTPS-Adresse ohne Zusätze eintragen.');
+  if (!url.hostname || url.hostname==='api.openai.com' || url.hostname==='openai.com') throw new Error('Hier gehört die Adresse deines geschützten Reci-mi-Vermittlungsdienstes hinein, nicht die OpenAI-Adresse.');
+  if (url.pathname!=='/' && url.pathname!=='') throw new Error('Bitte nur die Hauptadresse des Vermittlungsdienstes ohne weiteren Pfad eingeben.');
+  return url.origin+url.pathname.replace(/\/+$/,'');
+}
+async function thoughtSaveAiSettings(event) {
+  event.preventDefault();
+  const feedback=$('thoughtAiFeedback');
+  let endpoint='';
+  try { endpoint=thoughtCleanEndpoint($('thoughtAiEndpoint').value); }
+  catch(err) {feedback.textContent=err.message;return;}
+  const accessCode=$('thoughtAiAccess').value.trim();
+  if (accessCode.length<20 || accessCode.length>200) {feedback.textContent='Der Zugangscode muss mindestens 20 Zeichen lang sein.';return;}
+  const previous={...state.memory.ai};
+  state.memory.ai={endpoint,accessCode,allowNotes:$('thoughtAiNotes').checked};
+  try {
+    await persistState(true);
+    closeSheet($('thoughtAiSheet'));
+    thoughtUpdateAiStatus('KI-Zugang gespeichert. Ab der nächsten Nachricht beantwortet Reci mi deine Fragen über den verbundenen Dienst.');
+    showToast('KI-Verbindung gespeichert');
+  } catch {state.memory.ai=previous;feedback.textContent='Speichern fehlgeschlagen. Bitte noch einmal versuchen.';}
+}
+async function thoughtDisconnectAi() {
+  const previous={...state.memory.ai};
+  state.memory.ai={endpoint:'',accessCode:'',allowNotes:false};
+  try {
+    await persistState(true);
+    $('thoughtAiEndpoint').value=''; $('thoughtAiAccess').value=''; $('thoughtAiNotes').checked=false;
+    closeSheet($('thoughtAiSheet'));
+    thoughtUpdateAiStatus('KI-Verbindung getrennt. Neue Eingaben werden wieder nur lokal verarbeitet.');
+    showToast('Verbindung getrennt');
+  } catch {state.memory.ai=previous;$('thoughtAiFeedback').textContent='Trennen konnte nicht gespeichert werden.';}
+}
+function thoughtSelectAiContext(query) {
+  // Nur begrenzte, relevante Informationen verlassen das Gerät. Extra geschützte Notizen nie.
+  const ai=state.memory.ai;
+  if (!ai?.allowNotes) return [];
+  return thoughtFind(query,7)
+    .filter(r=>r.type!=='gespraech' && !r.locked && r.text)
+    .slice(0,5)
+    .map(r=>({project:String(r.project||'').slice(0,80),title:String(r.title||'').slice(0,140),text:String(r.text||'').slice(0,900)}));
+}
+async function thoughtAiRequest(text) {
+  const config=state.memory.ai;
+  const history=state.memory.messages.slice(-13,-1)
+    .filter(m=>['user','assistant'].includes(m.role))
+    .map(m=>({role:m.role,content:String(m.text||'').slice(0,2200)}));
+  const context=thoughtSelectAiContext(text);
+  const ctrl=new AbortController();
+  const timeout=setTimeout(()=>ctrl.abort(),42000);
+  try {
+    const response=await fetch(config.endpoint+'/chat',{
+      method:'POST', mode:'cors', cache:'no-store', signal:ctrl.signal,
+      headers:{'Content-Type':'application/json','X-Reci-Access':config.accessCode},
+      body:JSON.stringify({message:text.slice(0,12000),history,context})
+    });
+    const data=await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(data.error || `Server antwortet mit Fehler ${response.status}.`);
+    if (typeof data.answer!=='string' || !data.answer.trim()) throw new Error('Die KI hat keine gültige Antwort geliefert.');
+    return data;
+  } catch(err) {
+    if (err.name==='AbortError') throw new Error('Die KI antwortet nicht rechtzeitig. Bitte prüfe die Verbindung.');
+    if (err instanceof TypeError) throw new Error('KI-Dienst nicht erreichbar. Prüfe Adresse, Freigabe und Internetverbindung.');
+    throw err;
+  } finally {clearTimeout(timeout);}
+}
+function thoughtCaptureAiItems(aiItems, msgid, at) {
+  if (!Array.isArray(aiItems)) return 0;
+  let count=0;
+  for (const item of aiItems.slice(0,8)) {
+    if (!item || typeof item.text!=='string' || !item.text.trim()) continue;
+    const kind=['Idee','Projekt-Update','Wunsch','Erinnerung'].includes(item.kind)?item.kind:'Idee';
+    const text=item.text.trim().slice(0,3500);
+    let project=typeof item.project==='string'?item.project.trim().slice(0,80):'';
+    if (!project || project==='Unbekannt') project=thoughtProject(text);
+    const title=typeof item.title==='string' && item.title.trim()?item.title.trim().slice(0,100):thoughtTitle(text);
+    // Erkennung und Zuordnung bleiben als Vorschlag veränderbar.
+    state.memory.entries.push({id:uid(),messageId:msgid,text,title,project,kind,at,source:'ki-vorschlag'});
+    count++;
+  }
+  return count;
+}
 async function thoughtSend(e) {
   e.preventDefault();
   if (thoughtSending || !cryptoKey || !state) return;
   if (dictWanted || isListening) stopRecognition();
   const input=$('thoughtInput');
   const text=input.value.trim();
-  if (!text) { input.focus(); return; }
-  thoughtSending=true; $('thoughtSendBtn').disabled=true;
+  if (!text) {input.focus();return;}
+  thoughtSending=true;$('thoughtSendBtn').disabled=true;
+  ensureThoughtMemory();
+  const msgid=uid();
+  const now=new Date().toISOString();
+  const userMessage={id:msgid,role:'user',text,at:now};
+  // Original vor Netzwerkverbindung lokal und verschlüsselt sichern.
+  state.memory.messages.push(userMessage);
   try {
-    ensureThoughtMemory();
-    const now=new Date().toISOString();
-    const msgid=uid();
+    await persistState(true);
+  } catch {
+    state.memory.messages=state.memory.messages.filter(m=>m!==userMessage);
+    thoughtUpdateAiStatus('Speichern nicht möglich. Deine Eingabe bleibt im Textfeld.');
+    showToast('Deine Eingabe wurde nicht gespeichert.',4000);
+    thoughtSending=false;$('thoughtSendBtn').disabled=false;
+    return;
+  }
+  input.value='';state.memory.draft='';
+  thoughtRenderChat();thoughtToBottom();
+  let response='';
+  let count=0;
+  if (thoughtAiConnected()) {
+    thoughtUpdateAiStatus('Reci mi überlegt gerade …');
+    try {
+      const data=await thoughtAiRequest(text);
+      if (!cryptoKey || !state) return; // Während der Anfrage automatisch gesperrt: Original ist bereits gespeichert.
+      response=data.answer;
+      count=thoughtCaptureAiItems(data.items,msgid,now);
+      if (data.usage && typeof data.usage==='object') {
+        state.memory.aiUsage.calls=(state.memory.aiUsage.calls||0)+1;
+        state.memory.aiUsage.input=(state.memory.aiUsage.input||0)+(Number(data.usage.input_tokens)||0);
+        state.memory.aiUsage.output=(state.memory.aiUsage.output||0)+(Number(data.usage.output_tokens)||0);
+      }
+      thoughtUpdateAiStatus(count?`Antwort erhalten. ${count} ${count===1?'Gedanke':'Gedanken'} als Vorschlag gespeichert.`:'Antwort erhalten. Gespräch verschlüsselt gespeichert.');
+    } catch(err) {
+      if (!cryptoKey || !state) return;
+      response=`Ich konnte gerade keine KI-Antwort abrufen. Deine Aussage ist aber sicher im Gespräch gespeichert. ${err.message}`;
+      thoughtUpdateAiStatus('KI momentan nicht erreichbar. Die ursprüngliche Nachricht bleibt gespeichert.');
+    }
+  } else {
     const query=thoughtIsQuery(text);
-    state.memory.messages.push({id:msgid,role:'user',text,at:now});
-    let response;
     if (query) response=thoughtAnswerQuestion(text);
     else {
       const parts=thoughtSplit(text);
-      for (const part of parts) state.memory.entries.push({id:uid(),messageId:msgid,text:part,title:thoughtTitle(part),project:thoughtProject(part),at:now});
-      response=parts.length>1 ? `Ich habe ${parts.length} Gedanken getrennt gespeichert. Schau sie dir in der Gedankenwelt an. Falls etwas falsch zugeordnet ist, kannst du das dort ändern.` : `Dein Gedanke ist gespeichert und vorläufig „${thoughtProject(parts[0])}“ zugeordnet. Du findest ihn in der Gedankenwelt wieder.`;
+      for (const part of parts) state.memory.entries.push({id:uid(),messageId:msgid,text:part,title:thoughtTitle(part),project:thoughtProject(part),kind:'Vorläufig',at:now,source:'lokal'});
+      count=parts.length;
+      response=`${count} ${count===1?'Gedanke wurde':'Gedanken wurden'} lokal gespeichert. Für ein echtes KI-Gespräch wähle oben „KI verbinden“. Die Sortierung erfolgt bis dahin nur nach Stichwörtern.`;
     }
-    state.memory.messages.push({id:uid(),role:'assistant',text:response,at:new Date().toISOString()});
-    state.memory.draft='';
+    thoughtUpdateAiStatus('Lokaler Modus. Keine Übertragung an eine externe KI.');
+  }
+  state.memory.messages.push({id:uid(),role:'assistant',text:response,at:new Date().toISOString()});
+  try {
     await persistState(true);
-    input.value='';
-    updateThoughtPortal();
-    thoughtRenderChat(); thoughtToBottom();
-    $('thoughtStatus').textContent=query?'Gesucht wurde nur auf diesem Gerät.':'Verschlüsselt gespeichert. Die Zuordnung kannst du jederzeit ändern.';
-  } catch (error) {
-    // Speicherfehler sichtbar machen, Text im Eingabefeld behalten.
-    $('thoughtStatus').textContent='Speichern fehlgeschlagen. Bitte nicht schließen und erneut versuchen.';
-    showToast('Der Gedanke konnte nicht sicher gespeichert werden.',4000);
-  } finally { thoughtSending=false; $('thoughtSendBtn').disabled=false; }
+    updateThoughtPortal();thoughtRenderChat();thoughtToBottom();
+  } catch {
+    // Der Nutzertext wurde bereits VOR dem Netzwerkabruf separat gespeichert.
+    thoughtUpdateAiStatus('Die Antwort konnte nicht dauerhaft gespeichert werden. Bitte eine neue Sicherung erstellen.');
+  } finally {thoughtSending=false;$('thoughtSendBtn').disabled=false;}
 }
+
 function thoughtAllProjects() {
   return [...new Set([...THOUGHT_PROJECTS,...(state?.memory?.entries||[]).map(e=>e.project),...(state?.topics||[]).filter(t=>!t.deletedAt).map(t=>t.title)].filter(Boolean))];
 }
@@ -4992,12 +5141,16 @@ function thoughtRenderSearch() {
   const q=$('thoughtSearchInput').value.trim();
   if (!q) { $('thoughtSearchResults').innerHTML='<p class="thought-blank">Zum Beispiel: „Litterum“, „Kleiderschrank“ oder „Bibel“.</p>'; return; }
   const results=thoughtFind(q,50);
-  $('thoughtSearchResults').innerHTML=results.length ? results.map(r=>`<button class="thought-result" type="button" data-kind="${escapeHtml(r.type)}" data-id="${escapeHtml(r.id)}"><span>${r.type==='notiz'?'BESTEHENDE NOTIZ':'GESPEICHERTER GEDANKE'} · ${escapeHtml(r.project)}</span><strong>${escapeHtml(r.title)}</strong><small>${r.locked?'Extra geschützt, Text wird nicht angezeigt':escapeHtml(excerpt(r.text,250))}</small></button>`).join('') : '<p class="thought-blank">Dazu ist noch nichts gespeichert.</p>';
+  $('thoughtSearchResults').innerHTML=results.length ? results.map(r=>`<button class="thought-result" type="button" data-kind="${escapeHtml(r.type)}" data-id="${escapeHtml(r.id)}"><span>${r.type==='notiz'?'BESTEHENDE NOTIZ':r.type==='gespraech'?'GESPRÄCH':'GESPEICHERTER GEDANKE'} · ${escapeHtml(r.project)}</span><strong>${escapeHtml(r.title)}</strong><small>${r.locked?'Extra geschützt, Text wird nicht angezeigt':escapeHtml(excerpt(r.text,250))}</small></button>`).join('') : '<p class="thought-blank">Dazu ist noch nichts gespeichert.</p>';
 }
 function wireThoughtWorld() {
   $('thoughtHomeBtn').addEventListener('click', () => openThoughtWorld());
   $('thoughtBackBtn').addEventListener('click', goHomeFromScreen);
   $('thoughtSearchShortcut').addEventListener('click', () => {thoughtSetView('search');$('thoughtSearchInput').focus();});
+  $('thoughtAiBadge').addEventListener('click',thoughtOpenAiSettings);
+  $('thoughtAiSettingsForm').addEventListener('submit',thoughtSaveAiSettings);
+  $('thoughtAiClose').addEventListener('click',()=>closeSheet($('thoughtAiSheet')));
+  $('thoughtAiDisconnect').addEventListener('click',thoughtDisconnectAi);
   document.querySelectorAll('.thought-tab').forEach(b=>b.addEventListener('click',()=>thoughtSetView(b.dataset.view)));
   $('thoughtForm').addEventListener('submit',thoughtSend);
   $('thoughtInput').addEventListener('input', () => {
@@ -5028,6 +5181,7 @@ function wireThoughtWorld() {
   $('thoughtSearchResults').addEventListener('click',e=>{
     const b=e.target.closest('.thought-result'); if(!b) return;
     if (b.dataset.kind==='notiz') { openTopic(b.dataset.id); return; }
+    if (b.dataset.kind==='gespraech') { thoughtSetView('talk'); thoughtToBottom(); return; }
     const entry=state?.memory?.entries.find(x=>x.id===b.dataset.id);
     if (!entry) return;
     thoughtProjectFilter=entry.project;thoughtSetView('world');

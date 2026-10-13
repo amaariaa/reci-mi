@@ -578,3 +578,22 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .thought-view.active:not(#thoughtTalkView){overflow-y:auto;overscroll-behavior:contain}
 
 .thought-back svg,.thought-top-search svg,.thought-mic svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+/* Reci mi 3.7 · kompakte Gesprächsansicht und KI-Verbindung */
+.thought-eyebrow{font-size:8px;letter-spacing:.08em}
+.thought-ai-badge{flex-shrink:0;padding:8px 10px;max-width:104px;border-radius:13px;border:1px solid rgba(255,255,255,.42);color:#fff;background:rgba(255,255,255,.14);font-size:10px;font-weight:700;line-height:1.25}
+.thought-ai-badge.connected{background:rgba(156,217,173,.20);border-color:rgba(180,231,191,.8);color:#e5ffec}
+.thought-header h1{font-size:30px;margin:11px 0 4px}
+.thought-header>p{margin-bottom:10px}
+.thought-thread{gap:11px}
+.thought-welcome{padding:15px 16px}
+.thought-welcome h2{margin:0 0 5px;font-size:20px}
+.thought-welcome p{font-size:12px}
+.thought-ai-settings{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.thought-ai-settings>label:not(.thought-ai-optin){font-size:12px;font-weight:650}
+.thought-ai-settings>input{width:100%;min-height:45px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:12px;padding:10px 12px;font:14px var(--sans)}
+.thought-ai-optin{display:flex;gap:10px;align-items:flex-start;margin-top:5px;font-size:12px;line-height:1.5}
+.thought-ai-optin input{margin-top:3px;width:20px;height:20px;flex-shrink:0}
+.thought-ai-feedback{font-size:12px;color:#bf5c55;line-height:1.5;margin:0}
+.thought-ai-sheet>.btn{margin-top:10px}
+@media(max-width:370px){.thought-topline{gap:6px}.thought-ai-badge{max-width:92px;font-size:9px;padding:7px 6px}.thought-header{padding-left:13px;padding-right:13px}.thought-eyebrow{font-size:7px}}

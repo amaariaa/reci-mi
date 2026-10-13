@@ -597,3 +597,76 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .thought-ai-feedback{font-size:12px;color:#bf5c55;line-height:1.5;margin:0}
 .thought-ai-sheet>.btn{margin-top:10px}
 @media(max-width:370px){.thought-topline{gap:6px}.thought-ai-badge{max-width:92px;font-size:9px;padding:7px 6px}.thought-header{padding-left:13px;padding-right:13px}.thought-eyebrow{font-size:7px}}
+
+
+/* Reci mi V3.7.2 · Natürliches Wetter und sanfter Feinschliff
+   Die bestehende Himmels- und Themenpalette bleibt bewusst erhalten. */
+.weather-layer.rainy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 86% 58% at 60% 5%, rgba(169,184,211,.10), transparent 78%),
+    linear-gradient(180deg, rgba(25,40,67,.07), transparent 66%);
+}
+.weather-layer.rainy.night::before {
+  background:
+    radial-gradient(ellipse 90% 52% at 52% 4%, rgba(151,164,211,.08), transparent 76%),
+    linear-gradient(180deg, rgba(9,14,32,.11), transparent 66%);
+}
+.weather-layer .cloud {
+  opacity: var(--cloud-individual-opacity, .72);
+  will-change: transform;
+}
+.weather-layer .precip {
+  display: block;
+  pointer-events: none;
+  contain: strict;
+}
+/* Sanfte Lichtkante statt harter Glasflächen. Lesbarkeit behält Vorrang. */
+.thought-portal {
+  border-color: rgba(228,204,242,.39);
+  box-shadow: 0 12px 32px rgba(29,25,64,.17), inset 0 1px 0 rgba(255,245,250,.18);
+}
+.thought-portal::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  inset: 1px 1px auto;
+  height: 52%;
+  border-radius: 25px 25px 55% 55%;
+  background: linear-gradient(175deg, rgba(255,255,255,.10), transparent 82%);
+}
+.portal-orbit {
+  box-shadow: 0 0 0 9px rgba(245,214,238,.055), 0 0 22px rgba(241,194,214,.13), inset 0 0 22px rgba(240,172,212,.15);
+}
+.thought-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .5;
+  background: radial-gradient(ellipse 88% 52% at 70% 2%, rgba(248,202,156,.17), transparent 78%);
+}
+.thought-message.from-reci {
+  box-shadow: 0 6px 20px rgba(37,31,65,.065), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.thought-form {
+  box-shadow: 0 7px 22px rgba(45,36,76,.075);
+}
+.thought-top-search:focus-visible,
+.thought-back:focus-visible,
+.thought-ai-badge:focus-visible,
+.thought-portal:focus-visible,
+.thought-tab:focus-visible {
+  outline: 2px solid #e9c2ef;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thought-portal::before, .thought-aurora i, .sun-core,
+  .sun-rays, .sun-rays::after, .moon-orb, .fog-layer,
+  .weather-layer .cloud, .frost { animation: none !important; }
+  .weather-layer .cloud { will-change: auto; }
+}

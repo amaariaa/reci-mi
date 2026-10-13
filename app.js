@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.7.2';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -528,11 +528,12 @@ function buildClouds(box, count) {
   if (box.childElementCount === count) return;
   let html = '';
   for (let i = 0; i < count; i++) {
-    const top = 4 + (i * 37) % 70;
-    const scale = 0.7 + ((i * 53) % 60) / 100;
-    const dur = 70 + (i * 29) % 80;
-    const delay = -((i * 47) % dur);
-    html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
+    const top = 3 + (i * 41) % 65;
+    const scale = .62 + ((i * 47 + 13) % 95) / 100;
+    const dur = 85 + (i * 29) % 110;
+    const delay = -((i * 37) % dur);
+    const opacity = .48 + ((i * 19) % 42) / 100;
+    html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};--cloud-individual-opacity:${opacity.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
   }
   box.innerHTML = html;
 }
@@ -1200,6 +1201,7 @@ function applyWeatherFx() {
     layer.style.setProperty('--ice', fx.ice.toFixed(2));
     layer.classList.toggle('night', night);
     layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || fx.clouds > .9);
+    layer.classList.toggle('rainy', fx.rain > .12);
   });
   precipLayers.forEach(p => p.setup(fx));
   clearTimeout(flashTimer);
@@ -1236,69 +1238,185 @@ function scheduleFlash() {
   }, 5000 + Math.random() * 9000);
 }
 
+/* Räumlicher Wetterregen: echte transparente Tropfen statt gleichförmiger Striche.
+   Drei Tiefenebenen, leichte Windbewegung, zeitbasierte Bewegung und Sprite-Cache
+   für flüssige Darstellung auch auf dem Smartphone. Keine Änderung an Nutzerdaten. */
+function makeWaterDropSprite() {
+  const sprite = document.createElement('canvas');
+  sprite.width = 56;
+  sprite.height = 112;
+  const g = sprite.getContext('2d');
+  if (!g) return sprite;
+
+  // Hintergrund bleibt vollständig transparent. Die Form hat eine sanfte,
+  // gebrochene Lichtkante, eine gläserne Mitte und eine leicht gerundete Basis.
+  g.beginPath();
+  g.moveTo(28, 7);
+  g.bezierCurveTo(25, 21, 13, 48, 11, 68);
+  g.bezierCurveTo(8, 88, 17, 103, 28, 104);
+  g.bezierCurveTo(40, 104, 48, 89, 45, 70);
+  g.bezierCurveTo(43, 49, 31, 19, 28, 7);
+  g.closePath();
+  const glass = g.createLinearGradient(8, 15, 47, 100);
+  glass.addColorStop(0, 'rgba(246,251,255,.10)');
+  glass.addColorStop(.19, 'rgba(220,237,252,.52)');
+  glass.addColorStop(.42, 'rgba(171,203,234,.12)');
+  glass.addColorStop(.75, 'rgba(204,228,252,.25)');
+  glass.addColorStop(1, 'rgba(244,251,255,.65)');
+  g.fillStyle = glass;
+  g.fill();
+  g.lineWidth = 2.5;
+  g.strokeStyle = 'rgba(235,247,255,.72)';
+  g.stroke();
+
+  const glint = g.createLinearGradient(15, 21, 26, 82);
+  glint.addColorStop(0, 'rgba(255,255,255,.82)');
+  glint.addColorStop(.45, 'rgba(255,255,255,.31)');
+  glint.addColorStop(1, 'rgba(255,255,255,0)');
+  g.strokeStyle = glint;
+  g.lineWidth = 3.8;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(24, 28);
+  g.bezierCurveTo(18, 45, 16, 63, 17, 80);
+  g.stroke();
+  const lowLight = g.createRadialGradient(32, 87, 1, 32, 88, 18);
+  lowLight.addColorStop(0, 'rgba(253,255,255,.42)');
+  lowLight.addColorStop(1, 'rgba(253,255,255,0)');
+  g.fillStyle = lowLight;
+  g.fillRect(11, 68, 34, 36);
+  return sprite;
+}
+
+const WATER_DROP_SPRITE = makeWaterDropSprite();
+
 function makePrecip(canvas) {
-  const ctx = canvas.getContext('2d');
-  let drops = [], kind = 'none', amount = 0;
+  const ctx = canvas.getContext('2d', { alpha:true });
+  let drops = [];
+  let kind = 'none';
+  let amount = 0;
+  let motionReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const layer = {
     canvas,
+    w: 0,
+    h: 0,
     setup(fx) {
-      kind = fx.snow > 0 ? 'snow' : fx.rain > 0 ? 'rain' : 'none';
-      amount = kind === 'snow' ? fx.snow : fx.rain;
+      const nextKind = fx.snow > 0 ? 'snow' : fx.rain > 0 ? 'rain' : 'none';
+      const nextAmount = nextKind === 'snow' ? fx.snow : fx.rain;
+      const changed = nextKind !== kind || Math.abs(nextAmount - amount) > .08;
+      kind = nextKind;
+      amount = nextAmount;
       this.resize();
-      const n = kind === 'none' ? 0 : Math.round((kind === 'snow' ? 70 : 110) * amount + 10);
-      drops = Array.from({ length: n }, () => this.spawn(true));
+      if (!changed && drops.length && kind !== 'none') return;
+      if (kind === 'none') { drops = []; ctx.clearRect(0, 0, this.w, this.h); return; }
+      const areaScale = Math.max(.68, Math.min(1.55, Math.sqrt((this.w * this.h) / 195000)));
+      const count = Math.round((kind === 'snow' ? 24 + amount * 54 : 26 + amount * 108) * areaScale);
+      drops = Array.from({length:count}, () => this.spawn(true));
     },
     resize() {
       const r = canvas.getBoundingClientRect();
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.max(1, Math.round(r.width * dpr));
-      canvas.height = Math.max(1, Math.round(r.height * dpr));
+      const w = Math.max(1, Math.round(r.width));
+      const h = Math.max(1, Math.round(r.height));
+      const dpr = Math.min(1.8, window.devicePixelRatio || 1);
+      if (this.w === w && this.h === h && this.dpr === dpr) return;
+      this.w = w;
+      this.h = h;
+      this.dpr = dpr;
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.w = r.width; this.h = r.height;
     },
-    spawn(anywhere) {
-      return { x: Math.random() * (this.w || 400), y: anywhere ? Math.random() * (this.h || 300) : -10,
-        v: kind === 'snow' ? 0.4 + Math.random() * 0.8 : 7 + Math.random() * 6,
-        r: kind === 'snow' ? 1 + Math.random() * 2.4 : 10 + Math.random() * 10, p: Math.random() * 6.28 };
+    spawn(anywhere = false) {
+      // z beschreibt die Entfernung. Größere Tropfen bewegen sich optisch
+      // schneller, kleine Tropfen bleiben zart im Hintergrund.
+      const roll = Math.random();
+      const depth = roll < .45 ? 0 : roll < .88 ? 1 : 2;
+      const jitter = .72 + Math.random() * .58;
+      const snow = kind === 'snow';
+      const size = snow ? [.95, 1.8, 3.2][depth] * jitter : [1.25, 2.85, 5.35][depth] * jitter;
+      const speed = snow ? [23, 36, 55][depth] * jitter : [115, 195, 315][depth] * jitter;
+      return {
+        x: Math.random() * (this.w + 32) - 16,
+        y: anywhere ? Math.random() * this.h : -(12 + Math.random() * 42),
+        w: size, h: snow ? size : size * (2.1 + Math.random() * .65),
+        speed,
+        phase: Math.random() * Math.PI * 2,
+        depth,
+        opacity: snow ? [.36, .61, .9][depth] : [.32, .55, .84][depth],
+        drift: (Math.random() - .5) * (snow ? 18 : 23)
+      };
     },
-    active() { return kind !== 'none' && canvas.offsetParent !== null; },
-    frame() {
-      const { w, h } = this;
+    active() {
+      return kind !== 'none' && canvas.offsetParent !== null && this.w > 3 && this.h > 3;
+    },
+    frame(dt, elapsed) {
+      const {w, h} = this;
       ctx.clearRect(0, 0, w, h);
+      const isNight = canvas.parentElement?.classList.contains('night');
       if (kind === 'rain') {
-        ctx.strokeStyle = 'rgba(220,230,250,.45)';
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
         for (const d of drops) {
-          ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.r * .25, d.y + d.r);
-          d.y += d.v; d.x -= d.v * .25;
-          if (d.y > h) Object.assign(d, this.spawn(false));
-          if (d.x < -10) d.x = w + 5;
+          // Jede Ebene hat eine eigene Lichtdurchlässigkeit. Dezente
+          // Highlights ersetzen die früheren auffälligen weißen Striche.
+          const twinkle = .94 + .06 * Math.sin(elapsed * 1.3 + d.phase);
+          ctx.globalAlpha = d.opacity * (isNight ? 1.12 : .92) * twinkle;
+          const drift = d.speed * .055 + d.drift;
+          ctx.drawImage(WATER_DROP_SPRITE,
+            d.x - d.w * .5, d.y - d.h * .48, d.w, d.h);
+          d.y += d.speed * dt;
+          d.x -= drift * dt;
+          if (d.y > h + 20 || d.x < -24) Object.assign(d, this.spawn(false));
         }
-        ctx.stroke();
       } else if (kind === 'snow') {
-        ctx.fillStyle = 'rgba(255,255,255,.85)';
         for (const d of drops) {
-          ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.283); ctx.fill();
-          d.y += d.v; d.p += 0.02; d.x += Math.sin(d.p) * 0.5;
-          if (d.y > h + 5) Object.assign(d, this.spawn(false));
+          ctx.globalAlpha = d.opacity;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, d.w, 0, Math.PI * 2);
+          ctx.fillStyle = '#f8fcff';
+          ctx.fill();
+          if (d.depth === 2) {
+            ctx.globalAlpha = d.opacity * .13;
+            ctx.beginPath(); ctx.arc(d.x, d.y, d.w * 2.1, 0, Math.PI * 2); ctx.fill();
+          }
+          d.y += d.speed * dt;
+          d.phase += dt * 1.5;
+          d.x += (d.drift + Math.sin(d.phase) * 10) * dt;
+          if (d.y > h + 14 || d.x < -25 || d.x > w + 25) Object.assign(d, this.spawn(false));
         }
       }
+      ctx.globalAlpha = 1;
     }
   };
   return layer;
 }
 
+let lastPrecipTime = 0;
+let lastPrecipPaint = 0;
 function startPrecip() {
   if (precipAnim) return;
-  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const loop = () => {
+  lastPrecipTime = 0;
+  lastPrecipPaint = 0;
+  const loop = (time) => {
     precipAnim = null;
     if (document.hidden) return;
     const live = precipLayers.filter(p => p.active());
-    if (!live.length) { precipLayers.forEach(p => p.canvas.getContext('2d').clearRect(0, 0, p.canvas.width, p.canvas.height)); return; }
-    live.forEach(p => p.frame());
-    if (!reduced) precipAnim = requestAnimationFrame(loop);
+    if (!live.length) {
+      precipLayers.forEach(p => {
+        const ctx = p.canvas.getContext('2d');
+        ctx.clearRect(0, 0, p.w, p.h);
+      });
+      return;
+    }
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Maximal 30 Bilder/Sekunde, schont Akku und hält Regenbewegung ruhig.
+    if (!lastPrecipTime) lastPrecipTime = time;
+    if (!lastPrecipPaint || time - lastPrecipPaint >= 32 || reduced) {
+      const dt = reduced ? 0 : Math.min(.065, (time - lastPrecipTime) / 1000);
+      lastPrecipTime = time;
+      lastPrecipPaint = time;
+      live.forEach(p => p.frame(dt, time / 1000));
+      if (reduced) return;
+    }
+    precipAnim = requestAnimationFrame(loop);
   };
   precipAnim = requestAnimationFrame(loop);
 }

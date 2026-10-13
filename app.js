@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.7';
+const APP_VERSION = '3.6.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1815,6 +1815,7 @@ async function loadVaultWithKey(key) {
   const decrypted = await decryptValue(encryptedVault, key);
   cryptoKey = key;
   state = decrypted;
+  ensureThoughtMemory();
   if (!Array.isArray(state.topics)) state.topics = [];
   state.version = APP_VERSION;
   state.settings = { ...(state.settings || {}) };
@@ -1855,6 +1856,7 @@ function saveResume() {
     resume = { screen: 'editor', id: currentTopicId };
   }
   else if (els.trashScreen.classList.contains('active')) resume = { screen: 'trash' };
+  else if ($('thoughtScreen').classList.contains('active')) resume = { screen: 'thought' };
   try { localStorage.setItem(LS_RESUME, JSON.stringify(resume)); } catch {}
 }
 function readResume() {
@@ -2110,7 +2112,7 @@ async function maybeShowBioCard() {
    ===================================================================== */
 
 function showScreen(screen) {
-  [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen')].forEach(el => el.classList.toggle('active', el === screen));
+  [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen'), $('thoughtScreen')].forEach(el => el.classList.toggle('active', el === screen));
   // Der Himmel braucht die echte Größe der sichtbaren Startseite. Zwei Frames warten,
   // damit Sonne, Mond und Planeten nicht erst mit 0 px berechnet und danach neu gezeichnet werden.
   if (screen === els.homeScreen) requestAnimationFrame(() => requestAnimationFrame(() => applySky(true)));
@@ -2148,6 +2150,7 @@ function showUnlocked(resume = { screen: 'home' }) {
   renderDailyBits();
   renderCategoryControls();
   renderTopics();
+  updateThoughtPortal();
   maybeShowBioCard();
   maybeShowBackupCard();
   // Verlauf neu aufbauen: Startseite ist die Basis
@@ -2156,6 +2159,8 @@ function showUnlocked(resume = { screen: 'home' }) {
     openTopic(resume.id, { verified: true });
   } else if (resume.screen === 'trash') {
     openTrash();
+  } else if (resume.screen === 'thought') {
+    openThoughtWorld();
   } else {
     showScreen(els.homeScreen);
   }
@@ -2163,7 +2168,7 @@ function showUnlocked(resume = { screen: 'home' }) {
 
 function goHomeFromScreen() {
   // Für die Zurück-Pfeile in der App: wie die Zurück-Taste des Handys
-  if (history.state && (history.state.rm === 'editor' || history.state.rm === 'trash')) history.back();
+  if (history.state && (['editor', 'trash', 'thought'].includes(history.state.rm))) history.back();
   else showHome();
 }
 
@@ -2211,6 +2216,8 @@ function onPopState(e) {
     } else if (!(els.editorScreen.classList.contains('active') && currentTopicId === s.id)) openTopic(s.id, { push: false });
   } else if (s.rm === 'trash') {
     if (!els.trashScreen.classList.contains('active')) openTrash({ push: false });
+  } else if (s.rm === 'thought') {
+    if (!$('thoughtScreen').classList.contains('active')) openThoughtWorld({ push: false });
   } else if (s.rm !== 'sheet') {
     if (!els.homeScreen.classList.contains('active')) showHome();
   }
@@ -4500,7 +4507,8 @@ async function verifyBackupCheck() {
     const active = vault.topics.filter(t => !t.deletedAt).length;
     const deleted = vault.topics.filter(t => Boolean(t.deletedAt)).length;
     const totalText = vault.topics.reduce((n, t) => n + String(t.content || '').length, 0);
-    hint.textContent = `Sicherung ist vollständig lesbar: ${active} Themen${deleted ? `, ${deleted} im Papierkorb` : ''}, ${totalText.toLocaleString('de-DE')} Textzeichen. Deine aktuellen Daten wurden nicht verändert.`;
+    const memories = Array.isArray(vault.memory?.entries) ? vault.memory.entries.length : 0;
+    hint.textContent = `Sicherung ist vollständig lesbar: ${active} Themen${deleted ? `, ${deleted} im Papierkorb` : ''}, ${totalText.toLocaleString('de-DE')} Textzeichen${memories ? ` und ${memories} Gedanken` : ''}. Deine aktuellen Daten wurden nicht verändert.`;
   } catch {
     hint.textContent = 'Die Sicherung konnte mit dieser PIN nicht entschlüsselt werden. Prüfe die PIN oder wähle eine andere Sicherungsdatei.';
   } finally {
@@ -4579,6 +4587,7 @@ function wireEvents() {
   });
 
   els.newTopicBtn.addEventListener('click', () => openTopicSheet('create'));
+  wireThoughtWorld();
   els.manageCategoriesBtn.addEventListener('click', openCategoryManager);
   els.categoryForm.addEventListener('submit', e => { e.preventDefault(); saveCategoryManager(); });
   els.categoryCloseBtn.addEventListener('click', () => closeSheet(els.categorySheet));
@@ -4800,6 +4809,231 @@ async function boot() {
   if (wantsQuick && hasVaultConfig() && (resumed || hasInboxKey())) { openQuick('new'); return; }
   if (resumed) return;
   autoBiometric();
+}
+
+
+/* =====================================================================
+   Reci mi 3.6 · Gedankenwelt (erste lokale Ausbaustufe)
+   - vorhandener Tresor bleibt unverändert (DB, PIN, Verschlüsselung)
+   - alle Originalaussagen bleiben im Gespräch
+   - regelbasierte Aufteilung, erkennbar als vorläufige Zuordnung
+   - keine externe KI-API, keine versteckten Übertragungen
+   ===================================================================== */
+let thoughtView = 'talk';
+let thoughtProjectFilter = 'Alle';
+const THOUGHT_PROJECTS = ['Litterum','Reci mi','Njam Njam','Wildora','Numera','KI-Kleiderschrank','Valora','Aelyr','Der, der ist','Rahel und Adam','Bibel','Weitere Ideen','Allgemein'];
+const THOUGHT_HINTS = [
+  ['KI-Kleiderschrank',/kleider|kleidung|klamott|outfit|anzieh|anzug|blazer|garderobe|schuhe|schrank|artikelnummer|anprob/i],
+  ['Litterum',/litterum|story\s*studio|schreib.?app|lektora|manuskript|buchprüfung/i],
+  ['Reci mi',/reci\s*mi|rezimi|gedanken.?app|notiz.?app|gedächtnis.?app/i],
+  ['Njam Njam',/njam\s*njam|unsere\s*küche|rezept.?app|rezept[e\s]/i],
+  ['Wildora',/wildora|natur.?app|tiergeräusch|pflanzen.?app|artenkart/i],
+  ['Numera',/numera|stempeluhr|zeiterfass|arbeitszeit.?app/i],
+  ['Rahel und Adam',/rahel|adam|ich\s*habe\s*dich\s*nicht\s*vergessen/i],
+  ['Der, der ist',/der,?\s*der\s*ist|\bnara\b|\bliri\b|\btarem\b/i],
+  ['Aelyr',/aelyr|sternenstaub/i],
+  ['Valora',/valora|vaelora|liora|aren\s*sar/i],
+  ['Bibel',/bibel|jesus|matthäus|evangelium|gebet|gleichnis/i]
+];
+const THOUGHT_STOPWORDS = new Set('ich du wir ihr sie er es das der die den dem ein eine einen einem einer mein meine mit für und oder aber auch noch mal so wie was wer wo wann warum wieviel habe hast hat haben hatte wollte will möchte möchte zu zum zur von vor nach über bei beim ins im ist sind war waren werden wäre wäre das dir mir mich dich uns das diese dieser diesen diese dies welche welcher etwas dann jetzt schon doch ja nein bitte können kann könntest'.split(' '));
+
+function ensureThoughtMemory() {
+  if (!state) return;
+  if (!state.memory || typeof state.memory !== 'object' || Array.isArray(state.memory)) state.memory = {};
+  if (!Array.isArray(state.memory.messages)) state.memory.messages = [];
+  if (!Array.isArray(state.memory.entries)) state.memory.entries = [];
+  if (typeof state.memory.draft !== 'string') state.memory.draft = '';
+}
+function thoughtNorm(s) {
+  return String(s||'').toLocaleLowerCase('de').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function thoughtKeywords(s) {
+  return [...new Set(thoughtNorm(s).split(' ').filter(w => w.length >= 3 && !THOUGHT_STOPWORDS.has(w)))];
+}
+function thoughtProject(text) {
+  const value = String(text||'');
+  for (const [name,re] of THOUGHT_HINTS) if (re.test(value)) return name;
+  const normal = thoughtNorm(value);
+  for (const name of THOUGHT_PROJECTS) {
+    if (name !== 'Allgemein' && name !== 'Weitere Ideen' && normal.includes(thoughtNorm(name))) return name;
+  }
+  for (const t of (state?.topics || [])) {
+    if (t.deletedAt || t.locked || (t.title||'').trim().length < 6) continue;
+    if (normal.includes(thoughtNorm(t.title))) return t.title;
+  }
+  if (/idee|app|entwickel|funktion|projekt|erfind|wunsch/i.test(value)) return 'Weitere Ideen';
+  return 'Allgemein';
+}
+function thoughtSplit(raw) {
+  // Nur eindeutige Themenwechsel trennen, damit wir keine zusammengehörigen Sätze zerstückeln.
+  const original = String(raw||'').trim();
+  const splitSignals = /(?:[.!?;,]\s+|\s+)(?=(?:Ach[, ]+und|Außerdem|Übrigens|Noch\s+eine\s+Idee|Und\s+bei|Und\s+für|Anderes\s+Thema|Zum\s+Thema|Apropos)\b)/giu;
+  let parts = original.replace(splitSignals,'\n\n').split(/\n{2,}|\n(?=\s*(?:[-*•]|\d+[.)]\s))/u).map(x=>x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/u,'').trim()).filter(Boolean);
+  if (parts.length === 1) {
+    parts = original.replace(/[,;.]\s+(?=(?:ach\s+und|außerdem|übrigens|noch\s+eine\s+idee|und\s+bei|und\s+für|anderes\s+thema)\b)/giu, '.\n').split('\n').map(x=>x.trim()).filter(Boolean);
+  }
+  // Eine Aussage ohne deutliche Trennstelle immer als ein Gedanke erhalten.
+  return parts.length > 12 ? [original] : parts;
+}
+function thoughtTitle(s) {
+  const c = String(s||'').replace(/^(und |ach[, ]+und |außerdem[, ]*|übrigens[, ]*|ich (habe|möchte|wollte|will) (noch )?(eine |die )?idee[, :]*|zum thema\s+)/i,'').trim();
+  const words = c.split(/\s+/).slice(0,11).join(' ');
+  return words.length > 78 ? words.slice(0,75).trim()+' …' : (words || 'Neuer Gedanke');
+}
+function updateThoughtPortal() {
+  if (!state) return;
+  ensureThoughtMemory();
+  const count = state.memory.entries.length;
+  const el = $('thoughtMiniCount');
+  if (el) el.textContent = count ? `${count} Gedanken` : '';
+}
+function openThoughtWorld({push=true}={}) {
+  if (!state || !cryptoKey) return;
+  ensureThoughtMemory();
+  if (push) history.pushState({rm:'thought'}, '');
+  $('thoughtInput').value = state.memory.draft;
+  thoughtSetView(thoughtView);
+  showScreen($('thoughtScreen'));
+  if (thoughtView==='talk') thoughtToBottom();
+}
+function thoughtToBottom() { requestAnimationFrame(() => { const el=$('thoughtThread'); if (el) el.scrollTop = el.scrollHeight; }); }
+function thoughtSetView(view) {
+  thoughtView = ['talk','world','search'].includes(view) ? view : 'talk';
+  for (const key of ['talk','world','search']) {
+    const btn=document.querySelector(`.thought-tab[data-view="${key}"]`);
+    if (btn) { btn.classList.toggle('active',key===thoughtView); btn.setAttribute('aria-selected',String(key===thoughtView)); }
+    $(key==='talk'?'thoughtTalkView':key==='world'?'thoughtWorldView':'thoughtSearchView').classList.toggle('active',key===thoughtView);
+  }
+  if (thoughtView==='talk') { thoughtRenderChat(); thoughtToBottom(); }
+  if (thoughtView==='world') thoughtRenderEntries();
+  if (thoughtView==='search') thoughtRenderSearch();
+}
+function thoughtRenderChat() {
+  if (!state) return;
+  const arr=state.memory.messages;
+  const welcome=`<div class="thought-welcome"><span class="thought-spark" aria-hidden="true">✦</span><h2>Hier beginnt dein Raum.</h2><p>Sprich oder schreib, wie es dir einfällt. Ich bewahre den Wortlaut auf und sortiere erkennbare Ideen. Für offene Gespräche mit einer richtigen KI erweitern wir die App später.</p></div>`;
+  $('thoughtThread').innerHTML = welcome + arr.slice(-100).map(m=>`<article class="thought-message ${m.role==='user'?'from-user':'from-reci'}"><span class="thought-msg-name">${m.role==='user'?'Du':'Reci mi'}</span><p>${escapeHtml(m.text)}</p><time>${escapeHtml(formatDate(m.at))}</time></article>`).join('');
+}
+function thoughtFind(query, limit=15) {
+  const keys=thoughtKeywords(query);
+  if (!keys.length) return [];
+  const corpus=[];
+  for (const x of (state?.memory?.entries||[])) corpus.push({type:'gedanke',id:x.id,title:x.title,text:x.text,project:x.project,at:x.at});
+  for (const t of (state?.topics||[])) {
+    if (t.deletedAt) continue;
+    corpus.push({type:'notiz',id:t.id,title:t.title,text:t.locked?'':combinedTopicText(t),project:catOf(t),at:t.updatedAt,locked:!!t.locked});
+  }
+  const scored=corpus.map(item=>{
+    const title=thoughtNorm(item.title+' '+item.project);
+    const content=thoughtNorm(item.text);
+    const score=keys.reduce((s,k)=>s + (title.includes(k)?4:0) + (content.includes(k)?1:0),0);
+    return {...item,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||new Date(b.at)-new Date(a.at));
+  return scored.slice(0,limit);
+}
+function thoughtAnswerQuestion(input) {
+  const found=thoughtFind(input,4);
+  if (!found.length) return 'Dazu finde ich noch keinen passenden Eintrag in deinen gespeicherten Gedanken oder Notizen. Du kannst mir mehr dazu erzählen.';
+  const names=found.map(x=>`„${x.title}“ (${x.type==='notiz'?'bisherige Notiz':x.project})`).join(', ');
+  return `Ich habe ${found.length} passende Einträge gefunden: ${names}. Unter „Wiederfinden“ kannst du die Originaltexte ansehen. Das ist eine lokale Suche, noch keine KI-Antwort.`;
+}
+function thoughtIsQuery(input) {
+  return /^(was|wann|wie|wo|welche[rsn]?|wer|finde|such[e]?|zeig[e]?|erinnerst du dich|weißt du noch|haben wir|wozu|woran)\b/i.test(input.trim()) && /\?|finde|suche|zeig|erinner|weißt|haben wir/i.test(input);
+}
+let thoughtSending=false;
+async function thoughtSend(e) {
+  e.preventDefault();
+  if (thoughtSending || !cryptoKey || !state) return;
+  if (dictWanted || isListening) stopRecognition();
+  const input=$('thoughtInput');
+  const text=input.value.trim();
+  if (!text) { input.focus(); return; }
+  thoughtSending=true; $('thoughtSendBtn').disabled=true;
+  try {
+    ensureThoughtMemory();
+    const now=new Date().toISOString();
+    const msgid=uid();
+    const query=thoughtIsQuery(text);
+    state.memory.messages.push({id:msgid,role:'user',text,at:now});
+    let response;
+    if (query) response=thoughtAnswerQuestion(text);
+    else {
+      const parts=thoughtSplit(text);
+      for (const part of parts) state.memory.entries.push({id:uid(),messageId:msgid,text:part,title:thoughtTitle(part),project:thoughtProject(part),at:now});
+      response=parts.length>1 ? `Ich habe ${parts.length} Gedanken getrennt gespeichert. Schau sie dir in der Gedankenwelt an. Falls etwas falsch zugeordnet ist, kannst du das dort ändern.` : `Dein Gedanke ist gespeichert und vorläufig „${thoughtProject(parts[0])}“ zugeordnet. Du findest ihn in der Gedankenwelt wieder.`;
+    }
+    state.memory.messages.push({id:uid(),role:'assistant',text:response,at:new Date().toISOString()});
+    state.memory.draft='';
+    await persistState(true);
+    input.value='';
+    updateThoughtPortal();
+    thoughtRenderChat(); thoughtToBottom();
+    $('thoughtStatus').textContent=query?'Gesucht wurde nur auf diesem Gerät.':'Verschlüsselt gespeichert. Die Zuordnung kannst du jederzeit ändern.';
+  } catch (error) {
+    // Speicherfehler sichtbar machen, Text im Eingabefeld behalten.
+    $('thoughtStatus').textContent='Speichern fehlgeschlagen. Bitte nicht schließen und erneut versuchen.';
+    showToast('Der Gedanke konnte nicht sicher gespeichert werden.',4000);
+  } finally { thoughtSending=false; $('thoughtSendBtn').disabled=false; }
+}
+function thoughtAllProjects() {
+  return [...new Set([...THOUGHT_PROJECTS,...(state?.memory?.entries||[]).map(e=>e.project),...(state?.topics||[]).filter(t=>!t.deletedAt).map(t=>t.title)].filter(Boolean))];
+}
+function thoughtRenderEntries() {
+  const entries=(state?.memory?.entries||[]).slice().reverse();
+  $('thoughtWorldCount').textContent=`${entries.length} ${entries.length===1?'Gedanke':'Gedanken'}`;
+  const available=[...new Set(entries.map(e=>e.project))];
+  const projects=['Alle', ...available];
+  if (!projects.includes(thoughtProjectFilter)) thoughtProjectFilter='Alle';
+  $('thoughtProjectTabs').innerHTML=projects.map(p=>`<button type="button" class="thought-project-chip${p===thoughtProjectFilter?' active':''}" data-project="${escapeHtml(p)}">${escapeHtml(p)}${p!=='Alle'?` <small>${entries.filter(x=>x.project===p).length}</small>`:''}</button>`).join('');
+  const list=entries.filter(x=>thoughtProjectFilter==='Alle'||x.project===thoughtProjectFilter);
+  $('thoughtEntries').innerHTML=list.length ? list.map(e=>`<article class="thought-entry" data-id="${escapeHtml(e.id)}"><div class="thought-entry-meta"><span class="thought-entry-dot"></span><time>${escapeHtml(formatDate(e.at))}</time></div><h3>${escapeHtml(e.title)}</h3><p>${escapeHtml(e.text)}</p><label class="thought-project-label">Projekt <select class="thought-project-select" aria-label="Projektzuordnung ändern">${thoughtAllProjects().map(p=>`<option value="${escapeHtml(p)}" ${p===e.project?'selected':''}>${escapeHtml(p)}</option>`).join('')}</select></label></article>`).join('') : '<p class="thought-blank">Hier erscheinen deine Ideen, sobald du sie im Gespräch erzählst.</p>';
+}
+function thoughtRenderSearch() {
+  const q=$('thoughtSearchInput').value.trim();
+  if (!q) { $('thoughtSearchResults').innerHTML='<p class="thought-blank">Zum Beispiel: „Litterum“, „Kleiderschrank“ oder „Bibel“.</p>'; return; }
+  const results=thoughtFind(q,50);
+  $('thoughtSearchResults').innerHTML=results.length ? results.map(r=>`<button class="thought-result" type="button" data-kind="${escapeHtml(r.type)}" data-id="${escapeHtml(r.id)}"><span>${r.type==='notiz'?'BESTEHENDE NOTIZ':'GESPEICHERTER GEDANKE'} · ${escapeHtml(r.project)}</span><strong>${escapeHtml(r.title)}</strong><small>${r.locked?'Extra geschützt, Text wird nicht angezeigt':escapeHtml(excerpt(r.text,250))}</small></button>`).join('') : '<p class="thought-blank">Dazu ist noch nichts gespeichert.</p>';
+}
+function wireThoughtWorld() {
+  $('thoughtHomeBtn').addEventListener('click', () => openThoughtWorld());
+  $('thoughtBackBtn').addEventListener('click', goHomeFromScreen);
+  $('thoughtSearchShortcut').addEventListener('click', () => {thoughtSetView('search');$('thoughtSearchInput').focus();});
+  document.querySelectorAll('.thought-tab').forEach(b=>b.addEventListener('click',()=>thoughtSetView(b.dataset.view)));
+  $('thoughtForm').addEventListener('submit',thoughtSend);
+  $('thoughtInput').addEventListener('input', () => {
+    if (!cryptoKey || !state) return;
+    ensureThoughtMemory();
+    state.memory.draft=$('thoughtInput').value;
+    persistState();
+  });
+  $('thoughtMicBtn').addEventListener('click', () => {
+    dictTarget=$('thoughtInput'); dictMicBtn=$('thoughtMicBtn');
+    toggleRecognition();
+  });
+  $('thoughtProjectTabs').addEventListener('click', e=>{
+    const b=e.target.closest('[data-project]'); if(!b) return;
+    thoughtProjectFilter=b.dataset.project; thoughtRenderEntries();
+  });
+  $('thoughtEntries').addEventListener('change',async e=>{
+    if (!e.target.matches('.thought-project-select')) return;
+    const row=e.target.closest('[data-id]');
+    const item=state?.memory?.entries.find(t=>t.id===row?.dataset.id);
+    if (!item) return;
+    const previous=item.project;
+    item.project=e.target.value;
+    try {await persistState(true);thoughtRenderEntries();showToast('Zuordnung gespeichert');}
+    catch {item.project=previous;thoughtRenderEntries();showToast('Zuordnung konnte nicht gespeichert werden');}
+  });
+  $('thoughtSearchInput').addEventListener('input',thoughtRenderSearch);
+  $('thoughtSearchResults').addEventListener('click',e=>{
+    const b=e.target.closest('.thought-result'); if(!b) return;
+    if (b.dataset.kind==='notiz') { openTopic(b.dataset.id); return; }
+    const entry=state?.memory?.entries.find(x=>x.id===b.dataset.id);
+    if (!entry) return;
+    thoughtProjectFilter=entry.project;thoughtSetView('world');
+    const row=[...$('thoughtEntries').querySelectorAll('[data-id]')].find(x=>x.dataset.id===entry.id);
+    if (row) {row.scrollIntoView({block:'center',behavior:'smooth'});row.classList.add('thought-highlight');setTimeout(()=>row.classList.remove('thought-highlight'),2500);}
+  });
 }
 
 boot().catch(() => {

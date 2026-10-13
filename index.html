@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#141A36" />
   <meta name="robots" content="noindex, nofollow, noarchive" />
-  <meta name="description" content="Reci mi – private, lokale und verschlüsselte Notizen." />
-  <link rel="manifest" href="manifest.webmanifest?v=3.5.7" />
+  <meta name="description" content="Reci mi – dein verschlüsseltes Gedanken- und Projektgedächtnis." />
+  <link rel="manifest" href="manifest.webmanifest?v=3.6.0" />
   <link rel="icon" href="mond-192.png" />
   <link rel="apple-touch-icon" href="mond-192.png" />
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=3.5.7" />
+  <link rel="stylesheet" href="styles.css?v=3.6.0" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -88,6 +88,12 @@
       </header>
 
       <div class="home-body">
+        <button id="thoughtHomeBtn" class="thought-portal" type="button" aria-label="Dein Gespräch und deine Gedankenwelt öffnen">
+          <span class="portal-orbit" aria-hidden="true"><span class="portal-core"></span></span>
+          <span class="portal-copy"><span class="portal-kicker">DEINE GEDANKENWELT</span><strong>Erzähl mir alles.</strong><small>Sprechen, Gedanken sammeln und Ideen wiederfinden.</small></span>
+          <span class="portal-arrow" aria-hidden="true">↗</span>
+        </button>
+        <div class="legacy-label"><span>Deine bisherigen Themen</span><span id="thoughtMiniCount"></span></div>
         <label class="search">
           <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
           <input id="searchInput" type="search" placeholder="Themen und Texte durchsuchen" aria-label="Suchen" />
@@ -104,7 +110,7 @@
         </div>
 
         <div id="backupCard" class="bio-card hidden">
-          <p><strong>Zeit für eine Sicherung?</strong><span id="backupCardText"></span> Deine Notizen liegen nur auf diesem Handy. Mit einer Sicherung gehen sie nicht verloren.</p>
+          <p><strong>Zeit für eine Sicherung?</strong><span id="backupCardText"></span> Deine Notizen und Gedanken liegen auf diesem Gerät. Sichere sie regelmäßig.</p>
           <div class="bio-card-actions">
             <button id="backupLater" class="btn btn-ghost btn-small" type="button">Später</button>
             <button id="backupNow" class="btn btn-main btn-small" type="button">Jetzt sichern</button>
@@ -123,6 +129,58 @@
         <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         Neues Thema
       </button>
+    </section>
+
+
+    <!-- V3.6: persönliches Gedanken- und Gesprächsgedächtnis, lokal im bisherigen verschlüsselten Tresor -->
+    <section id="thoughtScreen" class="screen thought-screen">
+      <header class="thought-header">
+        <div class="thought-aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="thought-topline">
+          <button id="thoughtBackBtn" type="button" class="thought-back" aria-label="Zurück zu meinen Themen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+          <span class="thought-eyebrow">RECI MI · DEINE GEDANKENWELT</span>
+          <button id="thoughtSearchShortcut" type="button" class="thought-top-search" aria-label="Alles durchsuchen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg></button>
+        </div>
+        <h1>Erzähl mir <em>alles.</em></h1>
+        <p>Ein Gedanke führt zum nächsten. Hier dürfen alle bleiben.</p>
+        <div class="thought-tabs" role="tablist" aria-label="Gedankenwelt Ansichten">
+          <button class="thought-tab active" data-view="talk" type="button" role="tab" aria-selected="true">Gespräch</button>
+          <button class="thought-tab" data-view="world" type="button" role="tab" aria-selected="false">Gedankenwelt</button>
+          <button class="thought-tab" data-view="search" type="button" role="tab" aria-selected="false">Wiederfinden</button>
+        </div>
+      </header>
+      <div class="thought-view active" id="thoughtTalkView">
+        <div class="thought-thread" id="thoughtThread" aria-live="polite"></div>
+        <div class="thought-composer">
+          <p id="thoughtStatus" role="status" class="thought-status">Deine Texte bleiben verschlüsselt auf diesem Gerät. Die Zuordnung erfolgt lokal ohne externe KI. Spracheingabe kann den Sprachdienst deines Browsers nutzen.</p>
+          <form id="thoughtForm" class="thought-form">
+            <textarea id="thoughtInput" rows="2" maxlength="25000" placeholder="Was beschäftigt dich? Erzähl einfach drauflos …" aria-label="Deinen Gedanken eingeben"></textarea>
+            <div class="thought-compose-actions">
+              <button id="thoughtMicBtn" class="thought-mic" type="button" aria-label="Gedanken sprechen" title="Spracheingabe"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg></button>
+              <span class="thought-hint">Auch mehrere Ideen auf einmal</span>
+              <button id="thoughtSendBtn" class="thought-send" type="submit" aria-label="Gedanken speichern">Senden <span aria-hidden="true">↑</span></button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="thought-view" id="thoughtWorldView">
+        <div class="thought-panel">
+          <div class="thought-panel-head"><span>DEINE SAMMLUNG</span><strong id="thoughtWorldCount">0 Gedanken</strong></div>
+          <h2>Was in dir <em>wächst.</em></h2>
+          <p>Jeder Gedanke bleibt mit deinen ursprünglichen Worten erhalten. Die Zuordnung kannst du jederzeit ändern.</p>
+          <div id="thoughtProjectTabs" class="thought-project-tabs"></div>
+          <div id="thoughtEntries" class="thought-entries"></div>
+        </div>
+      </div>
+      <div class="thought-view" id="thoughtSearchView">
+        <div class="thought-panel">
+          <div class="thought-panel-head"><span>VERBINDUNGEN FINDEN</span></div>
+          <h2>Nichts geht <em>verloren.</em></h2>
+          <p>Durchsuche Gedanken, Gespräche und deine bisherigen Notizen. Extra geschützte Notiztexte bleiben verborgen.</p>
+          <label class="thought-searchbox"><span aria-hidden="true">⌕</span><input id="thoughtSearchInput" type="search" placeholder="Woran erinnerst du dich?" autocomplete="off" aria-label="Gedächtnis durchsuchen"></label>
+          <div id="thoughtSearchResults" class="thought-results"></div>
+        </div>
+      </div>
     </section>
 
     <!-- Thema -->
@@ -310,8 +368,8 @@
         <button type="button" id="emergencyBtn" class="sheet-item hidden">Notfallkopie zurückholen<small id="emergencyAge" class="item-sub"></small></button>
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
-      <p class="sheet-note">Deine Notizen sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
-      <p class="sheet-note version">Version 3.5.7</p>
+      <p class="sheet-note">Deine Notizen und Gedanken sind verschlüsselt und bleiben auf diesem Gerät. Reci mi sperrt sich, wenn du länger als 1 Minute weg bist. Spracheingabe und Vorlesen können je nach Handy einen Sprachdienst im Internet nutzen.</p>
+      <p class="sheet-note version">Version 3.6.0</p>
     </dialog>
 
     <!-- Blatt: Archiv -->
@@ -514,6 +572,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=3.5.7" defer></script>
+  <script src="app.js?v=3.6.0" defer></script>
 </body>
 </html>

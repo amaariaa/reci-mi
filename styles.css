@@ -287,7 +287,7 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 /* ---------- Sonne und Wetter ---------- */
 .hero > .hero-top, .hero > .hero-main, .hero > .sky-rows { position: relative; z-index: 2; }
 .hero .hero-moon, .hero .daily-quote, .hero .moon-line { display: none; }
-.sky-rows { margin-top: auto; padding-top: 18px; display: grid; gap: 3px; transform: translateY(26px); }
+.sky-rows { margin-top: auto; padding-top: 18px; display: grid; gap: 3px; transform: translateY(21px); }
 .lock-inner, .lock-phase { z-index: 2; }
 
 .sun { position: absolute; z-index: 1; width: var(--sun-size, 140px); height: var(--sun-size, 140px); transform: translate(-50%, -50%); pointer-events: none; opacity: var(--sun-veil, 1); transition: left 2s ease, top 2s ease, opacity 2s ease; }
@@ -297,27 +297,27 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .sun-core { position: absolute; inset: 0; border-radius: 50%;
   background: radial-gradient(circle, #FFFFFF 0 3.5%, var(--sun-core, #FFF6D8) 6%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 70%, transparent) 11%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 28%, transparent) 24%, transparent 58%);
   animation: sunBreathe 6s ease-in-out infinite; }
-.sun-rays { position: absolute; inset: -42%; border-radius: 50%;
+.sun-rays { position: absolute; inset: -38%; border-radius: 50%;
   background:
-    radial-gradient(circle, color-mix(in srgb, var(--sun-halo, #FFF1C2) 14%, transparent) 0 24%, transparent 62%),
-    repeating-conic-gradient(from -8deg,
-      color-mix(in srgb, var(--sun-halo, #FFF1C2) 30%, transparent) 0deg 5deg,
-      color-mix(in srgb, var(--sun-halo, #FFF1C2) 14%, transparent) 5deg 10deg,
-      transparent 10deg 28deg,
-      color-mix(in srgb, var(--sun-halo, #FFF1C2) 18%, transparent) 28deg 34deg,
-      transparent 34deg 60deg);
-  -webkit-mask: radial-gradient(circle, transparent 0 12%, rgba(0,0,0,.92) 24%, rgba(0,0,0,.60) 52%, transparent 84%);
-  mask: radial-gradient(circle, transparent 0 12%, rgba(0,0,0,.92) 24%, rgba(0,0,0,.60) 52%, transparent 84%);
-  filter: blur(4.2px); animation: sunTurn 145s linear infinite; opacity: .40; mix-blend-mode: screen; }
-.sun-rays::after { content: ""; position: absolute; inset: -6%; border-radius: 50%;
-  background: repeating-conic-gradient(from 12deg,
-    color-mix(in srgb, var(--sun-halo, #FFF1C2) 18%, transparent) 0deg 8deg,
-    transparent 8deg 36deg,
-    color-mix(in srgb, var(--sun-core, #FFF) 12%, transparent) 36deg 42deg,
-    transparent 42deg 74deg);
-  -webkit-mask: radial-gradient(circle, transparent 0 14%, rgba(0,0,0,.52) 32%, transparent 82%);
-  mask: radial-gradient(circle, transparent 0 14%, rgba(0,0,0,.52) 32%, transparent 82%);
-  filter: blur(8px); animation: sunTurn 210s linear infinite reverse; opacity: .34; }
+    radial-gradient(circle, color-mix(in srgb, var(--sun-halo, #FFF1C2) 13%, transparent) 0 23%, transparent 61%),
+    repeating-conic-gradient(from -7deg,
+      color-mix(in srgb, var(--sun-halo, #FFF1C2) 24%, transparent) 0deg 4.5deg,
+      color-mix(in srgb, var(--sun-halo, #FFF1C2) 10%, transparent) 4.5deg 8.5deg,
+      transparent 8.5deg 31deg,
+      color-mix(in srgb, var(--sun-core, #FFF) 10%, transparent) 31deg 36deg,
+      transparent 36deg 64deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 13%, rgba(0,0,0,.88) 25%, rgba(0,0,0,.50) 50%, transparent 82%);
+  mask: radial-gradient(circle, transparent 0 13%, rgba(0,0,0,.88) 25%, rgba(0,0,0,.50) 50%, transparent 82%);
+  filter: blur(4.8px); animation: sunTurn 150s linear infinite; opacity: .42; }
+.sun-rays::after { content: ""; position: absolute; inset: -5%; border-radius: 50%;
+  background: repeating-conic-gradient(from 11deg,
+    color-mix(in srgb, var(--sun-core, #FFF) 13%, transparent) 0deg 6deg,
+    transparent 6deg 38deg,
+    color-mix(in srgb, var(--sun-halo, #FFF1C2) 10%, transparent) 38deg 44deg,
+    transparent 44deg 76deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 16%, rgba(0,0,0,.45) 30%, transparent 80%);
+  mask: radial-gradient(circle, transparent 0 16%, rgba(0,0,0,.45) 30%, transparent 80%);
+  filter: blur(8px); animation: sunTurn 215s linear infinite reverse; opacity: .30; }
 @keyframes sunTurn { to { transform: rotate(360deg); } }
 @keyframes sunBreathe { 50% { transform: scale(1.06); opacity: .92; } }
 
@@ -735,14 +735,14 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
     radial-gradient(ellipse 70% 22% at 48% 89%, rgba(104,117,140,.22), transparent 97%);
 }
 .weather-layer .cloud {
-  width: clamp(180px, 47vw, 360px);
-  height: 102px;
-  opacity: calc(var(--cloud-op, .6) * var(--cloud-individual-opacity, .72));
-  filter: blur(var(--blur, 8px));
+  width: clamp(190px, 52vw, 390px);
+  height: 112px;
+  opacity: calc(var(--cloud-op, .6) * var(--cloud-individual-opacity, .64));
+  filter: blur(calc(var(--blur, 8px) + 2px));
   background:
-    radial-gradient(ellipse at 43% 72%, rgba(234,239,246,.94), transparent 69%) 0% 0%/100% 100% no-repeat,
-    radial-gradient(ellipse at 29% 60%, rgba(255,255,255,.93), transparent 65%) 0% 0%/72% 76% no-repeat,
-    radial-gradient(ellipse at 73% 53%, rgba(213,225,235,.93), transparent 70%) 100% 6%/78% 89% no-repeat;
+    radial-gradient(ellipse at 43% 72%, rgba(242,245,249,.84), transparent 69%) 0% 0%/100% 100% no-repeat,
+    radial-gradient(ellipse at 29% 60%, rgba(255,255,255,.82), transparent 65%) 0% 0%/72% 76% no-repeat,
+    radial-gradient(ellipse at 73% 53%, rgba(225,233,241,.80), transparent 70%) 100% 6%/78% 89% no-repeat;
 }
 .weather-layer.night .cloud { filter: blur(var(--blur, 8px)) brightness(.55) saturate(.75); }
 .weather-layer.dark-clouds .cloud { filter: blur(var(--blur, 8px)) brightness(.78) saturate(.66); }

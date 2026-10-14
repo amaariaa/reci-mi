@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.7.5';
+const APP_VERSION = '3.7.6';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -521,47 +521,34 @@ function isBetweenWrapped(value, start, end) {
   return start <= end ? (value >= start && value <= end) : (value >= start || value <= end);
 }
 
-
 const BODY_DIAM_KM = {
-  sun: 1392700,
-  moon: 3474.8,
-  mercury: 4879.4,
-  venus: 12103.6,
-  mars: 6779,
-  jupiter: 139820,
-  saturn: 116460
+  sun: 1392700, moon: 3474.8, mercury: 4879.4, venus: 12103.6, mars: 6779, jupiter: 139820, saturn: 116460
 };
-function apparentDiameterDeg(diamKm, distKm) {
+function apparentDiameterArcsec(diamKm, distKm) {
   const d = Math.max(1, Number(distKm) || 1);
-  return 2 * Math.atan((diamKm / 2) / d) * 180 / Math.PI;
+  return 2 * Math.atan((diamKm / 2) / d) * 180 / Math.PI * 3600;
 }
-function apparentDiameterArcsec(diamKm, distKm) { return apparentDiameterDeg(diamKm, distKm) * 3600; }
-function angularVisualScale(arcsec, minArcsec, maxArcsec, minScale, maxScale, gamma = 0.52) {
-  const lo = Math.max(1e-6, minArcsec), hi = Math.max(lo + 1e-6, maxArcsec), val = Math.max(lo, Math.min(hi, arcsec));
+function angularVisualScale(arcsec, minArcsec, maxArcsec, minScale, maxScale, gamma = .52) {
+  const lo = Math.max(1e-6, minArcsec), hi = Math.max(lo + 1e-6, maxArcsec);
+  const val = Math.max(lo, Math.min(hi, arcsec));
   const t = (Math.log(val) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
   return minScale + (maxScale - minScale) * Math.pow(t, gamma);
 }
 function sunRenderSize(date, alt) {
   const distKm = sunGeoXYZ(date).r * AU_KM;
-  const meanArcsec = 1919;
-  const arcsec = apparentDiameterArcsec(BODY_DIAM_KM.sun, distKm);
-  const ratio = Math.sqrt(arcsec / meanArcsec);
-  const base = 200 - alt * 36;
-  return Math.round(base * ratio);
+  const ratio = Math.sqrt(apparentDiameterArcsec(BODY_DIAM_KM.sun, distKm) / 1919);
+  return Math.round((200 - alt * 36) * ratio);
 }
 function moonRenderSize(distKm, alt) {
-  const meanArcsec = 1864;
-  const arcsec = apparentDiameterArcsec(BODY_DIAM_KM.moon, distKm);
-  const ratio = Math.sqrt(arcsec / meanArcsec);
-  const base = 86 - alt * 6.5;
-  return Math.round(base * ratio);
+  const ratio = Math.sqrt(apparentDiameterArcsec(BODY_DIAM_KM.moon, distKm) / 1864);
+  return Math.round((86 - alt * 6.5) * ratio);
 }
 function planetRenderScale(key, distAu) {
   const diamKm = BODY_DIAM_KM[key];
   if (!diamKm || !distAu) return 1;
   let arcsec = apparentDiameterArcsec(diamKm, distAu * AU_KM);
   if (key === 'saturn') arcsec *= 1.55;
-  return angularVisualScale(arcsec, 4, 55, 0.72, 1.12, 0.58);
+  return angularVisualScale(arcsec, 4, 55, .72, 1.12, .58);
 }
 
 function placeSun() {
@@ -866,7 +853,7 @@ function placeMoon() {
   moonOrb.style.left = `${p.x}px`;
   moonOrb.style.top = `${p.y}px`;
   moonOrb.style.setProperty('--moon-size', `${moonRenderSize(st.distKm, p.alt)}px`);
-  if (els.moonTap) { const hit = Math.max(48, Math.round(moonRenderSize(st.distKm, p.alt) * 0.7)); els.moonTap.style.left = `${p.x}px`; els.moonTap.style.top = `${p.y}px`; els.moonTap.style.width = `${hit}px`; els.moonTap.style.height = `${hit}px`; }
+  if (els.moonTap) { const hit = Math.max(48, Math.round(moonRenderSize(st.distKm, p.alt) * .7)); els.moonTap.style.left = `${p.x}px`; els.moonTap.style.top = `${p.y}px`; els.moonTap.style.width = `${hit}px`; els.moonTap.style.height = `${hit}px`; }
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   moonOrb.style.setProperty('--moon-earthshine', night ? '.1' : '.04');
   moonOrb.style.setProperty('--moon-wash', night ? '0' : '.28');
@@ -1275,12 +1262,12 @@ function applyWeatherFx() {
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const clouds = layer.querySelector('.clouds');
-    const n = fx.clouds < .10 ? 0 : Math.round(2 + fx.clouds * 11);
+    const n = fx.clouds < .10 ? 0 : Math.round(1 + fx.clouds * 7);
     buildClouds(clouds, n);
     const coverage = Math.max(0, Math.min(1, fx.clouds));
     // Gemisch aus einzelnen Wolken und der geschlossenen Decke.
     const deck = coverage < .33 ? 0 : Math.pow((coverage - .33) / .67, 1.75);
-    layer.style.setProperty('--cloud-op', (0.35 + coverage * .65).toFixed(2));
+    layer.style.setProperty('--cloud-op', (0.24 + coverage * .54).toFixed(2));
     layer.style.setProperty('--deck-opacity', deck.toFixed(3));
     layer.style.setProperty('--texture-opacity', (deck * .63).toFixed(3));
     layer.style.setProperty('--fog', fx.fog.toFixed(2));

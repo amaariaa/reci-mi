@@ -297,13 +297,22 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .sun-core { position: absolute; inset: 0; border-radius: 50%;
   background: radial-gradient(circle, #FFFFFF 0 3.5%, var(--sun-core, #FFF6D8) 6%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 70%, transparent) 11%, color-mix(in srgb, var(--sun-halo, #FFE9AE) 28%, transparent) 24%, transparent 58%);
   animation: sunBreathe 6s ease-in-out infinite; }
-.sun-rays { position: absolute; inset: -30%; border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--sun-halo, #FFF1C2) 55%, transparent) 0deg 2.2deg, transparent 2.2deg 17deg);
-  -webkit-mask: radial-gradient(circle, #000 0 6%, rgba(0,0,0,.55) 18%, transparent 52%); mask: radial-gradient(circle, #000 0 6%, rgba(0,0,0,.55) 18%, transparent 52%);
-  animation: sunTurn 90s linear infinite; opacity: .8; }
-.sun-rays::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
-  background: repeating-conic-gradient(from 8deg, color-mix(in srgb, var(--sun-core, #FFF) 40%, transparent) 0deg 1.2deg, transparent 1.2deg 23deg);
-  animation: sunTurn 140s linear infinite reverse; }
+.sun-rays { position: absolute; inset: -34%; border-radius: 50%;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--sun-halo, #FFF1C2) 16%, transparent) 0 22%, transparent 58%),
+    repeating-conic-gradient(from 0deg,
+      color-mix(in srgb, var(--sun-halo, #FFF1C2) 34%, transparent) 0deg 1.1deg,
+      transparent 1.1deg 15deg,
+      color-mix(in srgb, var(--sun-halo, #FFF1C2) 16%, transparent) 15deg 17.8deg,
+      transparent 17.8deg 28deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 14%, rgba(0,0,0,.9) 24%, rgba(0,0,0,.55) 46%, transparent 76%);
+  mask: radial-gradient(circle, transparent 0 14%, rgba(0,0,0,.9) 24%, rgba(0,0,0,.55) 46%, transparent 76%);
+  filter: blur(1.25px); animation: sunTurn 110s linear infinite; opacity: .58; }
+.sun-rays::after { content: ""; position: absolute; inset: -4%; border-radius: 50%;
+  background: repeating-conic-gradient(from 7deg, color-mix(in srgb, var(--sun-core, #FFF) 24%, transparent) 0deg 0.8deg, transparent 0.8deg 22deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 16%, rgba(0,0,0,.6) 28%, transparent 80%);
+  mask: radial-gradient(circle, transparent 0 16%, rgba(0,0,0,.6) 28%, transparent 80%);
+  filter: blur(2.2px); animation: sunTurn 165s linear infinite reverse; opacity: .75; }
 @keyframes sunTurn { to { transform: rotate(360deg); } }
 @keyframes sunBreathe { 50% { transform: scale(1.06); opacity: .92; } }
 

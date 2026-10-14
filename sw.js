@@ -1,10 +1,10 @@
-const CACHE = 'reci-mi-v3.5.9';
+const CACHE = 'reci-mi-v3.5.10';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=3.5.9',
-  './app.js?v=3.5.9',
-  './manifest.webmanifest?v=3.5.9',
+  './styles.css?v=3.5.10',
+  './app.js?v=3.5.10',
+  './manifest.webmanifest?v=3.5.10',
   './mond-192.png',
   './mond-512.png',
   './mond-maskable-512.png',

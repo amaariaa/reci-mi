@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.1';
+const APP_VERSION = '3.8.2';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1340,7 +1340,7 @@ function cloudPaletteNow() {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const kHor = cl((luminance(p.hor) - .10) / .38, 0, 1);
   const kMid = cl(luminance(p.mid) / .30, 0, 1);
-  let lit = mixHex('#8591C0', mixHex(p.hor, '#FFFFFF', .46), kHor);
+  let lit = mixHex('#7B92DA', mixHex(p.hor, '#FFFFFF', .46), kHor);
   let shadow = mixHex('#171C3A', mixHex(mixHex(p.top, p.mid, .5), '#5A668E', .50), kMid);
   const dark = cl(Math.max(fx.rain * .85, fx.snow * .45, fx.storm ? 1 : 0), 0, 1);
   if (dark > 0) {
@@ -1435,7 +1435,7 @@ function paintSkyClouds(force = false) {
   const ov = Math.max(0, Math.min(1, (cover - .7) / .25));
   const backTile = cover < .1 || !cloudFields.back ? null
     : paintCloudTile('back', cloudFields.back, cover < .99 ? (cover > .8 ? cover : Math.pow(cover, 1.45) * .8) : 1, pal,
-        { soft: .09 + .06 * cover + .10 * ov, alpha: heavy ? 1 : .88, gain: 3.4 - 1.6 * ov, depth: (heavy ? .7 : .28) * (1 - .5 * ov), erode: .13 - .09 * ov, tex: .26 - .12 * ov });
+        { soft: .17 + .07 * cover + .06 * ov, alpha: heavy ? 1 : .66 + .22 * ov, gain: 2.6 - .8 * ov, depth: (heavy ? .6 : .15) * (1 - .5 * ov), erode: .07 - .03 * ov, tex: .13 - .03 * ov });
   const frontCover = cover < .3 ? 0 : Math.min(.85, cover * .72);
   const frontTile = !frontCover || !cloudFields.front ? null
     : paintCloudTile('front', cloudFields.front, frontCover, pal,
@@ -1463,7 +1463,7 @@ function renderSkyClouds() {
     clearTimeout(cloudGenTimer);
     // erst nach dem ersten Bild rechnen, damit die App sofort startet
     cloudGenTimer = setTimeout(() => {
-      cloudFields.back = genCloudField(11, { dx: 8, dy: 10, oct: 4, cx: 5, cy: 8, gain: .5, warpX: .09, warpY: .10, lx: 4, ly: -1.2 });
+      cloudFields.back = genCloudField(11, { dx: 6, dy: 8, oct: 4, cx: 4, cy: 6, gain: .46, warpX: .09, warpY: .10, lx: 4, ly: -1.2 });
       cloudFields.front = genCloudField(73, { dx: 6, dy: 8, oct: 3, cx: 3, cy: 10, gain: .5, warpX: .12, warpY: .10, lx: 5, ly: -1 });
       cloudFields.key = 'v1';
       paintSkyClouds(true);
@@ -2137,14 +2137,14 @@ function placeStars() {
     const hero = Boolean(box.closest('.hero'));
     let seed = hero ? 7 : 3;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    const count = hero ? 26 : 40;
+    const count = hero ? 420 : 480;
     let html = '';
     for (let i = 0; i < count; i++) {
-      const big = rnd() < 0.2;
-      const size = big ? 3 : 2;
+      const big = rnd() < 0.12;
+      const size = big ? 3 : rnd() < .6 ? 1.4 : 2;
       const dur = (2.4 + rnd() * 4.2).toFixed(1);
       const delay = (-rnd() * 7).toFixed(1);
-      html += `<i class="${big ? 'big' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 92).toFixed(1)}%;--o:${(0.35 + rnd() * 0.55).toFixed(2)};width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
+      html += `<i class="${big ? 'big' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 100).toFixed(1)}%;--o:${(0.35 + rnd() * 0.55).toFixed(2)};width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
     }
     box.innerHTML = html;
   });
@@ -2157,7 +2157,8 @@ function shootingStar() {
   const visible = boxes[0];
   const dark = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stars')) > 0.6;
   if (visible && dark && !reduce && !document.hidden) {
-    const w = visible.clientWidth, h = visible.clientHeight;
+    const host = visible.parentElement;
+    const w = host.clientWidth, h = host.clientHeight;
     const star = document.createElement('b');
     star.className = 'shoot';
     const fromRight = Math.random() < 0.5;
@@ -2168,7 +2169,7 @@ function shootingStar() {
     star.style.setProperty('--dx', `${dx}px`);
     star.style.setProperty('--dy', `${dy}px`);
     star.style.setProperty('--rot', `${Math.atan2(dy, dx) * 180 / Math.PI}deg`);
-    visible.appendChild(star);
+    host.appendChild(star);
     setTimeout(() => star.remove(), 1700);
   }
   setTimeout(shootingStar, 9000 + Math.random() * 14000);

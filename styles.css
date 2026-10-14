@@ -805,3 +805,21 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .sky-rows { transform: none; padding-top: 10px; }
 .hero { padding-bottom: 20px;
   background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) calc(100% - 58px), var(--sky-hor) calc(100% - 12px), var(--bg) 100%); }
+
+/* Sternenhimmel V3.8.2: dreht sich ganz langsam um einen Punkt am Himmel, wie bei der drehenden Erde */
+.stars { inset: auto; left: 50%; top: 24%; width: var(--star-d, 900px); height: var(--star-d, 900px);
+  margin: calc(var(--star-d, 900px) / -2) 0 0 calc(var(--star-d, 900px) / -2);
+  animation: starTurn 1500s linear infinite; will-change: transform; }
+.lock-screen .stars { top: 22%; --star-d: 1500px; }
+.stars::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .9;
+  background: linear-gradient(112deg, transparent 38%, rgba(170,190,255,.055) 47%, rgba(200,214,255,.085) 52%, rgba(170,190,255,.045) 58%, transparent 66%);
+  filter: blur(18px); }
+@keyframes starTurn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .stars { animation: none; } }
+/* Sternschnuppen liegen über dem Himmel und drehen sich nicht mit */
+.sky > .shoot { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; opacity: 0; transform: rotate(var(--rot, 20deg)); box-shadow: 0 0 8px 2px rgba(255,255,255,.7); animation: shoot 1.4s ease-out forwards; pointer-events: none; }
+.sky > .shoot::after { content: ""; position: absolute; right: 1px; top: 50%; width: 110px; height: 1.5px; transform: translateY(-50%); transform-origin: right center; background: linear-gradient(270deg, rgba(255,255,255,.95), rgba(255,255,255,0)); }
+/* Wolken: weiche Schleier wie in der Samsung-Wetter-App */
+.sky-cloud { filter: blur(1.6px); }
+.sky-cloud.back { animation-duration: 260s; }
+.sky-cloud.front { animation-duration: 170s; }

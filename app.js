@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.10';
+const APP_VERSION = '3.5.11';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -625,9 +625,9 @@ function buildClouds(box, fx) {
   box.dataset.cloudSig = sig;
 
   const specs = [
-    { type: 'high', amount: high, threshold: .10, max: 3, baseTop: 6, range: 30, baseScale: 1.08, scaleStep: .16, baseDur: 125, opBase: .07, opGain: .16 },
-    { type: 'mid', amount: mid, threshold: .13, max: 4, baseTop: 18, range: 43, baseScale: .90, scaleStep: .18, baseDur: 98, opBase: .10, opGain: .25 },
-    { type: 'low', amount: low, threshold: .15, max: 6, baseTop: 31, range: 42, baseScale: .78, scaleStep: .20, baseDur: 76, opBase: .12, opGain: .42 }
+    { type: 'high', amount: high, threshold: .12, max: 3, baseTop: 8, range: 28, baseScale: 1.04, scaleStep: .14, baseDur: 136, opBase: .04, opGain: .10 },
+    { type: 'mid', amount: mid, threshold: .15, max: 4, baseTop: 20, range: 40, baseScale: .88, scaleStep: .16, baseDur: 106, opBase: .07, opGain: .18 },
+    { type: 'low', amount: low, threshold: .18, max: 5, baseTop: 34, range: 38, baseScale: .76, scaleStep: .18, baseDur: 84, opBase: .09, opGain: .28 }
   ];
   let html = '';
   specs.forEach((sp, ti) => {
@@ -639,7 +639,7 @@ function buildClouds(box, fx) {
       const scale = sp.baseScale + (((i * 47 + ti * 19) % 50) / 100) * sp.scaleStep;
       const dur = sp.baseDur + (i * 23 + ti * 11) % 55;
       const delay = -((i * 41 + ti * 29) % dur);
-      const opacity = Math.min(.78, sp.opBase + sp.amount * sp.opGain);
+      const opacity = Math.min(sp.type === 'low' ? .68 : .56, sp.opBase + sp.amount * sp.opGain);
       html += `<i class="cloud ${sp.type}" style="top:${top}%;--s:${scale.toFixed(2)};--o:${opacity.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
     }
   });

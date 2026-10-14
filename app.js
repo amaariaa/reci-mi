@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.3';
+const APP_VERSION = '3.8.4';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -329,6 +329,7 @@ function applySky(fromWeather = false) {
   placePlanets();
   updatePlaceClock();
   if (cloudFields.back) paintSkyClouds();
+  buildStarSky();
   refreshOpenCelestialInfo();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', top);
@@ -1438,7 +1439,7 @@ function paintSkyClouds(force = false) {
   const ov = Math.max(0, Math.min(1, (cover - .7) / .25));
   const backTile = cover < .1 || !cloudFields.back ? null
     : paintCloudTile('back', cloudFields.back, cover < .99 ? (cover > .8 ? cover : Math.pow(cover, 1.45) * .8) : 1, pal,
-        { soft: .17 + .07 * cover + .06 * ov, alpha: heavy ? 1 : .66 + .22 * ov, gain: 2.6 - .8 * ov, depth: (heavy ? .6 : .15) * (1 - .5 * ov), erode: .07 - .05 * ov, tex: .13 - .09 * ov, flat: ov * (fx.storm ? .45 : 1) });
+        { soft: .17 + .07 * cover + .06 * ov, alpha: heavy ? 1 : .80 + .10 * ov, gain: 3.2 - 1.4 * ov, depth: (heavy ? .6 : .22) * (1 - .5 * ov), erode: .09 - .07 * ov, tex: .20 - .16 * ov, flat: ov * (fx.storm ? .45 : 1) });
   const frontCover = cover < .3 ? 0 : Math.min(.85, cover * .72);
   const frontTile = !frontCover || !cloudFields.front ? null
     : paintCloudTile('front', cloudFields.front, frontCover, pal,
@@ -1446,6 +1447,7 @@ function paintSkyClouds(force = false) {
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;
+    [cvs.back, cvs.front].forEach(c => c && c.classList.toggle('full', cover >= .75));
     blitCloud(cvs.back, backTile);
     blitCloud(cvs.front, frontTile);
   });
@@ -2134,24 +2136,91 @@ function renderDailyBits(date = nowForSky(), phase = document.documentElement.da
   els.lockPhase.textContent = `${PHASE_LABEL[phase] || ''}\n${line}`;
 }
 
-function placeStars() {
+/* =====================================================================
+   V3.8.4 · Echter Sternenhimmel über deinem Ort
+   Etwa 251 der hellsten Sterne (Rektaszension, Deklination, Helligkeit, Farbe)
+   und die Linien der bekannten Sternbilder. Aus der aktuellen Uhrzeit und dem Ort
+   wird berechnet, wie der Himmel jetzt zum Pol hin gedreht ist. Danach dreht er sich
+   zur Show schneller als in Wirklichkeit.
+   ===================================================================== */
+const SKY_STAR_DATA = '37.95,89.27,2,0.6;263.05,86.58,4.36,0.1;251.70,82.03,4.2,0.1;236.02,77.80,4.3,0;244.38,75.75,4.95,0.3;230.18,71.83,3.05,0;222.68,74.15,2.08,1.47;165.93,61.75,1.79,1.06;165.45,56.38,2.37,0;178.45,53.68,2.44,0;183.85,57.03,3.31,0.08;193.50,55.97,1.77,-0.02;200.97,54.93,2.27,0.02;206.88,49.32,1.86,-0.1;127.58,60.72,3.36,0.85;134.80,48.03,3.14,0.2;154.28,42.92,3.45,0;155.57,41.50,3.05,1.6;167.43,44.50,3,1.4;169.62,33.10,3.5,1.4;169.55,31.53,3.8,0.6;143.22,51.68,3.17,0.4;135.90,47.15,3.6,0;10.12,56.53,2.24,1.17;2.30,59.15,2.27,0.38;14.18,60.72,2.47,-0.15;21.45,60.23,2.68,0.13;28.60,63.67,3.37,-0.15;319.65,62.58,2.45,0.22;322.17,70.55,3.23,-0.2;354.83,77.63,3.2,1.03;332.73,58.20,3.35,1.5;342.43,66.20,3.5,1.3;269.15,51.48,2.23,1.52;262.60,52.30,2.79,1.17;268.38,56.87,3.75,1.2;263.05,55.18,4.9,0.1;288.23,67.65,3.07,0.9;257.20,65.72,3.17,-0.1;245.97,61.52,2.74,0.9;240.47,58.57,4,0.3;211.10,64.38,3.65,-0.05;231.22,58.97,3.3,1.5;188.38,69.78,3.87,0;172.85,69.33,3.84,1.7;213.93,19.18,-0.05,1.23;221.25,27.07,2.7,0.97;218.03,38.30,3.03,0.19;225.47,40.38,3.5,0.96;217.95,30.37,3.6,0;208.68,18.40,2.68,0.58;228.88,33.32,3.5,0.95;233.68,26.72,2.23,0.03;231.95,29.10,3.68,0.3;233.22,31.35,4.1,-0.1;235.67,26.30,3.84,0;237.40,26.07,4.6,0.1;239.40,26.88,4.15,1;258.65,14.38,3.06,1.16;247.55,21.48,2.77,0.94;250.32,31.60,2.8,0.65;250.72,38.92,3.5,0.9;258.75,36.82,3.16,1.4;255.07,30.93,3.9,0;258.75,24.83,3.1,0;266.62,27.72,3.42,0.75;245.47,19.15,3.75,0.3;279.22,38.78,0.03,0;281.07,39.67,4.7,0.1;281.20,37.60,4.3,0.1;282.53,33.37,3.5,0;284.72,32.68,3.25,-0.05;283.62,36.90,4.2,1.7;310.35,45.28,1.25,0.09;305.55,40.25,2.2,0.67;292.68,27.97,3.18,1.1;311.55,33.97,2.46,1.03;296.25,45.13,2.87,-0;318.23,30.22,3.2,1;316.23,43.93,3.7,1.7;297.70,8.87,0.77,0.22;296.58,10.62,2.72,1.5;298.82,6.40,3.7,0.85;291.38,3.12,3.36,0.3;286.35,13.87,2.99,0;302.80,-0.82,3.2,-0.07;346.20,15.20,2.49,-0;345.95,28.08,2.42,1.67;3.30,15.18,2.83,-0.2;326.05,9.87,2.39,1.5;340.38,10.83,3.4,-0.1;340.75,30.22,2.94,0.9;332.55,6.20,3.5,0.1;2.10,29.08,2.06,-0.1;17.43,35.62,2.05,1.58;30.97,42.33,2.1,1.4;9.82,30.87,3.27,1.3;51.08,49.87,1.79,0.48;47.05,40.95,2.1,-0.05;46.20,53.50,2.9,0.7;55.65,47.78,3,-0.1;59.47,40.02,2.9,-0.1;58.53,31.88,2.85,-0.1;59.72,35.78,4,0;42.68,55.90,3.76,2;32.38,34.98,3,0.1;28.27,29.58,3.4,0.5;34.32,33.85,4,0;31.80,23.45,2,1.15;28.65,20.80,2.64,0.13;42.50,27.27,3.6,-0.1;79.17,46.00,0.08,0.8;89.88,44.95,1.9,0.03;89.92,37.22,2.6,-0.1;74.25,33.17,2.7,1.5;68.98,16.52,0.85,1.54;81.58,28.60,1.65,-0.13;84.40,21.15,3,-0.2;64.95,15.63,3.65,1;65.73,17.55,3.8,1;67.15,19.18,3.5,1;67.17,15.87,3.4,0.2;60.17,12.48,3.5,-0.1;56.75,24.12,2.87,-0.09;116.33,28.03,1.14,1;113.65,31.88,1.58,0.03;99.43,16.40,1.9,0;95.73,22.50,2.9,1.6;93.72,22.52,3.3,1.6;100.97,25.13,3,1.4;101.33,12.88,3.4,0.4;110.03,21.98,3.5,0.3;116.10,24.40,3.57,0.9;124.12,9.18,3.5,1.5;152.10,11.97,1.35,-0.11;177.28,14.57,2.14,0.09;155.00,19.83,2,1.15;168.52,20.52,2.56,0.13;168.55,15.43,3.3,-0;154.17,23.42,3.4,0.3;148.20,26.00,3.9,1;146.48,23.77,3,0.8;151.82,16.75,3.5,-0;201.30,-11.17,0.97,-0.23;195.55,10.95,2.8,0.9;190.43,-1.45,2.7,0.36;193.90,3.40,3.4,1.5;177.68,1.77,3.6,0.5;184.97,-0.67,3.9,0.1;229.25,-9.38,2.6,-0.1;222.72,-16.03,2.75,0.15;247.35,-26.43,1.06,1.85;240.07,-22.62,2.3,-0.12;241.35,-19.80,2.6,-0.07;239.73,-26.12,2.9,-0.2;245.30,-25.60,2.9,0.1;248.97,-28.22,2.8,-0.2;252.55,-34.30,2.3,1.15;263.40,-37.10,1.62,-0.2;264.32,-42.98,1.87,0.4;265.62,-39.03,2.4,-0.2;263.73,12.57,2.07,0.15;257.60,-15.72,2.4,0.06;265.88,4.57,2.77,1.17;243.57,-3.68,2.7,1.6;244.57,-4.68,3.2,1;249.30,-10.57,2.56,0;254.42,9.37,3.2,1.2;247.73,1.98,3.8,0;276.05,-34.38,1.85,-0.03;283.82,-26.30,2.05,-0.1;285.65,-29.87,2.6,0.1;275.25,-29.83,2.7,1.4;276.98,-25.42,2.8,1;271.45,-30.42,3,1;281.43,-26.98,3.2,-0.1;286.72,-27.67,3.3,1;326.75,-16.13,2.85,0.3;305.25,-14.78,3.05,0.8;304.52,-12.55,3.6,0.9;311.50,-25.27,4.1,0.5;312.95,-26.92,4.1,1.5;321.68,-22.42,3.7,0.9;325.02,-16.67,3.7,0.3;316.72,-17.23,4.1,0;320.50,-16.83,4.3,0.7;322.90,-5.57,2.9,0.8;331.45,-0.32,3,0.97;343.67,-15.82,3.27,0;335.43,-1.38,3.84,0;45.57,4.08,2.5,1.6;10.90,-17.98,2,1;34.83,-2.98,3.5,1.5;40.83,3.23,3.5,0.1;88.80,7.40,0.5,1.85;78.62,-8.20,0.13,-0.03;81.27,6.35,1.64,-0.22;83.00,-0.30,2.2,-0.2;84.05,-1.20,1.7,-0.18;85.20,-1.95,1.77,-0.2;86.95,-9.67,2.06,-0.17;83.78,9.93,3.5,-0.15;72.73,6.95,3.2,0.4;72.75,5.60,3.7,-0.2;81.12,-2.40,3.35,-0.2;83.85,-5.92,2.77,-0.2;101.28,-16.72,-1.46,0;104.65,-28.97,1.5,-0.21;107.10,-26.40,1.83,0.68;95.67,-17.95,1.98,-0.24;111.02,-29.30,2.45,-0.08;114.83,5.22,0.34,0.42;111.80,8.28,2.9,-0.09;83.17,-17.82,2.58,0.2;82.05,-20.77,2.8,1.1;141.90,-8.67,2,1.44;183.95,-17.55,2.6,-0.1;187.47,-16.52,2.95,0;188.60,-23.40,2.65,0.9;182.53,-22.62,3,1.3;194.00,38.32,2.9,-0.1;188.43,41.35,4.26,0.6;197.98,27.88,4.26,0.6;197.50,17.53,4.3,0.5;186.70,28.27,4.35,1.1;140.25,34.38,3.1,1.55;337.83,50.28,3.77,0;309.38,14.60,3.6,0.4;309.90,15.92,3.77,0;311.68,16.12,4.4,0.8;310.88,15.07,4.4,0;308.30,11.30,4,0;299.70,19.50,3.5,1.6;296.85,18.53,3.8,1.4;295.02,18.02,4.4,1;295.25,17.47,4.4,0;344.43,-29.62,1.16,0.09;77.02,-5.08,2.8,0.1;236.07,6.43,2.65,1.17;237.70,4.47,3.7,0.1;233.70,10.53,3.8,0.2;236.60,15.42,3.65,0;239.12,15.67,3.85,0.5;22.88,15.35,3.6,0.96;30.50,2.77,3.8,0;349.30,3.28,3.7,0;75.85,60.43,4,0.9;73.52,66.33,4.3,0;76.62,41.23,3.2,-0.2;75.62,41.08,3.7,1;75.50,43.82,3,1'.split(';').map(s => { const a = s.split(',').map(Number); return { ra: a[0], dec: a[1], mag: a[2], bv: a[3] }; });
+const SKY_LINE_DATA = '7 8 9 10 7|10 11 12 13|0 1 2 3 4 5 6 3|24 23 25 26 27|28 29 30 32 28|28 31|34 33 35 36 34|38 39 40 42 41 43 44|73 74 75|77 74 76|67 69 70 71 72 69|81 80 82|80 83|67 73 80 67|86 87 93 88 86|93 94 95|98 97 100 101 102|97 99 104|111 112 113 114 116 111|117 115 118 119 120 116|118 122|194 201 196 197 198 199 200 195 197|194 199|196 194|125 129 127 128|124 131 126|125 124|129 131|134 142 136 137 135 138 134|136 139 140 141|45 46 51 48 47 49 45|54 53 52 55 56 57|61 60 63 62 61|60 59|151 155 152 153|152 154|151 156 157 159 160 158|169 172 173 175 170 171 169|169 174 172|179 178 180 181 182 183 177|206 209|206 208 207|208 210|211 212|227 228 229 230 227|108 109 110|105 106 107 105|143 145 146 144|147 148 145|216 217 218 219 216|161 167 168 164 165 166 162|161 163'.split('|').map(s => s.split(' ').map(Number));
+
+let starSkyKey = '';
+function starSkyLST(date, lonDeg) {
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  return astroNorm360(280.46061837 + 360.98564736629 * (jd - 2451545.0) + lonDeg);
+}
+function starColor(bv) {
+  // B-V → Farbe: blau-weiß, weiß, gelblich, orange
+  if (bv < -.05) return [200, 218, 255];
+  if (bv < .3) return [234, 240, 255];
+  if (bv < .65) return [255, 247, 230];
+  if (bv < 1.0) return [255, 232, 190];
+  if (bv < 1.4) return [255, 211, 160];
+  return [255, 190, 140];
+}
+function starRadius(mag) { return Math.max(.5, .62 + (4.9 - mag) * .46); }
+
+/* Baut den Sternenhimmel für alle .stars-Flächen: ein großes Bild, das sich um den Himmelspol dreht. */
+function buildStarSky(force = false) {
+  const now = new Date();
+  const key = `${GEO.lat.toFixed(2)},${GEO.lon.toFixed(2)},${Math.floor(now.getTime() / 1800000)}`;
+  if (!force && key === starSkyKey) return;
+  starSkyKey = key;
+  const lst = starSkyLST(now, GEO.lon);
+  const SC = 4.2;                          // Pixel pro Grad Himmel
   document.querySelectorAll('.stars').forEach(box => {
-    if (box.childElementCount) return;
-    const hero = Boolean(box.closest('.hero'));
-    let seed = hero ? 7 : 3;
-    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    const count = hero ? 420 : 480;
-    let html = '';
-    for (let i = 0; i < count; i++) {
-      const big = rnd() < 0.12;
-      const size = big ? 3 : rnd() < .6 ? 1.4 : 2;
-      const dur = (2.4 + rnd() * 4.2).toFixed(1);
-      const delay = (-rnd() * 7).toFixed(1);
-      html += `<i class="${big ? 'big' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 100).toFixed(1)}%;--o:${(0.35 + rnd() * 0.55).toFixed(2)};width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
+    const lock = !box.closest('.hero');
+    const R = lock ? 620 : 480;
+    box.style.cssText = `left:50%;top:${lock ? 34 : 24}%;width:${R * 2}px;height:${R * 2}px;margin:${-R}px 0 0 ${-R}px;`;
+    box.innerHTML = '';
+    const dpr = Math.min(1.4, window.devicePixelRatio || 1);
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(R * 2 * dpr); cv.height = cv.width;
+    cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    const g = cv.getContext('2d');
+    g.scale(dpr, dpr);
+    const pos = s => {
+      const H = astroRad(lst - s.ra), r = (90 - s.dec) * SC;
+      return { x: R - r * Math.sin(H), y: R - r * Math.cos(H), r };
+    };
+    // Sternbild-Linien
+    g.lineWidth = 1; g.strokeStyle = 'rgba(170,190,255,.20)'; g.lineJoin = 'round';
+    for (const line of SKY_LINE_DATA) {
+      g.beginPath();
+      line.forEach((idx, n) => { const p = pos(SKY_STAR_DATA[idx]); n ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y); });
+      g.stroke();
     }
-    box.innerHTML = html;
+    // feine Hintergrundsterne (Dekoration, kein echter Katalog)
+    let seed = lock ? 91 : 37;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < (lock ? 1900 : 1400); i++) {
+      const a = rnd() * 6.2832, rr = Math.sqrt(rnd()) * R;
+      g.fillStyle = `rgba(225,232,255,${(.22 + rnd() * .34).toFixed(2)})`;
+      g.fillRect(R + rr * Math.cos(a), R + rr * Math.sin(a), 1, 1);
+    }
+    // echte Sterne: schwächere ins Bild, hellere als funkelnde Punkte
+    let html = '';
+    SKY_STAR_DATA.forEach((s, n) => {
+      const p = pos(s);
+      if (p.r > R - 6) return;
+      const rad = starRadius(s.mag), c = starColor(s.bv);
+      if (s.mag > 3.3) {
+        g.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${Math.min(.95, .55 + (4.9 - s.mag) * .18).toFixed(2)})`;
+        g.beginPath(); g.arc(p.x, p.y, rad, 0, 6.2832); g.fill();
+      } else {
+        const d = rad * 2;
+        const glow = s.mag < 2.2 ? `box-shadow:0 0 ${(rad * 3.2).toFixed(1)}px ${(rad * .9).toFixed(1)}px rgba(${c[0]},${c[1]},${c[2]},.55);` : '';
+        const dur = (2.6 + ((n * 37) % 40) / 10).toFixed(1), del = (-((n * 53) % 70) / 10).toFixed(1);
+        html += `<i class="tw${s.mag < 2.2 ? ' big' : ''}" style="left:${(p.x - rad).toFixed(1)}px;top:${(p.y - rad).toFixed(1)}px;width:${d.toFixed(1)}px;height:${d.toFixed(1)}px;background:rgb(${c[0]},${c[1]},${c[2]});${glow}animation-duration:${dur}s;animation-delay:${del}s"></i>`;
+      }
+    });
+    box.appendChild(cv);
+    box.insertAdjacentHTML('beforeend', html);
   });
 }
+function placeStars() { buildStarSky(true); }
 
 /* Sternschnuppen: ab und zu eine, nur wenn der Himmel dunkel genug ist */
 function shootingStar() {

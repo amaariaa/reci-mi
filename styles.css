@@ -826,3 +826,18 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 
 /* Eis/Frost: nur ein zarter heller Hauch an den Rändern statt weißer Ecken */
 .frost { opacity: calc(var(--ice, 0) * .30); }
+
+/* V3.8.4 · Sterne drehen sich schneller (eine Runde in 7 Minuten) und funkeln einzeln */
+.stars { animation: starTurn 420s linear infinite; }
+@keyframes starTurn { to { transform: rotate(-360deg); } }
+.stars i.tw { position: absolute; border-radius: 50%; animation: starGlint 4s ease-in-out infinite; }
+.stars i.tw.big { animation-name: starGlintBig; }
+@keyframes starGlint { 0%, 100% { opacity: .85; transform: scale(1); } 40% { opacity: .35; transform: scale(.7); } 55% { opacity: 1; transform: scale(1.25); } }
+@keyframes starGlintBig { 0%, 100% { opacity: 1; transform: scale(1); } 45% { opacity: .6; transform: scale(.82); } 60% { opacity: 1; transform: scale(1.3); } }
+/* Wolken nur im oberen Teil; bei geschlossener Decke (Regen, Schnee) über die ganze Fläche */
+.sky-cloud { aspect-ratio: 720 / 190;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0,0,0,.45) 78%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0,0,0,.45) 78%, transparent 100%); }
+.sky-cloud.full { aspect-ratio: 720 / 300;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.55) 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.55) 82%, transparent 100%); }

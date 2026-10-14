@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.7.2';
+const APP_VERSION = '3.7.3';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -268,7 +268,8 @@ function applySky(fromWeather = false) {
   root.setProperty('--sky-top', top);
   root.setProperty('--sky-mid', mid);
   root.setProperty('--sky-hor', hor);
-  root.setProperty('--stars', (A.stars + (B.stars - A.stars) * t).toFixed(3));
+  // Auch Sterne verschwinden hinter einer geschlossenen Wolkendecke.
+  root.setProperty('--stars', ((A.stars + (B.stars - A.stars) * t) * skyWeatherVisibility(wfx, 'stars')).toFixed(3));
   root.setProperty('--moon-lit', mixHex(A.moonLit, B.moonLit, t));
   root.setProperty('--moon-lit-2', mixHex(mixHex(A.moonLit, B.moonLit, t), '#FFFFFF', .55));
   root.setProperty('--moon-dark', rgba(mixArr(A.moonDark, B.moonDark, t)));
@@ -319,6 +320,8 @@ function applySky(fromWeather = false) {
   root.setProperty('--c-quick', cats.quick);
   document.documentElement.dataset.mode = body.dark ? 'dark' : 'light';
   document.documentElement.dataset.phase = phase;
+  const nightSky = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(phase);
+  document.querySelectorAll('.weather-layer').forEach(layer => layer.classList.toggle('night', nightSky));
 
   placeSun();
   placeMoon();
@@ -393,16 +396,45 @@ function describeWeather(code, cloud = 0, temp = 10) {
 function previewWeather() {
   const m = /[?&]wetter=([a-zäöü]+)/i.exec(location.search);
   if (!m) return null;
-  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, regen: 63, starkregen: 65, schnee: 73, eis: 67, frost: 0, gewitter: 95 };
+  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, regen: 63, starkregen: 65, schnee: 73, leichtschnee: 71, starkschnee: 75, eis: 67, frost: 0, gewitter: 95 };
   const code = map[m[1].toLowerCase()];
   if (code === undefined) return null;
-  return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' ? -4 : 12, name: 'Vorschau' };
+  return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' || m[1].includes('schnee') ? -4 : 12, name: 'Vorschau' };
 }
 
 let weatherNow = null;      // aktuell angezeigtes Wetter
 let weatherCurrent = null;  // echtes aktuelles Wetter des gewählten Ortes
 let weatherForecast = [];   // Tagesvorschau, Index 0 = heute
 function currentFx() { return weatherNow?.fx || describeWeather(0, 0, 10); }
+
+// Wetter ist von der Astronomie unabhängig: Die Bahnpositionen bleiben
+// korrekt berechnet, aber Bewölkung / Nebel bestimmt die Sichtbarkeit.
+function skyWeatherVisibility(fx, object = 'sun') {
+  const cover = Math.max(0, Math.min(1, fx.clouds || 0));
+  const fog = Math.max(0, Math.min(1, fx.fog || 0));
+  const precip = Math.max(fx.rain || 0, fx.snow || 0);
+  // Ein dichter, geschlossener Himmel muss die Scheiben wirklich verdecken.
+  if (cover >= .95 || fog >= .94 || (cover > .83 && precip >= .82)) return 0;
+  // Ab etwa 75 % zunehmend starke Verdeckung, bei 95 % vollständig.
+  const cloudFade = cover < .32 ? 1 - cover * .18
+    : cover < .72 ? .94 - (cover - .32) * 1.45
+    : Math.max(0, .36 * (1 - (cover - .72) / .23));
+  const fogFade = Math.pow(1 - fog, 3.1);
+  const rainFade = 1 - .42 * (fx.rain || 0);
+  const snowFade = 1 - .34 * (fx.snow || 0);
+  const level = Math.max(0, Math.min(1, cloudFade * fogFade * rainFade * snowFade));
+  return object === 'stars' ? Math.pow(level, 1.5) : level;
+}
+
+function celestialWeatherOpacity(fx, offset = 0) {
+  const base = skyWeatherVisibility(fx);
+  // Ziehende Wolken führen bei halbbewölktem Himmel zu langsamem Wechsel.
+  // Keine künstlichen Blitze / schnellen Helligkeitssprünge.
+  if (base <= 0 || fx.clouds < .25 || fx.clouds > .87 || fx.fog > .2) return base;
+  const cover = Math.sin(Math.PI * Math.min(1, Math.max(0, (fx.clouds - .25) / .62)));
+  const passing = Math.sin(Date.now() / 18500 + offset) * .14 * cover;
+  return Math.max(0, Math.min(1, base * (1 + passing)));
+}
 
 function weatherForView() {
   const place = getPlace();
@@ -516,7 +548,9 @@ function placeSun() {
   sun.style.setProperty('--sun-halo', mixHex('#FF9A4D', '#FFF1C2', Math.min(1, alt * 1.4)));
   sun.style.setProperty('--sun-size', `${Math.round(200 - alt * 36)}px`);
   const fx = currentFx();
-  sun.style.setProperty('--sun-veil', (1 - Math.min(.7, fx.clouds * .5 + fx.fog * .4 + fx.rain * .2 + fx.snow * .2)).toFixed(2));
+  const visibility = celestialWeatherOpacity(fx, .8);
+  sun.style.setProperty('--sun-veil', visibility.toFixed(3));
+  if (els.sunTap) els.sunTap.style.pointerEvents = visibility < .09 ? 'none' : 'auto';
 }
 
 /* ---------- Wetter-Effekte ---------- */
@@ -525,19 +559,20 @@ let precipAnim = null;
 let flashTimer = null;
 
 function buildClouds(box, count) {
-  if (box.childElementCount === count) return;
+  if (!box || box.childElementCount === count) return;
   let html = '';
   for (let i = 0; i < count; i++) {
-    const top = 3 + (i * 41) % 65;
-    const scale = .62 + ((i * 47 + 13) % 95) / 100;
-    const dur = 85 + (i * 29) % 110;
-    const delay = -((i * 37) % dur);
-    const opacity = .48 + ((i * 19) % 42) / 100;
-    html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};--cloud-individual-opacity:${opacity.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
+    // Versetzte Wolkenbänke mit eigenständiger Geschwindigkeit und Tiefe.
+    const top = -8 + ((i * 31 + 7) % 91);
+    const scale = .88 + ((i * 29 + 11) % 90) / 68;
+    const dur = 98 + (i * 23) % 140;
+    const delay = -((i * 37 + 17) % dur);
+    const opacity = .51 + ((i * 17) % 37) / 100;
+    const soft = i % 4 === 0 ? 12 : 7;
+    html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};--blur:${soft}px;--cloud-individual-opacity:${opacity.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
   }
   box.innerHTML = html;
 }
-
 
 function moonIllumination(age) {
   return (1 - Math.cos(2 * Math.PI * (age / SYNODIC))) / 2;
@@ -795,7 +830,9 @@ function placeMoon() {
   moonOrb.style.setProperty('--moon-shadow', night ? 'color-mix(in srgb, var(--sky-mid) 88%, black)' : 'transparent');
   moonOrb.style.setProperty('--moon-halo', night ? '#F3EAD3' : '#FFFFFF');
   const fx = currentFx();
-  moonOrb.style.setProperty('--moon-veil', (1 - Math.min(.7, fx.clouds * .5 + fx.fog * .4 + fx.rain * .2 + fx.snow * .2)).toFixed(2));
+  const visibility = celestialWeatherOpacity(fx, 3.4);
+  moonOrb.style.setProperty('--moon-veil', visibility.toFixed(3));
+  if (els.moonTap) els.moonTap.style.pointerEvents = visibility < .09 ? 'none' : 'auto';
   const key = `${MOON_STYLE}|${st.illum.toFixed(3)}|${Math.round(st.limbAngle)}|${Math.round(st.northAngle)}`;
   if (moonOrb.dataset.key !== key) { moonOrb.dataset.key = key; moonOrb.innerHTML = moonDiscSvg(st, MOON_STYLE); }
 }
@@ -1029,12 +1066,12 @@ function planetVisualLight(p, sunAlt) {
   const magLevel = Math.max(0.16, Math.min(1, (2.2 - mag) / 6.8));
   const altitudeLevel = Math.max(0.28, Math.min(1, (p.alt + 1) / 18));
   const fx = currentFx();
-  const weatherLevel = Math.max(0.18, 1 - (fx.clouds * .48 + fx.fog * .70 + fx.rain * .42 + fx.snow * .34));
+  const weatherLevel = skyWeatherVisibility(fx, 'stars');
   const skyLevel = sunAlt > 0 ? .20 : sunAlt > -4 ? .36 : sunAlt > -8 ? .66 : 1;
   const visibleLevel = Math.max(.06, Math.min(1, magLevel * altitudeLevel * weatherLevel * skyLevel));
   const nightBoost = sunAlt <= -8 ? 1 : .88;
   return {
-    opacity: Math.max(.26, Math.min(1, .25 + visibleLevel * .82)),
+    opacity: weatherLevel < .025 ? 0 : Math.max(0, Math.min(1, visibleLevel * 1.18)),
     glow: (2.5 + 13 * magLevel * skyLevel * nightBoost).toFixed(1),
     glowAlpha: Math.max(.10, Math.min(.86, .12 + magLevel * skyLevel * .72)).toFixed(2),
     brightness: Math.max(.82, Math.min(1.38, .90 + magLevel * .48)).toFixed(2)
@@ -1165,7 +1202,7 @@ function placePlanets() {
     const name = PLANET_META[p.key].name;
     const light = planetVisualLight(p, sun.alt);
     const style = `left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px;--planet-opacity:${light.opacity.toFixed(2)};--planet-glow:${light.glow}px;--planet-glow-alpha:${light.glowAlpha};--planet-brightness:${light.brightness}`;
-    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="${style}" aria-label="${name} anzeigen"><span class="planet-disc" aria-hidden="true"></span></button>`;
+    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="${style}" aria-label="${name} anzeigen" ${light.opacity < .045 ? 'tabindex="-1" aria-hidden="true"' : ''}><span class="planet-disc" aria-hidden="true"></span></button>`;
   }).join('');
 
   layer.querySelectorAll('.planet-dot').forEach(btn => {
@@ -1194,13 +1231,20 @@ function applyWeatherFx() {
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const clouds = layer.querySelector('.clouds');
-    const n = fx.clouds < .08 ? 0 : Math.round(2 + fx.clouds * 7);
+    const n = fx.clouds < .10 ? 0 : Math.round(2 + fx.clouds * 11);
     buildClouds(clouds, n);
-    layer.style.setProperty('--cloud-op', (0.25 + fx.clouds * 0.6).toFixed(2));
+    const coverage = Math.max(0, Math.min(1, fx.clouds));
+    // Gemisch aus einzelnen Wolken und der geschlossenen Decke.
+    const deck = coverage < .33 ? 0 : Math.pow((coverage - .33) / .67, 1.75);
+    layer.style.setProperty('--cloud-op', (0.35 + coverage * .65).toFixed(2));
+    layer.style.setProperty('--deck-opacity', deck.toFixed(3));
+    layer.style.setProperty('--texture-opacity', (deck * .63).toFixed(3));
     layer.style.setProperty('--fog', fx.fog.toFixed(2));
     layer.style.setProperty('--ice', fx.ice.toFixed(2));
     layer.classList.toggle('night', night);
     layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || fx.clouds > .9);
+    layer.classList.toggle('overcast', fx.clouds >= .88);
+    layer.classList.toggle('snowing', fx.snow > .12);
     layer.classList.toggle('rainy', fx.rain > .12);
   });
   precipLayers.forEach(p => p.setup(fx));
@@ -1290,6 +1334,53 @@ function makeWaterDropSprite() {
 
 const WATER_DROP_SPRITE = makeWaterDropSprite();
 
+/* Winterhimmel V3.7.3: gecachte Eiskristall-Sprites, zarte Brechungslichter.
+   Nicht jede Flocke ist perfekt sechseckig. Größere Kristalle zeigen Struktur,
+   entfernte Teilchen bleiben klein und weich. */
+function makeSnowCrystalSprite(variant = 0) {
+  const surface = document.createElement('canvas');
+  surface.width = 96;
+  surface.height = 96;
+  const g = surface.getContext('2d');
+  if (!g) return surface;
+  const c = 48;
+  const halo = g.createRadialGradient(c,c,1,c,c,38);
+  halo.addColorStop(0,'rgba(242,251,255,.35)');
+  halo.addColorStop(.42,'rgba(210,236,255,.11)');
+  halo.addColorStop(1,'rgba(230,248,255,0)');
+  g.fillStyle = halo;
+  g.fillRect(0,0,96,96);
+  g.save();
+  g.translate(c,c);
+  g.rotate(variant * Math.PI/10);
+  g.lineCap = 'round';
+  // Kleine Asymmetrie verhindert die Wirkung eines immer gleichen Symbols.
+  for (let a=0; a<6; a++) {
+    g.save(); g.rotate(a*Math.PI/3);
+    const len = (variant===1 ? 30 : variant===2 ? 25 : 28) * (a===4 ? .92 : 1);
+    const edge = g.createLinearGradient(0,0,0,-len);
+    edge.addColorStop(0,'rgba(255,255,255,.94)');
+    edge.addColorStop(.6,'rgba(231,247,255,.83)');
+    edge.addColorStop(1,'rgba(205,232,255,.3)');
+    g.strokeStyle = edge; g.lineWidth=2.3;
+    g.beginPath();g.moveTo(0,0);g.lineTo(0,-len);g.stroke();
+    const branches = variant===1 ? [12,21] : [10,18,24];
+    for (const b of branches) {
+      if (b>len-2) continue;
+      const arm=variant===2 ? 6 : 5.5;
+      g.lineWidth=1.5;
+      g.beginPath();g.moveTo(0,-b);g.lineTo(-arm,-b-arm*1.05);
+      g.moveTo(0,-b);g.lineTo(arm,-b-arm*1.05);g.stroke();
+    }
+    g.restore();
+  }
+  g.fillStyle='rgba(255,255,255,.96)';
+  g.beginPath();g.arc(0,0,3.4,0,Math.PI*2);g.fill();
+  g.restore();
+  return surface;
+}
+const SNOW_CRYSTALS = [0,1,2].map(makeSnowCrystalSprite);
+
 function makePrecip(canvas) {
   const ctx = canvas.getContext('2d', { alpha:true });
   let drops = [];
@@ -1333,8 +1424,8 @@ function makePrecip(canvas) {
       const depth = roll < .45 ? 0 : roll < .88 ? 1 : 2;
       const jitter = .72 + Math.random() * .58;
       const snow = kind === 'snow';
-      const size = snow ? [.95, 1.8, 3.2][depth] * jitter : [1.25, 2.85, 5.35][depth] * jitter;
-      const speed = snow ? [23, 36, 55][depth] * jitter : [115, 195, 315][depth] * jitter;
+      const size = snow ? [1.3, 3.1, 6.3][depth] * jitter : [1.25, 2.85, 5.35][depth] * jitter;
+      const speed = snow ? [17, 32, 52][depth] * jitter : [115, 195, 315][depth] * jitter;
       return {
         x: Math.random() * (this.w + 32) - 16,
         y: anywhere ? Math.random() * this.h : -(12 + Math.random() * 42),
@@ -1342,7 +1433,11 @@ function makePrecip(canvas) {
         speed,
         phase: Math.random() * Math.PI * 2,
         depth,
-        opacity: snow ? [.36, .61, .9][depth] : [.32, .55, .84][depth],
+        opacity: snow ? [.29, .6, .82][depth] : [.32, .55, .84][depth],
+        sprite: Math.floor(Math.random()*SNOW_CRYSTALS.length),
+        rotation: Math.random()*Math.PI*2,
+        spin: (Math.random()-.5)*.6,
+        shimmer: .6 + Math.random()*.4,
         drift: (Math.random() - .5) * (snow ? 18 : 23)
       };
     },
@@ -1368,19 +1463,32 @@ function makePrecip(canvas) {
         }
       } else if (kind === 'snow') {
         for (const d of drops) {
-          ctx.globalAlpha = d.opacity;
-          ctx.beginPath();
-          ctx.arc(d.x, d.y, d.w, 0, Math.PI * 2);
-          ctx.fillStyle = '#f8fcff';
-          ctx.fill();
-          if (d.depth === 2) {
-            ctx.globalAlpha = d.opacity * .13;
-            ctx.beginPath(); ctx.arc(d.x, d.y, d.w * 2.1, 0, Math.PI * 2); ctx.fill();
+          const glow = (Math.sin(elapsed * .78 + d.phase * 4) + 1) * .5;
+          // Schimmer nur bei einzelnen Flocken, kein stroboskopisches Blinken.
+          const glint = d.depth === 2 ? (1 + glow * .13 * d.shimmer) : 1;
+          ctx.globalAlpha = Math.min(.95, d.opacity * (isNight ? .91 : .82) * glint);
+          ctx.save();
+          ctx.translate(d.x,d.y);
+          if (d.depth === 0) {
+            ctx.fillStyle='#f4faff';
+            ctx.beginPath();ctx.arc(0,0,d.w*.63,0,Math.PI*2);ctx.fill();
+          } else {
+            ctx.rotate(d.rotation);
+            const size=d.w*(d.depth===2 ? 3.5 : 2.6);
+            const crystal=SNOW_CRYSTALS[d.sprite];
+            ctx.drawImage(crystal,-size/2,-size/2,size,size);
+          }
+          ctx.restore();
+          if (d.depth === 2 && glow > .93 && d.shimmer > .87) {
+            ctx.globalAlpha = d.opacity * (glow-.93) * 1.3;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(d.x,d.y,.9,0,Math.PI*2); ctx.fill();
           }
           d.y += d.speed * dt;
-          d.phase += dt * 1.5;
-          d.x += (d.drift + Math.sin(d.phase) * 10) * dt;
-          if (d.y > h + 14 || d.x < -25 || d.x > w + 25) Object.assign(d, this.spawn(false));
+          d.phase += dt * (1.0 + d.depth*.15);
+          d.rotation += d.spin*dt;
+          d.x += (d.drift + Math.sin(d.phase) * 11) * dt;
+          if (d.y > h + 18 || d.x < -28 || d.x > w + 28) Object.assign(d, this.spawn(false));
         }
       }
       ctx.globalAlpha = 1;

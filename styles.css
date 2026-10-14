@@ -670,3 +670,77 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
   .weather-layer .cloud, .frost { animation: none !important; }
   .weather-layer .cloud { will-change: auto; }
 }
+
+
+/* Reci mi V3.7.3 · Realistischer Wolkenhimmel und Schneekristalle */
+.weather-layer .clouds {
+  opacity: 1;
+  isolation: isolate;
+}
+/* Die geschlossene Wolkendecke, weich geschichtet statt grauer Einheitsfläche.
+   Sie überlagert die Gestirne tatsächlich; nachts mit kühler Dunkelfärbung. */
+.weather-layer .clouds::before,
+.weather-layer .clouds::after {
+  content: "";
+  position: absolute;
+  inset: -12% -12%;
+  pointer-events: none;
+  transition: opacity 2.4s ease;
+  will-change: opacity;
+}
+.weather-layer .clouds::before {
+  opacity: var(--deck-opacity, 0);
+  background:
+    radial-gradient(ellipse 65% 36% at 8% 16%, rgba(241,244,248,.98) 26%, transparent 97%),
+    radial-gradient(ellipse 75% 48% at 86% 21%, rgba(209,217,229,.98) 25%, transparent 96%),
+    radial-gradient(ellipse 65% 40% at 29% 63%, rgba(206,216,227,.99) 18%, transparent 96%),
+    radial-gradient(ellipse 82% 45% at 83% 82%, rgba(232,237,243,.99) 20%, transparent 99%),
+    linear-gradient(180deg, rgba(196,210,224,.98), rgba(230,236,242,.98) 55%, rgba(184,199,216,.98));
+  filter: blur(7px);
+  animation: cloudBankMove 75s ease-in-out infinite alternate;
+}
+.weather-layer .clouds::after {
+  opacity: var(--texture-opacity, 0);
+  background:
+    radial-gradient(ellipse 46% 19% at 26% 35%, rgba(246,249,252,.66), transparent 90%),
+    radial-gradient(ellipse 47% 26% at 78% 44%, rgba(132,153,179,.25), transparent 92%),
+    radial-gradient(ellipse 57% 28% at 50% 84%, rgba(241,246,251,.75), transparent 90%);
+  filter: blur(16px);
+  animation: cloudBankMove 115s ease-in-out infinite alternate-reverse;
+}
+.weather-layer.night .clouds::before {
+  background:
+    radial-gradient(ellipse 70% 42% at 13% 17%, rgba(66,77,103,.98), transparent 96%),
+    radial-gradient(ellipse 76% 48% at 88% 27%, rgba(52,62,86,.99), transparent 97%),
+    radial-gradient(ellipse 83% 51% at 51% 80%, rgba(37,47,70,.98), transparent 98%),
+    linear-gradient(180deg, rgba(37,46,67,.99), rgba(52,61,85,.99) 54%, rgba(36,43,64,.99));
+}
+.weather-layer.night .clouds::after {
+  background:
+    radial-gradient(ellipse 55% 31% at 24% 38%, rgba(116,124,150,.37), transparent 95%),
+    radial-gradient(ellipse 54% 24% at 81% 68%, rgba(13,23,44,.48), transparent 93%),
+    radial-gradient(ellipse 70% 22% at 48% 89%, rgba(104,117,140,.22), transparent 97%);
+}
+.weather-layer .cloud {
+  width: clamp(180px, 47vw, 360px);
+  height: 102px;
+  opacity: calc(var(--cloud-op, .6) * var(--cloud-individual-opacity, .72));
+  filter: blur(var(--blur, 8px));
+  background:
+    radial-gradient(ellipse at 43% 72%, rgba(234,239,246,.94), transparent 69%) 0% 0%/100% 100% no-repeat,
+    radial-gradient(ellipse at 29% 60%, rgba(255,255,255,.93), transparent 65%) 0% 0%/72% 76% no-repeat,
+    radial-gradient(ellipse at 73% 53%, rgba(213,225,235,.93), transparent 70%) 100% 6%/78% 89% no-repeat;
+}
+.weather-layer.night .cloud { filter: blur(var(--blur, 8px)) brightness(.55) saturate(.75); }
+.weather-layer.dark-clouds .cloud { filter: blur(var(--blur, 8px)) brightness(.78) saturate(.66); }
+.weather-layer.night.dark-clouds .cloud { filter: blur(var(--blur, 8px)) brightness(.44) saturate(.62); }
+.weather-layer.overcast .clouds::before { filter: blur(5px); }
+.weather-layer.snowing .precip { filter: drop-shadow(0 0 2px rgba(223,240,255,.14)); }
+@keyframes cloudBankMove { from { transform: translateX(-2%) translateY(-1%); } to { transform: translateX(3%) translateY(1.5%); } }
+@media (prefers-reduced-motion: reduce) {
+  .weather-layer .clouds::before,
+  .weather-layer .clouds::after { animation: none !important; transition: none; }
+}
+
+/* Unsichtbare Planeten dürfen keine unsichtbaren Tippflächen behalten. */
+.planet-dot[aria-hidden="true"] { pointer-events: none; }

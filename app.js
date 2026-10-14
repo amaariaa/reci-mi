@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.7.3';
+const APP_VERSION = '3.7.4';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1401,7 +1401,7 @@ function makePrecip(canvas) {
       if (!changed && drops.length && kind !== 'none') return;
       if (kind === 'none') { drops = []; ctx.clearRect(0, 0, this.w, this.h); return; }
       const areaScale = Math.max(.68, Math.min(1.55, Math.sqrt((this.w * this.h) / 195000)));
-      const count = Math.round((kind === 'snow' ? 24 + amount * 54 : 26 + amount * 108) * areaScale);
+      const count = Math.round((kind === 'snow' ? 19 + amount * 47 : 26 + amount * 108) * areaScale);
       drops = Array.from({length:count}, () => this.spawn(true));
     },
     resize() {
@@ -1421,7 +1421,7 @@ function makePrecip(canvas) {
       // z beschreibt die Entfernung. Größere Tropfen bewegen sich optisch
       // schneller, kleine Tropfen bleiben zart im Hintergrund.
       const roll = Math.random();
-      const depth = roll < .45 ? 0 : roll < .88 ? 1 : 2;
+      const depth = roll < .25 ? 0 : roll < .78 ? 1 : 2;
       const jitter = .72 + Math.random() * .58;
       const snow = kind === 'snow';
       const size = snow ? [1.3, 3.1, 6.3][depth] * jitter : [1.25, 2.85, 5.35][depth] * jitter;
@@ -1433,7 +1433,7 @@ function makePrecip(canvas) {
         speed,
         phase: Math.random() * Math.PI * 2,
         depth,
-        opacity: snow ? [.29, .6, .82][depth] : [.32, .55, .84][depth],
+        opacity: snow ? [.13, .54, .83][depth] : [.32, .55, .84][depth],
         sprite: Math.floor(Math.random()*SNOW_CRYSTALS.length),
         rotation: Math.random()*Math.PI*2,
         spin: (Math.random()-.5)*.6,
@@ -1469,15 +1469,13 @@ function makePrecip(canvas) {
           ctx.globalAlpha = Math.min(.95, d.opacity * (isNight ? .91 : .82) * glint);
           ctx.save();
           ctx.translate(d.x,d.y);
-          if (d.depth === 0) {
-            ctx.fillStyle='#f4faff';
-            ctx.beginPath();ctx.arc(0,0,d.w*.63,0,Math.PI*2);ctx.fill();
-          } else {
-            ctx.rotate(d.rotation);
-            const size=d.w*(d.depth===2 ? 3.5 : 2.6);
-            const crystal=SNOW_CRYSTALS[d.sprite];
-            ctx.drawImage(crystal,-size/2,-size/2,size,size);
-          }
+          // Alle Schneepartikel haben eine Kristallform. Im Hintergrund
+          // transparent und klein, im Vordergrund detailreich mit Schimmer.
+          // Keine deckenden weißen Kreise mehr über dem Himmel.
+          ctx.rotate(d.rotation);
+          const size=d.w*(d.depth === 0 ? 5.5 : d.depth === 2 ? 3.5 : 2.8);
+          const crystal=SNOW_CRYSTALS[d.sprite];
+          ctx.drawImage(crystal,-size/2,-size/2,size,size);
           ctx.restore();
           if (d.depth === 2 && glow > .93 && d.shimmer > .87) {
             ctx.globalAlpha = d.opacity * (glow-.93) * 1.3;

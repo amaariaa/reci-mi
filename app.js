@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.11';
+const APP_VERSION = '3.7.5';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -260,7 +260,7 @@ function applySky(fromWeather = false) {
   let top = mixHex(A.top, B.top, t), mid = mixHex(A.mid, B.mid, t), hor = mixHex(A.hor, B.hor, t);
   // Wetter: Wolken, Regen und Nebel machen den Himmel grauer
   const wfx = currentFx();
-  const grey = Math.min(.75, cloudVisualLoad(wfx) * .44 + wfx.fog * .45 + wfx.rain * .25 + wfx.snow * .25);
+  const grey = Math.min(.75, wfx.clouds * .45 + wfx.fog * .45 + wfx.rain * .25 + wfx.snow * .25);
   if (grey > 0.02) {
     top = desaturate(top, grey); mid = desaturate(mid, grey); hor = desaturate(hor, grey * 1.1);
     if (wfx.rain > .5 || wfx.storm) { top = mixHex(top, '#2A2F3C', .25); mid = mixHex(mid, '#3A4050', .2); }
@@ -268,7 +268,8 @@ function applySky(fromWeather = false) {
   root.setProperty('--sky-top', top);
   root.setProperty('--sky-mid', mid);
   root.setProperty('--sky-hor', hor);
-  root.setProperty('--stars', (A.stars + (B.stars - A.stars) * t).toFixed(3));
+  // Auch Sterne verschwinden hinter einer geschlossenen Wolkendecke.
+  root.setProperty('--stars', ((A.stars + (B.stars - A.stars) * t) * skyWeatherVisibility(wfx, 'stars')).toFixed(3));
   root.setProperty('--moon-lit', mixHex(A.moonLit, B.moonLit, t));
   root.setProperty('--moon-lit-2', mixHex(mixHex(A.moonLit, B.moonLit, t), '#FFFFFF', .55));
   root.setProperty('--moon-dark', rgba(mixArr(A.moonDark, B.moonDark, t)));
@@ -319,6 +320,8 @@ function applySky(fromWeather = false) {
   root.setProperty('--c-quick', cats.quick);
   document.documentElement.dataset.mode = body.dark ? 'dark' : 'light';
   document.documentElement.dataset.phase = phase;
+  const nightSky = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(phase);
+  document.querySelectorAll('.weather-layer').forEach(layer => layer.classList.toggle('night', nightSky));
 
   placeSun();
   placeMoon();
@@ -366,22 +369,9 @@ function applyPlaceGeo() {
 }
 
 // WMO-Wettercodes → was wir zeigen
-function describeWeather(code, cloud = 0, temp = 10, cloudLayers = null) {
+function describeWeather(code, cloud = 0, temp = 10) {
   const c = Number(code);
-  const clamp01 = v => Math.max(0, Math.min(1, v));
-  const total = clamp01((Number(cloud) || 0) / 100);
-  const layerValue = v => Number.isFinite(Number(v)) ? clamp01(Number(v) / 100) : null;
-  const suppliedLow = layerValue(cloudLayers?.low);
-  const suppliedMid = layerValue(cloudLayers?.mid);
-  const suppliedHigh = layerValue(cloudLayers?.high);
-  const fx = {
-    label: 'Klar', clouds: total, rain: 0, snow: 0, fog: 0, ice: 0, storm: 0,
-    // Wenn Open-Meteo echte Schichtdaten liefert, nutzen wir sie direkt.
-    // Bei altem Cache/Offline bleibt eine sanfte, transparente Näherung erhalten.
-    cloudLow: suppliedLow ?? total * .34,
-    cloudMid: suppliedMid ?? total * .42,
-    cloudHigh: suppliedHigh ?? total * .56
-  };
+  const fx = { label: 'Klar', clouds: Math.min(1, (cloud || 0) / 100), rain: 0, snow: 0, fog: 0, ice: 0, storm: 0 };
   const set = (label, o) => Object.assign(fx, { label }, o);
   if (c === 0) set('Klar', { clouds: Math.min(fx.clouds, .1) });
   else if (c === 1) set('Überwiegend klar', { clouds: Math.max(fx.clouds, .2) });
@@ -398,36 +388,53 @@ function describeWeather(code, cloud = 0, temp = 10, cloudLayers = null) {
   else if (c === 80 || c === 81 || c === 82) set(c === 80 ? 'Leichte Regenschauer' : c === 81 ? 'Regenschauer' : 'Heftige Regenschauer', { clouds: .85, rain: c === 80 ? .45 : c === 81 ? .7 : 1 });
   else if (c === 85 || c === 86) set(c === 85 ? 'Leichte Schneeschauer' : 'Schneeschauer', { clouds: .9, snow: c === 85 ? .45 : .8 });
   else if (c >= 95) set(c === 95 ? 'Gewitter' : 'Gewitter mit Hagel', { clouds: 1, rain: .9, storm: 1 });
-  if (isFinite(temp) && temp <= 0) fx.ice = Math.max(fx.ice, temp <= -3 ? .9 : .55);
+  if (isFinite(temp) && temp <= 0) fx.ice = Math.max(fx.ice, temp <= -3 ? .9 : .55);   // Frost: vereist
   return fx;
-}
-
-function cloudVisualLoad(fx = currentFx()) {
-  // Hohe Schleierwolken verändern den Himmel nur leicht, tiefe Wolken deutlich stärker.
-  return Math.min(1, (fx.cloudLow || 0) * .66 + (fx.cloudMid || 0) * .34 + (fx.cloudHigh || 0) * .12);
-}
-
-function celestialVeil(fx = currentFx()) {
-  // Wolken ziehen sichtbar VOR Sonne/Mond vorbei. Deshalb nur sanftes globales Abdunkeln.
-  const block = (fx.cloudLow || 0) * .34 + (fx.cloudMid || 0) * .16 + (fx.cloudHigh || 0) * .045
-    + (fx.fog || 0) * .30 + (fx.rain || 0) * .12 + (fx.snow || 0) * .10;
-  return Math.max(.42, 1 - Math.min(.58, block));
 }
 
 // Vorschau: ?wetter=regen | schnee | eis | bewoelkt | nebel | gewitter | sonnig
 function previewWeather() {
   const m = /[?&]wetter=([a-zäöü]+)/i.exec(location.search);
   if (!m) return null;
-  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, regen: 63, starkregen: 65, schnee: 73, eis: 67, frost: 0, gewitter: 95 };
+  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, regen: 63, starkregen: 65, schnee: 73, leichtschnee: 71, starkschnee: 75, eis: 67, frost: 0, gewitter: 95 };
   const code = map[m[1].toLowerCase()];
   if (code === undefined) return null;
-  return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' ? -4 : 12, name: 'Vorschau' };
+  return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' || m[1].includes('schnee') ? -4 : 12, name: 'Vorschau' };
 }
 
 let weatherNow = null;      // aktuell angezeigtes Wetter
 let weatherCurrent = null;  // echtes aktuelles Wetter des gewählten Ortes
 let weatherForecast = [];   // Tagesvorschau, Index 0 = heute
 function currentFx() { return weatherNow?.fx || describeWeather(0, 0, 10); }
+
+// Wetter ist von der Astronomie unabhängig: Die Bahnpositionen bleiben
+// korrekt berechnet, aber Bewölkung / Nebel bestimmt die Sichtbarkeit.
+function skyWeatherVisibility(fx, object = 'sun') {
+  const cover = Math.max(0, Math.min(1, fx.clouds || 0));
+  const fog = Math.max(0, Math.min(1, fx.fog || 0));
+  const precip = Math.max(fx.rain || 0, fx.snow || 0);
+  // Ein dichter, geschlossener Himmel muss die Scheiben wirklich verdecken.
+  if (cover >= .95 || fog >= .94 || (cover > .83 && precip >= .82)) return 0;
+  // Ab etwa 75 % zunehmend starke Verdeckung, bei 95 % vollständig.
+  const cloudFade = cover < .32 ? 1 - cover * .18
+    : cover < .72 ? .94 - (cover - .32) * 1.45
+    : Math.max(0, .36 * (1 - (cover - .72) / .23));
+  const fogFade = Math.pow(1 - fog, 3.1);
+  const rainFade = 1 - .42 * (fx.rain || 0);
+  const snowFade = 1 - .34 * (fx.snow || 0);
+  const level = Math.max(0, Math.min(1, cloudFade * fogFade * rainFade * snowFade));
+  return object === 'stars' ? Math.pow(level, 1.5) : level;
+}
+
+function celestialWeatherOpacity(fx, offset = 0) {
+  const base = skyWeatherVisibility(fx);
+  // Ziehende Wolken führen bei halbbewölktem Himmel zu langsamem Wechsel.
+  // Keine künstlichen Blitze / schnellen Helligkeitssprünge.
+  if (base <= 0 || fx.clouds < .25 || fx.clouds > .87 || fx.fog > .2) return base;
+  const cover = Math.sin(Math.PI * Math.min(1, Math.max(0, (fx.clouds - .25) / .62)));
+  const passing = Math.sin(Date.now() / 18500 + offset) * .14 * cover;
+  return Math.max(0, Math.min(1, base * (1 + passing)));
+}
 
 function weatherForView() {
   const place = getPlace();
@@ -436,7 +443,7 @@ function weatherForView() {
   const f = weatherForecast[skyDayOffset];
   if (!f) return { name: place.name, unavailable: true, fx: describeWeather(0, 0, 10) };
   const tempMid = isFinite(f.max) && isFinite(f.min) ? (f.max + f.min) / 2 : (isFinite(f.max) ? f.max : 10);
-  return { ...f, name: place.name, temp: tempMid, forecast: true, fx: describeWeather(f.code, f.cloud ?? 0, tempMid, { low: f.cloudLow, mid: f.cloudMid, high: f.cloudHigh }) };
+  return { ...f, name: place.name, temp: tempMid, forecast: true, fx: describeWeather(f.code, f.cloud ?? 0, tempMid) };
 }
 
 function applyWeatherForView() {
@@ -466,7 +473,7 @@ async function refreshWeather(force = false) {
   try {
     const cached = JSON.parse(localStorage.getItem(LS_WEATHER) || 'null');
     if (cached && cached.key === `${place.lat},${place.lon}`) {
-      if (cached.w) weatherCurrent = { ...cached.w, name: place.name, fx: describeWeather(cached.w.code, cached.w.cloud, cached.w.temp, { low: cached.w.cloudLow, mid: cached.w.cloudMid, high: cached.w.cloudHigh }) };
+      if (cached.w) weatherCurrent = { ...cached.w, name: place.name, fx: describeWeather(cached.w.code, cached.w.cloud, cached.w.temp) };
       weatherForecast = Array.isArray(cached.forecast) ? cached.forecast : [];
       applyWeatherForView();
       cachedFresh = Date.now() - cached.t < WEATHER_MAX_AGE;
@@ -475,7 +482,7 @@ async function refreshWeather(force = false) {
   } catch {}
   if (!navigator.onLine) return;
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat.toFixed(3)}&longitude=${place.lon.toFixed(3)}&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high&hourly=cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=${SKY_MAX_FUTURE_DAYS + 1}&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat.toFixed(3)}&longitude=${place.lon.toFixed(3)}&current=temperature_2m,weather_code,cloud_cover&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=${SKY_MAX_FUTURE_DAYS + 1}&timezone=auto`;
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
@@ -483,35 +490,14 @@ async function refreshWeather(force = false) {
       try { localStorage.setItem(LS_PLACE, JSON.stringify({ ...place, tz: data.timezone })); } catch {}
       applyPlaceGeo();
     }
-    const w = {
-      code: data.current.weather_code,
-      cloud: data.current.cloud_cover,
-      cloudLow: data.current.cloud_cover_low,
-      cloudMid: data.current.cloud_cover_mid,
-      cloudHigh: data.current.cloud_cover_high,
-      temp: data.current.temperature_2m
-    };
+    const w = { code: data.current.weather_code, cloud: data.current.cloud_cover, temp: data.current.temperature_2m };
     const times = data.daily?.time || [];
     const codes = data.daily?.weather_code || [];
     const maxs = data.daily?.temperature_2m_max || [];
     const mins = data.daily?.temperature_2m_min || [];
-    const hourlyTimes = data.hourly?.time || [];
-    const hourIndex = new Map(hourlyTimes.map((t, i) => [t, i]));
-    const hourlyPick = (date, dayOffset) => {
-      const wall = nowForSky(dayOffset);
-      const hh = String(wall.getHours()).padStart(2, '0');
-      let idx = hourIndex.get(`${date}T${hh}:00`);
-      if (idx == null) idx = hourlyTimes.findIndex(t => t.startsWith(`${date}T`));
-      return idx == null || idx < 0 ? {} : {
-        cloud: data.hourly?.cloud_cover?.[idx],
-        cloudLow: data.hourly?.cloud_cover_low?.[idx],
-        cloudMid: data.hourly?.cloud_cover_mid?.[idx],
-        cloudHigh: data.hourly?.cloud_cover_high?.[idx]
-      };
-    };
-    const forecast = times.map((date, i) => ({ date, code: codes[i], max: maxs[i], min: mins[i], ...hourlyPick(date, i) }));
+    const forecast = times.map((date, i) => ({ date, code: codes[i], max: maxs[i], min: mins[i], cloud: 0 }));
     localStorage.setItem(LS_WEATHER, JSON.stringify({ key: `${place.lat},${place.lon}`, t: Date.now(), w, forecast }));
-    weatherCurrent = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp, { low: w.cloudLow, mid: w.cloudMid, high: w.cloudHigh }) };
+    weatherCurrent = { ...w, name: place.name, fx: describeWeather(w.code, w.cloud, w.temp) };
     weatherForecast = forecast;
     applyWeatherForView();
   } catch { /* offline oder Dienst nicht erreichbar: alter Stand bleibt */ }
@@ -535,6 +521,7 @@ function isBetweenWrapped(value, start, end) {
   return start <= end ? (value >= start && value <= end) : (value >= start || value <= end);
 }
 
+
 const BODY_DIAM_KM = {
   sun: 1392700,
   moon: 3474.8,
@@ -544,7 +531,6 @@ const BODY_DIAM_KM = {
   jupiter: 139820,
   saturn: 116460
 };
-
 function apparentDiameterDeg(diamKm, distKm) {
   const d = Math.max(1, Number(distKm) || 1);
   return 2 * Math.atan((diamKm / 2) / d) * 180 / Math.PI;
@@ -567,8 +553,6 @@ function moonRenderSize(distKm, alt) {
   const meanArcsec = 1864;
   const arcsec = apparentDiameterArcsec(BODY_DIAM_KM.moon, distKm);
   const ratio = Math.sqrt(arcsec / meanArcsec);
-  // Der Mond wird bewusst etwas kompakter gerendert als die Sonne,
-  // weil die volle Scheibe optisch größer wirkt als die Sonnenikone mit Strahlen.
   const base = 86 - alt * 6.5;
   return Math.round(base * ratio);
 }
@@ -607,7 +591,9 @@ function placeSun() {
   sun.style.setProperty('--sun-halo', mixHex('#FF9A4D', '#FFF1C2', Math.min(1, alt * 1.4)));
   sun.style.setProperty('--sun-size', `${sunRenderSize(now, alt)}px`);
   const fx = currentFx();
-  sun.style.setProperty('--sun-veil', celestialVeil(fx).toFixed(2));
+  const visibility = celestialWeatherOpacity(fx, .8);
+  sun.style.setProperty('--sun-veil', visibility.toFixed(3));
+  if (els.sunTap) els.sunTap.style.pointerEvents = visibility < .09 ? 'none' : 'auto';
 }
 
 /* ---------- Wetter-Effekte ---------- */
@@ -615,37 +601,21 @@ const precipLayers = [];
 let precipAnim = null;
 let flashTimer = null;
 
-function buildClouds(box, fx) {
-  if (!box) return;
-  const low = Math.max(0, Math.min(1, fx.cloudLow || 0));
-  const mid = Math.max(0, Math.min(1, fx.cloudMid || 0));
-  const high = Math.max(0, Math.min(1, fx.cloudHigh || 0));
-  const sig = [low, mid, high, fx.rain || 0, fx.storm || 0].map(v => Math.round(v * 20) / 20).join('|');
-  if (box.dataset.cloudSig === sig) return;
-  box.dataset.cloudSig = sig;
-
-  const specs = [
-    { type: 'high', amount: high, threshold: .12, max: 3, baseTop: 8, range: 28, baseScale: 1.04, scaleStep: .14, baseDur: 136, opBase: .04, opGain: .10 },
-    { type: 'mid', amount: mid, threshold: .15, max: 4, baseTop: 20, range: 40, baseScale: .88, scaleStep: .16, baseDur: 106, opBase: .07, opGain: .18 },
-    { type: 'low', amount: low, threshold: .18, max: 5, baseTop: 34, range: 38, baseScale: .76, scaleStep: .18, baseDur: 84, opBase: .09, opGain: .28 }
-  ];
+function buildClouds(box, count) {
+  if (!box || box.childElementCount === count) return;
   let html = '';
-  specs.forEach((sp, ti) => {
-    if (sp.amount < sp.threshold) return;
-    let count = 1 + Math.round(sp.amount * (sp.max - 1));
-    if ((fx.rain > .35 || fx.storm) && sp.type === 'low') count = Math.max(count, 5);
-    for (let i = 0; i < count; i++) {
-      const top = sp.baseTop + ((i * 31 + ti * 17) % sp.range);
-      const scale = sp.baseScale + (((i * 47 + ti * 19) % 50) / 100) * sp.scaleStep;
-      const dur = sp.baseDur + (i * 23 + ti * 11) % 55;
-      const delay = -((i * 41 + ti * 29) % dur);
-      const opacity = Math.min(sp.type === 'low' ? .68 : .56, sp.opBase + sp.amount * sp.opGain);
-      html += `<i class="cloud ${sp.type}" style="top:${top}%;--s:${scale.toFixed(2)};--o:${opacity.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
-    }
-  });
+  for (let i = 0; i < count; i++) {
+    // Versetzte Wolkenbänke mit eigenständiger Geschwindigkeit und Tiefe.
+    const top = -8 + ((i * 31 + 7) % 91);
+    const scale = .88 + ((i * 29 + 11) % 90) / 68;
+    const dur = 98 + (i * 23) % 140;
+    const delay = -((i * 37 + 17) % dur);
+    const opacity = .51 + ((i * 17) % 37) / 100;
+    const soft = i % 4 === 0 ? 12 : 7;
+    html += `<i class="cloud" style="top:${top}%;--s:${scale.toFixed(2)};--blur:${soft}px;--cloud-individual-opacity:${opacity.toFixed(2)};animation-duration:${dur}s;animation-delay:${delay}s"></i>`;
+  }
   box.innerHTML = html;
 }
-
 
 function moonIllumination(age) {
   return (1 - Math.cos(2 * Math.PI * (age / SYNODIC))) / 2;
@@ -903,7 +873,9 @@ function placeMoon() {
   moonOrb.style.setProperty('--moon-shadow', night ? 'color-mix(in srgb, var(--sky-mid) 88%, black)' : 'transparent');
   moonOrb.style.setProperty('--moon-halo', night ? '#F3EAD3' : '#FFFFFF');
   const fx = currentFx();
-  moonOrb.style.setProperty('--moon-veil', celestialVeil(fx).toFixed(2));
+  const visibility = celestialWeatherOpacity(fx, 3.4);
+  moonOrb.style.setProperty('--moon-veil', visibility.toFixed(3));
+  if (els.moonTap) els.moonTap.style.pointerEvents = visibility < .09 ? 'none' : 'auto';
   const key = `${MOON_STYLE}|${st.illum.toFixed(3)}|${Math.round(st.limbAngle)}|${Math.round(st.northAngle)}`;
   if (moonOrb.dataset.key !== key) { moonOrb.dataset.key = key; moonOrb.innerHTML = moonDiscSvg(st, MOON_STYLE); }
 }
@@ -1127,7 +1099,7 @@ function planetVisibilityText(p, sunAlt) {
   const fx = currentFx();
   if (sunAlt > -2) return 'bei Tageslicht kaum sichtbar';
   if (sunAlt > -7) return 'in der Dämmerung';
-  if (cloudVisualLoad(fx) > .72 || fx.fog > .45 || fx.rain > .35 || fx.snow > .35) return 'astronomisch sichtbar, Wetter kann die Sicht verdecken';
+  if (fx.clouds > .78 || fx.fog > .45 || fx.rain > .35 || fx.snow > .35) return 'astronomisch sichtbar, Wetter kann die Sicht verdecken';
   if (p.alt < 8) return 'sehr tief über dem Horizont';
   return 'bei dunklem Himmel sichtbar';
 }
@@ -1137,12 +1109,12 @@ function planetVisualLight(p, sunAlt) {
   const magLevel = Math.max(0.16, Math.min(1, (2.2 - mag) / 6.8));
   const altitudeLevel = Math.max(0.28, Math.min(1, (p.alt + 1) / 18));
   const fx = currentFx();
-  const weatherLevel = Math.max(0.18, 1 - (cloudVisualLoad(fx) * .48 + fx.fog * .70 + fx.rain * .42 + fx.snow * .34));
+  const weatherLevel = skyWeatherVisibility(fx, 'stars');
   const skyLevel = sunAlt > 0 ? .20 : sunAlt > -4 ? .36 : sunAlt > -8 ? .66 : 1;
   const visibleLevel = Math.max(.06, Math.min(1, magLevel * altitudeLevel * weatherLevel * skyLevel));
   const nightBoost = sunAlt <= -8 ? 1 : .88;
   return {
-    opacity: Math.max(.26, Math.min(1, .25 + visibleLevel * .82)),
+    opacity: weatherLevel < .025 ? 0 : Math.max(0, Math.min(1, visibleLevel * 1.18)),
     glow: (2.5 + 13 * magLevel * skyLevel * nightBoost).toFixed(1),
     glowAlpha: Math.max(.10, Math.min(.86, .12 + magLevel * skyLevel * .72)).toFixed(2),
     brightness: Math.max(.82, Math.min(1.38, .90 + magLevel * .48)).toFixed(2)
@@ -1274,7 +1246,7 @@ function placePlanets() {
     const light = planetVisualLight(p, sun.alt);
     const scale = planetRenderScale(p.key, p.distance);
     const style = `left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px;--planet-opacity:${light.opacity.toFixed(2)};--planet-glow:${light.glow}px;--planet-glow-alpha:${light.glowAlpha};--planet-brightness:${light.brightness};--planet-scale:${scale.toFixed(3)}`;
-    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="${style}" aria-label="${name} anzeigen"><span class="planet-disc" aria-hidden="true"></span></button>`;
+    return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="${style}" aria-label="${name} anzeigen" ${light.opacity < .045 ? 'tabindex="-1" aria-hidden="true"' : ''}><span class="planet-disc" aria-hidden="true"></span></button>`;
   }).join('');
 
   layer.querySelectorAll('.planet-dot').forEach(btn => {
@@ -1303,12 +1275,21 @@ function applyWeatherFx() {
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const clouds = layer.querySelector('.clouds');
-    buildClouds(clouds, fx);
-    layer.style.setProperty('--cloud-op', '1');
+    const n = fx.clouds < .10 ? 0 : Math.round(2 + fx.clouds * 11);
+    buildClouds(clouds, n);
+    const coverage = Math.max(0, Math.min(1, fx.clouds));
+    // Gemisch aus einzelnen Wolken und der geschlossenen Decke.
+    const deck = coverage < .33 ? 0 : Math.pow((coverage - .33) / .67, 1.75);
+    layer.style.setProperty('--cloud-op', (0.35 + coverage * .65).toFixed(2));
+    layer.style.setProperty('--deck-opacity', deck.toFixed(3));
+    layer.style.setProperty('--texture-opacity', (deck * .63).toFixed(3));
     layer.style.setProperty('--fog', fx.fog.toFixed(2));
     layer.style.setProperty('--ice', fx.ice.toFixed(2));
     layer.classList.toggle('night', night);
-    layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || (fx.cloudLow || 0) > .86);
+    layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || fx.clouds > .9);
+    layer.classList.toggle('overcast', fx.clouds >= .88);
+    layer.classList.toggle('snowing', fx.snow > .12);
+    layer.classList.toggle('rainy', fx.rain > .12);
   });
   precipLayers.forEach(p => p.setup(fx));
   clearTimeout(flashTimer);
@@ -1345,69 +1326,247 @@ function scheduleFlash() {
   }, 5000 + Math.random() * 9000);
 }
 
+/* Räumlicher Wetterregen: echte transparente Tropfen statt gleichförmiger Striche.
+   Drei Tiefenebenen, leichte Windbewegung, zeitbasierte Bewegung und Sprite-Cache
+   für flüssige Darstellung auch auf dem Smartphone. Keine Änderung an Nutzerdaten. */
+function makeWaterDropSprite() {
+  const sprite = document.createElement('canvas');
+  sprite.width = 56;
+  sprite.height = 112;
+  const g = sprite.getContext('2d');
+  if (!g) return sprite;
+
+  // Hintergrund bleibt vollständig transparent. Die Form hat eine sanfte,
+  // gebrochene Lichtkante, eine gläserne Mitte und eine leicht gerundete Basis.
+  g.beginPath();
+  g.moveTo(28, 7);
+  g.bezierCurveTo(25, 21, 13, 48, 11, 68);
+  g.bezierCurveTo(8, 88, 17, 103, 28, 104);
+  g.bezierCurveTo(40, 104, 48, 89, 45, 70);
+  g.bezierCurveTo(43, 49, 31, 19, 28, 7);
+  g.closePath();
+  const glass = g.createLinearGradient(8, 15, 47, 100);
+  glass.addColorStop(0, 'rgba(246,251,255,.10)');
+  glass.addColorStop(.19, 'rgba(220,237,252,.52)');
+  glass.addColorStop(.42, 'rgba(171,203,234,.12)');
+  glass.addColorStop(.75, 'rgba(204,228,252,.25)');
+  glass.addColorStop(1, 'rgba(244,251,255,.65)');
+  g.fillStyle = glass;
+  g.fill();
+  g.lineWidth = 2.5;
+  g.strokeStyle = 'rgba(235,247,255,.72)';
+  g.stroke();
+
+  const glint = g.createLinearGradient(15, 21, 26, 82);
+  glint.addColorStop(0, 'rgba(255,255,255,.82)');
+  glint.addColorStop(.45, 'rgba(255,255,255,.31)');
+  glint.addColorStop(1, 'rgba(255,255,255,0)');
+  g.strokeStyle = glint;
+  g.lineWidth = 3.8;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(24, 28);
+  g.bezierCurveTo(18, 45, 16, 63, 17, 80);
+  g.stroke();
+  const lowLight = g.createRadialGradient(32, 87, 1, 32, 88, 18);
+  lowLight.addColorStop(0, 'rgba(253,255,255,.42)');
+  lowLight.addColorStop(1, 'rgba(253,255,255,0)');
+  g.fillStyle = lowLight;
+  g.fillRect(11, 68, 34, 36);
+  return sprite;
+}
+
+const WATER_DROP_SPRITE = makeWaterDropSprite();
+
+/* Winterhimmel V3.7.3: gecachte Eiskristall-Sprites, zarte Brechungslichter.
+   Nicht jede Flocke ist perfekt sechseckig. Größere Kristalle zeigen Struktur,
+   entfernte Teilchen bleiben klein und weich. */
+function makeSnowCrystalSprite(variant = 0) {
+  const surface = document.createElement('canvas');
+  surface.width = 96;
+  surface.height = 96;
+  const g = surface.getContext('2d');
+  if (!g) return surface;
+  const c = 48;
+  const halo = g.createRadialGradient(c,c,1,c,c,38);
+  halo.addColorStop(0,'rgba(242,251,255,.35)');
+  halo.addColorStop(.42,'rgba(210,236,255,.11)');
+  halo.addColorStop(1,'rgba(230,248,255,0)');
+  g.fillStyle = halo;
+  g.fillRect(0,0,96,96);
+  g.save();
+  g.translate(c,c);
+  g.rotate(variant * Math.PI/10);
+  g.lineCap = 'round';
+  // Kleine Asymmetrie verhindert die Wirkung eines immer gleichen Symbols.
+  for (let a=0; a<6; a++) {
+    g.save(); g.rotate(a*Math.PI/3);
+    const len = (variant===1 ? 30 : variant===2 ? 25 : 28) * (a===4 ? .92 : 1);
+    const edge = g.createLinearGradient(0,0,0,-len);
+    edge.addColorStop(0,'rgba(255,255,255,.94)');
+    edge.addColorStop(.6,'rgba(231,247,255,.83)');
+    edge.addColorStop(1,'rgba(205,232,255,.3)');
+    g.strokeStyle = edge; g.lineWidth=2.3;
+    g.beginPath();g.moveTo(0,0);g.lineTo(0,-len);g.stroke();
+    const branches = variant===1 ? [12,21] : [10,18,24];
+    for (const b of branches) {
+      if (b>len-2) continue;
+      const arm=variant===2 ? 6 : 5.5;
+      g.lineWidth=1.5;
+      g.beginPath();g.moveTo(0,-b);g.lineTo(-arm,-b-arm*1.05);
+      g.moveTo(0,-b);g.lineTo(arm,-b-arm*1.05);g.stroke();
+    }
+    g.restore();
+  }
+  g.fillStyle='rgba(255,255,255,.96)';
+  g.beginPath();g.arc(0,0,3.4,0,Math.PI*2);g.fill();
+  g.restore();
+  return surface;
+}
+const SNOW_CRYSTALS = [0,1,2].map(makeSnowCrystalSprite);
+
 function makePrecip(canvas) {
-  const ctx = canvas.getContext('2d');
-  let drops = [], kind = 'none', amount = 0;
+  const ctx = canvas.getContext('2d', { alpha:true });
+  let drops = [];
+  let kind = 'none';
+  let amount = 0;
+  let motionReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const layer = {
     canvas,
+    w: 0,
+    h: 0,
     setup(fx) {
-      kind = fx.snow > 0 ? 'snow' : fx.rain > 0 ? 'rain' : 'none';
-      amount = kind === 'snow' ? fx.snow : fx.rain;
+      const nextKind = fx.snow > 0 ? 'snow' : fx.rain > 0 ? 'rain' : 'none';
+      const nextAmount = nextKind === 'snow' ? fx.snow : fx.rain;
+      const changed = nextKind !== kind || Math.abs(nextAmount - amount) > .08;
+      kind = nextKind;
+      amount = nextAmount;
       this.resize();
-      const n = kind === 'none' ? 0 : Math.round((kind === 'snow' ? 70 : 110) * amount + 10);
-      drops = Array.from({ length: n }, () => this.spawn(true));
+      if (!changed && drops.length && kind !== 'none') return;
+      if (kind === 'none') { drops = []; ctx.clearRect(0, 0, this.w, this.h); return; }
+      const areaScale = Math.max(.68, Math.min(1.55, Math.sqrt((this.w * this.h) / 195000)));
+      const count = Math.round((kind === 'snow' ? 19 + amount * 47 : 26 + amount * 108) * areaScale);
+      drops = Array.from({length:count}, () => this.spawn(true));
     },
     resize() {
       const r = canvas.getBoundingClientRect();
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.max(1, Math.round(r.width * dpr));
-      canvas.height = Math.max(1, Math.round(r.height * dpr));
+      const w = Math.max(1, Math.round(r.width));
+      const h = Math.max(1, Math.round(r.height));
+      const dpr = Math.min(1.8, window.devicePixelRatio || 1);
+      if (this.w === w && this.h === h && this.dpr === dpr) return;
+      this.w = w;
+      this.h = h;
+      this.dpr = dpr;
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.w = r.width; this.h = r.height;
     },
-    spawn(anywhere) {
-      return { x: Math.random() * (this.w || 400), y: anywhere ? Math.random() * (this.h || 300) : -10,
-        v: kind === 'snow' ? 0.4 + Math.random() * 0.8 : 7 + Math.random() * 6,
-        r: kind === 'snow' ? 1 + Math.random() * 2.4 : 10 + Math.random() * 10, p: Math.random() * 6.28 };
+    spawn(anywhere = false) {
+      // z beschreibt die Entfernung. Größere Tropfen bewegen sich optisch
+      // schneller, kleine Tropfen bleiben zart im Hintergrund.
+      const roll = Math.random();
+      const depth = roll < .25 ? 0 : roll < .78 ? 1 : 2;
+      const jitter = .72 + Math.random() * .58;
+      const snow = kind === 'snow';
+      const size = snow ? [1.3, 3.1, 6.3][depth] * jitter : [1.25, 2.85, 5.35][depth] * jitter;
+      const speed = snow ? [17, 32, 52][depth] * jitter : [115, 195, 315][depth] * jitter;
+      return {
+        x: Math.random() * (this.w + 32) - 16,
+        y: anywhere ? Math.random() * this.h : -(12 + Math.random() * 42),
+        w: size, h: snow ? size : size * (2.1 + Math.random() * .65),
+        speed,
+        phase: Math.random() * Math.PI * 2,
+        depth,
+        opacity: snow ? [.13, .54, .83][depth] : [.32, .55, .84][depth],
+        sprite: Math.floor(Math.random()*SNOW_CRYSTALS.length),
+        rotation: Math.random()*Math.PI*2,
+        spin: (Math.random()-.5)*.6,
+        shimmer: .6 + Math.random()*.4,
+        drift: (Math.random() - .5) * (snow ? 18 : 23)
+      };
     },
-    active() { return kind !== 'none' && canvas.offsetParent !== null; },
-    frame() {
-      const { w, h } = this;
+    active() {
+      return kind !== 'none' && canvas.offsetParent !== null && this.w > 3 && this.h > 3;
+    },
+    frame(dt, elapsed) {
+      const {w, h} = this;
       ctx.clearRect(0, 0, w, h);
+      const isNight = canvas.parentElement?.classList.contains('night');
       if (kind === 'rain') {
-        ctx.strokeStyle = 'rgba(220,230,250,.45)';
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
         for (const d of drops) {
-          ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.r * .25, d.y + d.r);
-          d.y += d.v; d.x -= d.v * .25;
-          if (d.y > h) Object.assign(d, this.spawn(false));
-          if (d.x < -10) d.x = w + 5;
+          // Jede Ebene hat eine eigene Lichtdurchlässigkeit. Dezente
+          // Highlights ersetzen die früheren auffälligen weißen Striche.
+          const twinkle = .94 + .06 * Math.sin(elapsed * 1.3 + d.phase);
+          ctx.globalAlpha = d.opacity * (isNight ? 1.12 : .92) * twinkle;
+          const drift = d.speed * .055 + d.drift;
+          ctx.drawImage(WATER_DROP_SPRITE,
+            d.x - d.w * .5, d.y - d.h * .48, d.w, d.h);
+          d.y += d.speed * dt;
+          d.x -= drift * dt;
+          if (d.y > h + 20 || d.x < -24) Object.assign(d, this.spawn(false));
         }
-        ctx.stroke();
       } else if (kind === 'snow') {
-        ctx.fillStyle = 'rgba(255,255,255,.85)';
         for (const d of drops) {
-          ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.283); ctx.fill();
-          d.y += d.v; d.p += 0.02; d.x += Math.sin(d.p) * 0.5;
-          if (d.y > h + 5) Object.assign(d, this.spawn(false));
+          const glow = (Math.sin(elapsed * .78 + d.phase * 4) + 1) * .5;
+          // Schimmer nur bei einzelnen Flocken, kein stroboskopisches Blinken.
+          const glint = d.depth === 2 ? (1 + glow * .13 * d.shimmer) : 1;
+          ctx.globalAlpha = Math.min(.95, d.opacity * (isNight ? .91 : .82) * glint);
+          ctx.save();
+          ctx.translate(d.x,d.y);
+          // Alle Schneepartikel haben eine Kristallform. Im Hintergrund
+          // transparent und klein, im Vordergrund detailreich mit Schimmer.
+          // Keine deckenden weißen Kreise mehr über dem Himmel.
+          ctx.rotate(d.rotation);
+          const size=d.w*(d.depth === 0 ? 5.5 : d.depth === 2 ? 3.5 : 2.8);
+          const crystal=SNOW_CRYSTALS[d.sprite];
+          ctx.drawImage(crystal,-size/2,-size/2,size,size);
+          ctx.restore();
+          if (d.depth === 2 && glow > .93 && d.shimmer > .87) {
+            ctx.globalAlpha = d.opacity * (glow-.93) * 1.3;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(d.x,d.y,.9,0,Math.PI*2); ctx.fill();
+          }
+          d.y += d.speed * dt;
+          d.phase += dt * (1.0 + d.depth*.15);
+          d.rotation += d.spin*dt;
+          d.x += (d.drift + Math.sin(d.phase) * 11) * dt;
+          if (d.y > h + 18 || d.x < -28 || d.x > w + 28) Object.assign(d, this.spawn(false));
         }
       }
+      ctx.globalAlpha = 1;
     }
   };
   return layer;
 }
 
+let lastPrecipTime = 0;
+let lastPrecipPaint = 0;
 function startPrecip() {
   if (precipAnim) return;
-  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const loop = () => {
+  lastPrecipTime = 0;
+  lastPrecipPaint = 0;
+  const loop = (time) => {
     precipAnim = null;
     if (document.hidden) return;
     const live = precipLayers.filter(p => p.active());
-    if (!live.length) { precipLayers.forEach(p => p.canvas.getContext('2d').clearRect(0, 0, p.canvas.width, p.canvas.height)); return; }
-    live.forEach(p => p.frame());
-    if (!reduced) precipAnim = requestAnimationFrame(loop);
+    if (!live.length) {
+      precipLayers.forEach(p => {
+        const ctx = p.canvas.getContext('2d');
+        ctx.clearRect(0, 0, p.w, p.h);
+      });
+      return;
+    }
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Maximal 30 Bilder/Sekunde, schont Akku und hält Regenbewegung ruhig.
+    if (!lastPrecipTime) lastPrecipTime = time;
+    if (!lastPrecipPaint || time - lastPrecipPaint >= 32 || reduced) {
+      const dt = reduced ? 0 : Math.min(.065, (time - lastPrecipTime) / 1000);
+      lastPrecipTime = time;
+      lastPrecipPaint = time;
+      live.forEach(p => p.frame(dt, time / 1000));
+      if (reduced) return;
+    }
+    precipAnim = requestAnimationFrame(loop);
   };
   precipAnim = requestAnimationFrame(loop);
 }
@@ -1924,6 +2083,7 @@ async function loadVaultWithKey(key) {
   const decrypted = await decryptValue(encryptedVault, key);
   cryptoKey = key;
   state = decrypted;
+  ensureThoughtMemory();
   if (!Array.isArray(state.topics)) state.topics = [];
   state.version = APP_VERSION;
   state.settings = { ...(state.settings || {}) };
@@ -1964,6 +2124,7 @@ function saveResume() {
     resume = { screen: 'editor', id: currentTopicId };
   }
   else if (els.trashScreen.classList.contains('active')) resume = { screen: 'trash' };
+  else if ($('thoughtScreen').classList.contains('active')) resume = { screen: 'thought' };
   try { localStorage.setItem(LS_RESUME, JSON.stringify(resume)); } catch {}
 }
 function readResume() {
@@ -2219,7 +2380,7 @@ async function maybeShowBioCard() {
    ===================================================================== */
 
 function showScreen(screen) {
-  [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen')].forEach(el => el.classList.toggle('active', el === screen));
+  [els.lockScreen, els.homeScreen, els.editorScreen, els.trashScreen, $('quickScreen'), $('thoughtScreen')].forEach(el => el.classList.toggle('active', el === screen));
   // Der Himmel braucht die echte Größe der sichtbaren Startseite. Zwei Frames warten,
   // damit Sonne, Mond und Planeten nicht erst mit 0 px berechnet und danach neu gezeichnet werden.
   if (screen === els.homeScreen) requestAnimationFrame(() => requestAnimationFrame(() => applySky(true)));
@@ -2257,6 +2418,7 @@ function showUnlocked(resume = { screen: 'home' }) {
   renderDailyBits();
   renderCategoryControls();
   renderTopics();
+  updateThoughtPortal();
   maybeShowBioCard();
   maybeShowBackupCard();
   // Verlauf neu aufbauen: Startseite ist die Basis
@@ -2265,6 +2427,8 @@ function showUnlocked(resume = { screen: 'home' }) {
     openTopic(resume.id, { verified: true });
   } else if (resume.screen === 'trash') {
     openTrash();
+  } else if (resume.screen === 'thought') {
+    openThoughtWorld();
   } else {
     showScreen(els.homeScreen);
   }
@@ -2272,7 +2436,7 @@ function showUnlocked(resume = { screen: 'home' }) {
 
 function goHomeFromScreen() {
   // Für die Zurück-Pfeile in der App: wie die Zurück-Taste des Handys
-  if (history.state && (history.state.rm === 'editor' || history.state.rm === 'trash')) history.back();
+  if (history.state && (['editor', 'trash', 'thought'].includes(history.state.rm))) history.back();
   else showHome();
 }
 
@@ -2320,6 +2484,8 @@ function onPopState(e) {
     } else if (!(els.editorScreen.classList.contains('active') && currentTopicId === s.id)) openTopic(s.id, { push: false });
   } else if (s.rm === 'trash') {
     if (!els.trashScreen.classList.contains('active')) openTrash({ push: false });
+  } else if (s.rm === 'thought') {
+    if (!$('thoughtScreen').classList.contains('active')) openThoughtWorld({ push: false });
   } else if (s.rm !== 'sheet') {
     if (!els.homeScreen.classList.contains('active')) showHome();
   }
@@ -4609,7 +4775,8 @@ async function verifyBackupCheck() {
     const active = vault.topics.filter(t => !t.deletedAt).length;
     const deleted = vault.topics.filter(t => Boolean(t.deletedAt)).length;
     const totalText = vault.topics.reduce((n, t) => n + String(t.content || '').length, 0);
-    hint.textContent = `Sicherung ist vollständig lesbar: ${active} Themen${deleted ? `, ${deleted} im Papierkorb` : ''}, ${totalText.toLocaleString('de-DE')} Textzeichen. Deine aktuellen Daten wurden nicht verändert.`;
+    const memories = Array.isArray(vault.memory?.entries) ? vault.memory.entries.length : 0;
+    hint.textContent = `Sicherung ist vollständig lesbar: ${active} Themen${deleted ? `, ${deleted} im Papierkorb` : ''}, ${totalText.toLocaleString('de-DE')} Textzeichen${memories ? ` und ${memories} Gedanken` : ''}. Deine aktuellen Daten wurden nicht verändert.`;
   } catch {
     hint.textContent = 'Die Sicherung konnte mit dieser PIN nicht entschlüsselt werden. Prüfe die PIN oder wähle eine andere Sicherungsdatei.';
   } finally {
@@ -4688,6 +4855,7 @@ function wireEvents() {
   });
 
   els.newTopicBtn.addEventListener('click', () => openTopicSheet('create'));
+  wireThoughtWorld();
   els.manageCategoriesBtn.addEventListener('click', openCategoryManager);
   els.categoryForm.addEventListener('submit', e => { e.preventDefault(); saveCategoryManager(); });
   els.categoryCloseBtn.addEventListener('click', () => closeSheet(els.categorySheet));
@@ -4850,7 +5018,7 @@ function wireEvents() {
     if (r) r(true);
   });
 
-  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet'), $('archiveSheet'), $('mergeSheet'), $('markersSheet')].forEach(dlg => {
+  [els.topicSheet, els.actionSheet, els.menuSheet, els.nameSheet, els.confirmSheet, $('protectSheet'), $('placeSheet'), $('sketchSheet'), $('versionsSheet'), $('versionViewSheet'), $('attachSheet'), $('pinSheet'), $('backupCheckSheet'), $('archiveSheet'), $('mergeSheet'), $('markersSheet'), $('thoughtAiSheet')].forEach(dlg => {
     dlg.addEventListener('close', onSheetClosed);
     // Tippen auf den abgedunkelten Bereich schließt das Blatt
     dlg.addEventListener('click', e => { if (e.target === dlg) { const r = dlg.getBoundingClientRect(); if (e.clientY < r.top) closeSheet(dlg); } });
@@ -4909,6 +5077,385 @@ async function boot() {
   if (wantsQuick && hasVaultConfig() && (resumed || hasInboxKey())) { openQuick('new'); return; }
   if (resumed) return;
   autoBiometric();
+}
+
+
+/* =====================================================================
+   Reci mi 3.7 · Gedankenwelt mit optionaler KI-Verbindung
+   - vorhandener Tresor bleibt unverändert (DB, PIN, Verschlüsselung)
+   - alle Originalaussagen bleiben im Gespräch
+   - regelbasierte Aufteilung, erkennbar als vorläufige Zuordnung
+   - KI nur nach bewusster Verbindung, transparent mit Kontext-Freigabe
+   ===================================================================== */
+let thoughtView = 'talk';
+let thoughtProjectFilter = 'Alle';
+const THOUGHT_PROJECTS = ['Litterum','Reci mi','Njam Njam','Wildora','Numera','KI-Kleiderschrank','Valora','Aelyr','Der, der ist','Rahel und Adam','Bibel','Weitere Ideen','Allgemein'];
+const THOUGHT_HINTS = [
+  ['KI-Kleiderschrank',/kleider|kleidung|klamott|outfit|anzieh|anzug|blazer|garderobe|schuhe|schrank|artikelnummer|anprob/i],
+  ['Litterum',/litterum|story\s*studio|schreib.?app|lektora|manuskript|buchprüfung/i],
+  ['Reci mi',/reci\s*mi|rezimi|gedanken.?app|notiz.?app|gedächtnis.?app/i],
+  ['Njam Njam',/njam\s*njam|unsere\s*küche|rezept.?app|rezept[e\s]/i],
+  ['Wildora',/wildora|natur.?app|tiergeräusch|pflanzen.?app|artenkart/i],
+  ['Numera',/numera|stempeluhr|zeiterfass|arbeitszeit.?app/i],
+  ['Rahel und Adam',/rahel|adam|ich\s*habe\s*dich\s*nicht\s*vergessen/i],
+  ['Der, der ist',/der,?\s*der\s*ist|\bnara\b|\bliri\b|\btarem\b/i],
+  ['Aelyr',/aelyr|sternenstaub/i],
+  ['Valora',/valora|vaelora|liora|aren\s*sar/i],
+  ['Bibel',/bibel|jesus|matthäus|evangelium|gebet|gleichnis/i]
+];
+const THOUGHT_STOPWORDS = new Set('ich du wir ihr sie er es das der die den dem ein eine einen einem einer mein meine mit für und oder aber auch noch mal so wie was wer wo wann warum wieviel habe hast hat haben hatte wollte will möchte möchte zu zum zur von vor nach über bei beim ins im ist sind war waren werden wäre wäre das dir mir mich dich uns das diese dieser diesen diese dies welche welcher etwas dann jetzt schon doch ja nein bitte können kann könntest'.split(' '));
+
+function ensureThoughtMemory() {
+  if (!state) return;
+  if (!state.memory || typeof state.memory !== 'object' || Array.isArray(state.memory)) state.memory = {};
+  if (!Array.isArray(state.memory.messages)) state.memory.messages = [];
+  if (!Array.isArray(state.memory.entries)) state.memory.entries = [];
+  if (typeof state.memory.draft !== 'string') state.memory.draft = '';
+  if (!state.memory.ai || typeof state.memory.ai !== 'object') state.memory.ai = { endpoint:'', accessCode:'', allowNotes:false };
+  if (typeof state.memory.ai.endpoint !== 'string') state.memory.ai.endpoint = '';
+  if (typeof state.memory.ai.accessCode !== 'string') state.memory.ai.accessCode = '';
+  if (typeof state.memory.ai.allowNotes !== 'boolean') state.memory.ai.allowNotes = false;
+  if (!state.memory.aiUsage || typeof state.memory.aiUsage !== 'object') state.memory.aiUsage = {input:0, output:0, calls:0};
+}
+function thoughtNorm(s) {
+  return String(s||'').toLocaleLowerCase('de').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function thoughtKeywords(s) {
+  return [...new Set(thoughtNorm(s).split(' ').filter(w => w.length >= 3 && !THOUGHT_STOPWORDS.has(w)))];
+}
+function thoughtProject(text) {
+  const value = String(text||'');
+  for (const [name,re] of THOUGHT_HINTS) if (re.test(value)) return name;
+  const normal = thoughtNorm(value);
+  for (const name of THOUGHT_PROJECTS) {
+    if (name !== 'Allgemein' && name !== 'Weitere Ideen' && normal.includes(thoughtNorm(name))) return name;
+  }
+  for (const t of (state?.topics || [])) {
+    if (t.deletedAt || t.locked || (t.title||'').trim().length < 6) continue;
+    if (normal.includes(thoughtNorm(t.title))) return t.title;
+  }
+  if (/idee|app|entwickel|funktion|projekt|erfind|wunsch/i.test(value)) return 'Weitere Ideen';
+  return 'Allgemein';
+}
+function thoughtSplit(raw) {
+  // Nur eindeutige Themenwechsel trennen, damit wir keine zusammengehörigen Sätze zerstückeln.
+  const original = String(raw||'').trim();
+  const splitSignals = /(?:[.!?;,]\s+|\s+)(?=(?:Ach[, ]+und|Außerdem|Übrigens|Noch\s+eine\s+Idee|Und\s+bei|Und\s+für|Anderes\s+Thema|Zum\s+Thema|Apropos)\b)/giu;
+  let parts = original.replace(splitSignals,'\n\n').split(/\n{2,}|\n(?=\s*(?:[-*•]|\d+[.)]\s))/u).map(x=>x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/u,'').trim()).filter(Boolean);
+  if (parts.length === 1) {
+    parts = original.replace(/[,;.]\s+(?=(?:ach\s+und|außerdem|übrigens|noch\s+eine\s+idee|und\s+bei|und\s+für|anderes\s+thema)\b)/giu, '.\n').split('\n').map(x=>x.trim()).filter(Boolean);
+  }
+  // Eine Aussage ohne deutliche Trennstelle immer als ein Gedanke erhalten.
+  return parts.length > 12 ? [original] : parts;
+}
+function thoughtTitle(s) {
+  const c = String(s||'').replace(/^(und |ach[, ]+und |außerdem[, ]*|übrigens[, ]*|ich (habe|möchte|wollte|will) (noch )?(eine |die )?idee[, :]*|zum thema\s+)/i,'').trim();
+  const words = c.split(/\s+/).slice(0,11).join(' ');
+  return words.length > 78 ? words.slice(0,75).trim()+' …' : (words || 'Neuer Gedanke');
+}
+function updateThoughtPortal() {
+  if (!state) return;
+  ensureThoughtMemory();
+  const count = state.memory.entries.length;
+  const el = $('thoughtMiniCount');
+  if (el) el.textContent = count ? `${count} Gedanken` : '';
+}
+function openThoughtWorld({push=true}={}) {
+  if (!state || !cryptoKey) return;
+  ensureThoughtMemory();
+  if (push) history.pushState({rm:'thought'}, '');
+  $('thoughtInput').value = state.memory.draft;
+  thoughtSetView(thoughtView);
+  thoughtUpdateAiStatus();
+  showScreen($('thoughtScreen'));
+  if (thoughtView==='talk') thoughtToBottom();
+}
+function thoughtToBottom() { requestAnimationFrame(() => { const el=$('thoughtThread'); if (el) el.scrollTop = el.scrollHeight; }); }
+function thoughtSetView(view) {
+  thoughtView = ['talk','world','search'].includes(view) ? view : 'talk';
+  for (const key of ['talk','world','search']) {
+    const btn=document.querySelector(`.thought-tab[data-view="${key}"]`);
+    if (btn) { btn.classList.toggle('active',key===thoughtView); btn.setAttribute('aria-selected',String(key===thoughtView)); }
+    $(key==='talk'?'thoughtTalkView':key==='world'?'thoughtWorldView':'thoughtSearchView').classList.toggle('active',key===thoughtView);
+  }
+  if (thoughtView==='talk') { thoughtRenderChat(); thoughtToBottom(); }
+  if (thoughtView==='world') thoughtRenderEntries();
+  if (thoughtView==='search') thoughtRenderSearch();
+}
+function thoughtRenderChat() {
+  if (!state) return;
+  const arr=state.memory.messages;
+  const welcome=arr.length ? '' : `<div class="thought-welcome"><h2>Erzähl mir, was dir einfällt.</h2><p>Ich bewahre deine Gedanken auf. Für echte KI-Antworten verbindest du Reci mi einmalig unter „KI verbinden“.</p></div>`;
+  $('thoughtThread').innerHTML = welcome + arr.slice(-100).map(m=>`<article class="thought-message ${m.role==='user'?'from-user':'from-reci'}"><span class="thought-msg-name">${m.role==='user'?'Du':'Reci mi'}</span><p>${escapeHtml(m.text)}</p><time>${escapeHtml(formatDate(m.at))}</time></article>`).join('');
+}
+function thoughtFind(query, limit=15) {
+  const keys=thoughtKeywords(query);
+  if (!keys.length) return [];
+  const corpus=[];
+  for (const x of (state?.memory?.entries||[])) corpus.push({type:'gedanke',id:x.id,title:x.title,text:x.text,project:x.project,at:x.at});
+  for (const x of (state?.memory?.messages||[])) corpus.push({type:'gespraech',id:x.id,title:x.role==='user'?'Deine Aussage':'Antwort von Reci mi',text:x.text,project:'Gespräch',at:x.at});
+  for (const t of (state?.topics||[])) {
+    if (t.deletedAt) continue;
+    corpus.push({type:'notiz',id:t.id,title:t.title,text:t.locked?'':combinedTopicText(t),project:catOf(t),at:t.updatedAt,locked:!!t.locked});
+  }
+  const scored=corpus.map(item=>{
+    const title=thoughtNorm(item.title+' '+item.project);
+    const content=thoughtNorm(item.text);
+    const score=keys.reduce((s,k)=>s + (title.includes(k)?4:0) + (content.includes(k)?1:0),0);
+    return {...item,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||new Date(b.at)-new Date(a.at));
+  return scored.slice(0,limit);
+}
+function thoughtAnswerQuestion(input) {
+  const found=thoughtFind(input,4);
+  if (!found.length) return 'Dazu finde ich noch keinen passenden Eintrag in deinen gespeicherten Gedanken oder Notizen. Du kannst mir mehr dazu erzählen.';
+  const names=found.map(x=>`„${x.title}“ (${x.type==='notiz'?'bisherige Notiz':x.project})`).join(', ');
+  return `Ich habe ${found.length} passende Einträge gefunden: ${names}. Unter „Wiederfinden“ kannst du die Originaltexte ansehen. Das ist eine lokale Suche, noch keine KI-Antwort.`;
+}
+function thoughtIsQuery(input) {
+  return /^(was|wann|wie|wo|welche[rsn]?|wer|finde|such[e]?|zeig[e]?|erinnerst du dich|weißt du noch|haben wir|wozu|woran)\b/i.test(input.trim()) && /\?|finde|suche|zeig|erinner|weißt|haben wir/i.test(input);
+}
+let thoughtSending=false;
+function thoughtAiConnected() {
+  const ai=state?.memory?.ai;
+  return Boolean(ai?.endpoint && ai?.accessCode);
+}
+function thoughtUpdateAiStatus(message='') {
+  const connected=thoughtAiConnected();
+  const chip=$('thoughtAiBadge');
+  if (chip) { chip.textContent=connected?'KI eingerichtet':'KI verbinden'; chip.classList.toggle('connected',connected); }
+  const info=$('thoughtStatus');
+  if (info) info.textContent=message || (connected
+    ? 'KI aktiv. Für eine Antwort werden Gesprächsausschnitte über deine Verbindung an den KI-Dienst gesendet. Lokale Daten bleiben verschlüsselt.'
+    : 'Lokal und verschlüsselt gespeichert. Für echte Gespräche: oben „KI verbinden“ wählen.');
+}
+function thoughtOpenAiSettings() {
+  if (!cryptoKey || !state) return;
+  ensureThoughtMemory();
+  $('thoughtAiEndpoint').value=state.memory.ai.endpoint;
+  $('thoughtAiAccess').value=state.memory.ai.accessCode;
+  $('thoughtAiNotes').checked=state.memory.ai.allowNotes;
+  const usage=state.memory.aiUsage;
+  $('thoughtAiUsage').textContent=usage.calls
+    ? `${usage.calls} erfolgreiche KI-Anfragen, ${Number(usage.input||0).toLocaleString('de-DE')} Eingabe-Tokens, ${Number(usage.output||0).toLocaleString('de-DE')} Ausgabe-Tokens (seit Verbindung; keine Euro-Abrechnung).`
+    : 'Bisher keine erfolgreichen KI-Anfragen erfasst.';
+  $('thoughtAiFeedback').textContent='';
+  openSheet($('thoughtAiSheet'));
+}
+function thoughtCleanEndpoint(value) {
+  const url=new URL(value.trim());
+  if (url.protocol!=='https:' || url.username || url.password || url.search || url.hash || url.port) throw new Error('Bitte eine HTTPS-Adresse ohne Zusätze eintragen.');
+  if (!url.hostname || url.hostname==='api.openai.com' || url.hostname==='openai.com') throw new Error('Hier gehört die Adresse deines geschützten Reci-mi-Vermittlungsdienstes hinein, nicht die OpenAI-Adresse.');
+  if (url.pathname!=='/' && url.pathname!=='') throw new Error('Bitte nur die Hauptadresse des Vermittlungsdienstes ohne weiteren Pfad eingeben.');
+  return url.origin+url.pathname.replace(/\/+$/,'');
+}
+async function thoughtSaveAiSettings(event) {
+  event.preventDefault();
+  const feedback=$('thoughtAiFeedback');
+  let endpoint='';
+  try { endpoint=thoughtCleanEndpoint($('thoughtAiEndpoint').value); }
+  catch(err) {feedback.textContent=err.message;return;}
+  const accessCode=$('thoughtAiAccess').value.trim();
+  if (accessCode.length<20 || accessCode.length>200) {feedback.textContent='Der Zugangscode muss mindestens 20 Zeichen lang sein.';return;}
+  const previous={...state.memory.ai};
+  state.memory.ai={endpoint,accessCode,allowNotes:$('thoughtAiNotes').checked};
+  try {
+    await persistState(true);
+    closeSheet($('thoughtAiSheet'));
+    thoughtUpdateAiStatus('KI-Zugang gespeichert. Ab der nächsten Nachricht beantwortet Reci mi deine Fragen über den verbundenen Dienst.');
+    showToast('KI-Verbindung gespeichert');
+  } catch {state.memory.ai=previous;feedback.textContent='Speichern fehlgeschlagen. Bitte noch einmal versuchen.';}
+}
+async function thoughtDisconnectAi() {
+  const previous={...state.memory.ai};
+  state.memory.ai={endpoint:'',accessCode:'',allowNotes:false};
+  try {
+    await persistState(true);
+    $('thoughtAiEndpoint').value=''; $('thoughtAiAccess').value=''; $('thoughtAiNotes').checked=false;
+    closeSheet($('thoughtAiSheet'));
+    thoughtUpdateAiStatus('KI-Verbindung getrennt. Neue Eingaben werden wieder nur lokal verarbeitet.');
+    showToast('Verbindung getrennt');
+  } catch {state.memory.ai=previous;$('thoughtAiFeedback').textContent='Trennen konnte nicht gespeichert werden.';}
+}
+function thoughtSelectAiContext(query) {
+  // Nur begrenzte, relevante Informationen verlassen das Gerät. Extra geschützte Notizen nie.
+  const ai=state.memory.ai;
+  if (!ai?.allowNotes) return [];
+  return thoughtFind(query,7)
+    .filter(r=>r.type!=='gespraech' && !r.locked && r.text)
+    .slice(0,5)
+    .map(r=>({project:String(r.project||'').slice(0,80),title:String(r.title||'').slice(0,140),text:String(r.text||'').slice(0,900)}));
+}
+async function thoughtAiRequest(text) {
+  const config=state.memory.ai;
+  const history=state.memory.messages.slice(-13,-1)
+    .filter(m=>['user','assistant'].includes(m.role))
+    .map(m=>({role:m.role,content:String(m.text||'').slice(0,2200)}));
+  const context=thoughtSelectAiContext(text);
+  const ctrl=new AbortController();
+  const timeout=setTimeout(()=>ctrl.abort(),42000);
+  try {
+    const response=await fetch(config.endpoint+'/chat',{
+      method:'POST', mode:'cors', cache:'no-store', signal:ctrl.signal,
+      headers:{'Content-Type':'application/json','X-Reci-Access':config.accessCode},
+      body:JSON.stringify({message:text.slice(0,12000),history,context})
+    });
+    const data=await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(data.error || `Server antwortet mit Fehler ${response.status}.`);
+    if (typeof data.answer!=='string' || !data.answer.trim()) throw new Error('Die KI hat keine gültige Antwort geliefert.');
+    return data;
+  } catch(err) {
+    if (err.name==='AbortError') throw new Error('Die KI antwortet nicht rechtzeitig. Bitte prüfe die Verbindung.');
+    if (err instanceof TypeError) throw new Error('KI-Dienst nicht erreichbar. Prüfe Adresse, Freigabe und Internetverbindung.');
+    throw err;
+  } finally {clearTimeout(timeout);}
+}
+function thoughtCaptureAiItems(aiItems, msgid, at) {
+  if (!Array.isArray(aiItems)) return 0;
+  let count=0;
+  for (const item of aiItems.slice(0,8)) {
+    if (!item || typeof item.text!=='string' || !item.text.trim()) continue;
+    const kind=['Idee','Projekt-Update','Wunsch','Erinnerung'].includes(item.kind)?item.kind:'Idee';
+    const text=item.text.trim().slice(0,3500);
+    let project=typeof item.project==='string'?item.project.trim().slice(0,80):'';
+    if (!project || project==='Unbekannt') project=thoughtProject(text);
+    const title=typeof item.title==='string' && item.title.trim()?item.title.trim().slice(0,100):thoughtTitle(text);
+    // Erkennung und Zuordnung bleiben als Vorschlag veränderbar.
+    state.memory.entries.push({id:uid(),messageId:msgid,text,title,project,kind,at,source:'ki-vorschlag'});
+    count++;
+  }
+  return count;
+}
+async function thoughtSend(e) {
+  e.preventDefault();
+  if (thoughtSending || !cryptoKey || !state) return;
+  if (dictWanted || isListening) stopRecognition();
+  const input=$('thoughtInput');
+  const text=input.value.trim();
+  if (!text) {input.focus();return;}
+  thoughtSending=true;$('thoughtSendBtn').disabled=true;
+  ensureThoughtMemory();
+  const msgid=uid();
+  const now=new Date().toISOString();
+  const userMessage={id:msgid,role:'user',text,at:now};
+  // Original vor Netzwerkverbindung lokal und verschlüsselt sichern.
+  state.memory.messages.push(userMessage);
+  try {
+    await persistState(true);
+  } catch {
+    state.memory.messages=state.memory.messages.filter(m=>m!==userMessage);
+    thoughtUpdateAiStatus('Speichern nicht möglich. Deine Eingabe bleibt im Textfeld.');
+    showToast('Deine Eingabe wurde nicht gespeichert.',4000);
+    thoughtSending=false;$('thoughtSendBtn').disabled=false;
+    return;
+  }
+  input.value='';state.memory.draft='';
+  thoughtRenderChat();thoughtToBottom();
+  let response='';
+  let count=0;
+  if (thoughtAiConnected()) {
+    thoughtUpdateAiStatus('Reci mi überlegt gerade …');
+    try {
+      const data=await thoughtAiRequest(text);
+      if (!cryptoKey || !state) return; // Während der Anfrage automatisch gesperrt: Original ist bereits gespeichert.
+      response=data.answer;
+      count=thoughtCaptureAiItems(data.items,msgid,now);
+      if (data.usage && typeof data.usage==='object') {
+        state.memory.aiUsage.calls=(state.memory.aiUsage.calls||0)+1;
+        state.memory.aiUsage.input=(state.memory.aiUsage.input||0)+(Number(data.usage.input_tokens)||0);
+        state.memory.aiUsage.output=(state.memory.aiUsage.output||0)+(Number(data.usage.output_tokens)||0);
+      }
+      thoughtUpdateAiStatus(count?`Antwort erhalten. ${count} ${count===1?'Gedanke':'Gedanken'} als Vorschlag gespeichert.`:'Antwort erhalten. Gespräch verschlüsselt gespeichert.');
+    } catch(err) {
+      if (!cryptoKey || !state) return;
+      response=`Ich konnte gerade keine KI-Antwort abrufen. Deine Aussage ist aber sicher im Gespräch gespeichert. ${err.message}`;
+      thoughtUpdateAiStatus('KI momentan nicht erreichbar. Die ursprüngliche Nachricht bleibt gespeichert.');
+    }
+  } else {
+    const query=thoughtIsQuery(text);
+    if (query) response=thoughtAnswerQuestion(text);
+    else {
+      const parts=thoughtSplit(text);
+      for (const part of parts) state.memory.entries.push({id:uid(),messageId:msgid,text:part,title:thoughtTitle(part),project:thoughtProject(part),kind:'Vorläufig',at:now,source:'lokal'});
+      count=parts.length;
+      response=`${count} ${count===1?'Gedanke wurde':'Gedanken wurden'} lokal gespeichert. Für ein echtes KI-Gespräch wähle oben „KI verbinden“. Die Sortierung erfolgt bis dahin nur nach Stichwörtern.`;
+    }
+    thoughtUpdateAiStatus('Lokaler Modus. Keine Übertragung an eine externe KI.');
+  }
+  state.memory.messages.push({id:uid(),role:'assistant',text:response,at:new Date().toISOString()});
+  try {
+    await persistState(true);
+    updateThoughtPortal();thoughtRenderChat();thoughtToBottom();
+  } catch {
+    // Der Nutzertext wurde bereits VOR dem Netzwerkabruf separat gespeichert.
+    thoughtUpdateAiStatus('Die Antwort konnte nicht dauerhaft gespeichert werden. Bitte eine neue Sicherung erstellen.');
+  } finally {thoughtSending=false;$('thoughtSendBtn').disabled=false;}
+}
+
+function thoughtAllProjects() {
+  return [...new Set([...THOUGHT_PROJECTS,...(state?.memory?.entries||[]).map(e=>e.project),...(state?.topics||[]).filter(t=>!t.deletedAt).map(t=>t.title)].filter(Boolean))];
+}
+function thoughtRenderEntries() {
+  const entries=(state?.memory?.entries||[]).slice().reverse();
+  $('thoughtWorldCount').textContent=`${entries.length} ${entries.length===1?'Gedanke':'Gedanken'}`;
+  const available=[...new Set(entries.map(e=>e.project))];
+  const projects=['Alle', ...available];
+  if (!projects.includes(thoughtProjectFilter)) thoughtProjectFilter='Alle';
+  $('thoughtProjectTabs').innerHTML=projects.map(p=>`<button type="button" class="thought-project-chip${p===thoughtProjectFilter?' active':''}" data-project="${escapeHtml(p)}">${escapeHtml(p)}${p!=='Alle'?` <small>${entries.filter(x=>x.project===p).length}</small>`:''}</button>`).join('');
+  const list=entries.filter(x=>thoughtProjectFilter==='Alle'||x.project===thoughtProjectFilter);
+  $('thoughtEntries').innerHTML=list.length ? list.map(e=>`<article class="thought-entry" data-id="${escapeHtml(e.id)}"><div class="thought-entry-meta"><span class="thought-entry-dot"></span><time>${escapeHtml(formatDate(e.at))}</time></div><h3>${escapeHtml(e.title)}</h3><p>${escapeHtml(e.text)}</p><label class="thought-project-label">Projekt <select class="thought-project-select" aria-label="Projektzuordnung ändern">${thoughtAllProjects().map(p=>`<option value="${escapeHtml(p)}" ${p===e.project?'selected':''}>${escapeHtml(p)}</option>`).join('')}</select></label></article>`).join('') : '<p class="thought-blank">Hier erscheinen deine Ideen, sobald du sie im Gespräch erzählst.</p>';
+}
+function thoughtRenderSearch() {
+  const q=$('thoughtSearchInput').value.trim();
+  if (!q) { $('thoughtSearchResults').innerHTML='<p class="thought-blank">Zum Beispiel: „Litterum“, „Kleiderschrank“ oder „Bibel“.</p>'; return; }
+  const results=thoughtFind(q,50);
+  $('thoughtSearchResults').innerHTML=results.length ? results.map(r=>`<button class="thought-result" type="button" data-kind="${escapeHtml(r.type)}" data-id="${escapeHtml(r.id)}"><span>${r.type==='notiz'?'BESTEHENDE NOTIZ':r.type==='gespraech'?'GESPRÄCH':'GESPEICHERTER GEDANKE'} · ${escapeHtml(r.project)}</span><strong>${escapeHtml(r.title)}</strong><small>${r.locked?'Extra geschützt, Text wird nicht angezeigt':escapeHtml(excerpt(r.text,250))}</small></button>`).join('') : '<p class="thought-blank">Dazu ist noch nichts gespeichert.</p>';
+}
+function wireThoughtWorld() {
+  $('thoughtHomeBtn').addEventListener('click', () => openThoughtWorld());
+  $('thoughtBackBtn').addEventListener('click', goHomeFromScreen);
+  $('thoughtSearchShortcut').addEventListener('click', () => {thoughtSetView('search');$('thoughtSearchInput').focus();});
+  $('thoughtAiBadge').addEventListener('click',thoughtOpenAiSettings);
+  $('thoughtAiSettingsForm').addEventListener('submit',thoughtSaveAiSettings);
+  $('thoughtAiClose').addEventListener('click',()=>closeSheet($('thoughtAiSheet')));
+  $('thoughtAiDisconnect').addEventListener('click',thoughtDisconnectAi);
+  document.querySelectorAll('.thought-tab').forEach(b=>b.addEventListener('click',()=>thoughtSetView(b.dataset.view)));
+  $('thoughtForm').addEventListener('submit',thoughtSend);
+  $('thoughtInput').addEventListener('input', () => {
+    if (!cryptoKey || !state) return;
+    ensureThoughtMemory();
+    state.memory.draft=$('thoughtInput').value;
+    persistState();
+  });
+  $('thoughtMicBtn').addEventListener('click', () => {
+    dictTarget=$('thoughtInput'); dictMicBtn=$('thoughtMicBtn');
+    toggleRecognition();
+  });
+  $('thoughtProjectTabs').addEventListener('click', e=>{
+    const b=e.target.closest('[data-project]'); if(!b) return;
+    thoughtProjectFilter=b.dataset.project; thoughtRenderEntries();
+  });
+  $('thoughtEntries').addEventListener('change',async e=>{
+    if (!e.target.matches('.thought-project-select')) return;
+    const row=e.target.closest('[data-id]');
+    const item=state?.memory?.entries.find(t=>t.id===row?.dataset.id);
+    if (!item) return;
+    const previous=item.project;
+    item.project=e.target.value;
+    try {await persistState(true);thoughtRenderEntries();showToast('Zuordnung gespeichert');}
+    catch {item.project=previous;thoughtRenderEntries();showToast('Zuordnung konnte nicht gespeichert werden');}
+  });
+  $('thoughtSearchInput').addEventListener('input',thoughtRenderSearch);
+  $('thoughtSearchResults').addEventListener('click',e=>{
+    const b=e.target.closest('.thought-result'); if(!b) return;
+    if (b.dataset.kind==='notiz') { openTopic(b.dataset.id); return; }
+    if (b.dataset.kind==='gespraech') { thoughtSetView('talk'); thoughtToBottom(); return; }
+    const entry=state?.memory?.entries.find(x=>x.id===b.dataset.id);
+    if (!entry) return;
+    thoughtProjectFilter=entry.project;thoughtSetView('world');
+    const row=[...$('thoughtEntries').querySelectorAll('[data-id]')].find(x=>x.dataset.id===entry.id);
+    if (row) {row.scrollIntoView({block:'center',behavior:'smooth'});row.classList.add('thought-highlight');setTimeout(()=>row.classList.remove('thought-highlight'),2500);}
+  });
 }
 
 boot().catch(() => {

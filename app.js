@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.5.8';
+const APP_VERSION = '3.5.9';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -535,6 +535,51 @@ function isBetweenWrapped(value, start, end) {
   return start <= end ? (value >= start && value <= end) : (value >= start || value <= end);
 }
 
+const BODY_DIAM_KM = {
+  sun: 1392700,
+  moon: 3474.8,
+  mercury: 4879.4,
+  venus: 12103.6,
+  mars: 6779,
+  jupiter: 139820,
+  saturn: 116460
+};
+
+function apparentDiameterDeg(diamKm, distKm) {
+  const d = Math.max(1, Number(distKm) || 1);
+  return 2 * Math.atan((diamKm / 2) / d) * 180 / Math.PI;
+}
+function apparentDiameterArcsec(diamKm, distKm) { return apparentDiameterDeg(diamKm, distKm) * 3600; }
+function angularVisualScale(arcsec, minArcsec, maxArcsec, minScale, maxScale, gamma = 0.52) {
+  const lo = Math.max(1e-6, minArcsec), hi = Math.max(lo + 1e-6, maxArcsec), val = Math.max(lo, Math.min(hi, arcsec));
+  const t = (Math.log(val) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
+  return minScale + (maxScale - minScale) * Math.pow(t, gamma);
+}
+function sunRenderSize(date, alt) {
+  const distKm = sunGeoXYZ(date).r * AU_KM;
+  const meanArcsec = 1919;
+  const arcsec = apparentDiameterArcsec(BODY_DIAM_KM.sun, distKm);
+  const ratio = Math.sqrt(arcsec / meanArcsec);
+  const base = 200 - alt * 36;
+  return Math.round(base * ratio);
+}
+function moonRenderSize(distKm, alt) {
+  const meanArcsec = 1864;
+  const arcsec = apparentDiameterArcsec(BODY_DIAM_KM.moon, distKm);
+  const ratio = Math.sqrt(arcsec / meanArcsec);
+  // Der Mond wird bewusst etwas kompakter gerendert als die Sonne,
+  // weil die volle Scheibe optisch größer wirkt als die Sonnenikone mit Strahlen.
+  const base = 86 - alt * 6.5;
+  return Math.round(base * ratio);
+}
+function planetRenderScale(key, distAu) {
+  const diamKm = BODY_DIAM_KM[key];
+  if (!diamKm || !distAu) return 1;
+  let arcsec = apparentDiameterArcsec(diamKm, distAu * AU_KM);
+  if (key === 'saturn') arcsec *= 1.55;
+  return angularVisualScale(arcsec, 4, 55, 0.72, 1.12, 0.58);
+}
+
 function placeSun() {
   const hero = document.querySelector('.hero');
   const sun = $('sun');
@@ -560,7 +605,7 @@ function placeSun() {
   // tief = warm und größer, hoch = weißgelb
   sun.style.setProperty('--sun-core', mixHex('#FFB866', '#FFFBEA', Math.min(1, alt * 1.6)));
   sun.style.setProperty('--sun-halo', mixHex('#FF9A4D', '#FFF1C2', Math.min(1, alt * 1.4)));
-  sun.style.setProperty('--sun-size', `${Math.round(200 - alt * 36)}px`);
+  sun.style.setProperty('--sun-size', `${sunRenderSize(now, alt)}px`);
   const fx = currentFx();
   sun.style.setProperty('--sun-veil', celestialVeil(fx).toFixed(2));
 }
@@ -850,8 +895,8 @@ function placeMoon() {
   const p = arcPoint(arc, f);
   moonOrb.style.left = `${p.x}px`;
   moonOrb.style.top = `${p.y}px`;
-  moonOrb.style.setProperty('--moon-size', `${Math.round(104 - p.alt * 8)}px`);
-  if (els.moonTap) { const hit = Math.round(62 - p.alt * 4); els.moonTap.style.left = `${p.x}px`; els.moonTap.style.top = `${p.y}px`; els.moonTap.style.width = `${hit}px`; els.moonTap.style.height = `${hit}px`; }
+  moonOrb.style.setProperty('--moon-size', `${moonRenderSize(st.distKm, p.alt)}px`);
+  if (els.moonTap) { const hit = Math.max(48, Math.round(moonRenderSize(st.distKm, p.alt) * 0.7)); els.moonTap.style.left = `${p.x}px`; els.moonTap.style.top = `${p.y}px`; els.moonTap.style.width = `${hit}px`; els.moonTap.style.height = `${hit}px`; }
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   moonOrb.style.setProperty('--moon-earthshine', night ? '.1' : '.04');
   moonOrb.style.setProperty('--moon-wash', night ? '0' : '.28');
@@ -1227,7 +1272,8 @@ function placePlanets() {
     const dim = sun.alt > -4 ? ' dim' : '';
     const name = PLANET_META[p.key].name;
     const light = planetVisualLight(p, sun.alt);
-    const style = `left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px;--planet-opacity:${light.opacity.toFixed(2)};--planet-glow:${light.glow}px;--planet-glow-alpha:${light.glowAlpha};--planet-brightness:${light.brightness}`;
+    const scale = planetRenderScale(p.key, p.distance);
+    const style = `left:${pt.x.toFixed(1)}px;top:${pt.y.toFixed(1)}px;--planet-opacity:${light.opacity.toFixed(2)};--planet-glow:${light.glow}px;--planet-glow-alpha:${light.glowAlpha};--planet-brightness:${light.brightness};--planet-scale:${scale.toFixed(3)}`;
     return `<button type="button" class="planet-dot planet-${p.key}${dim}" data-planet="${p.key}" style="${style}" aria-label="${name} anzeigen"><span class="planet-disc" aria-hidden="true"></span></button>`;
   }).join('');
 

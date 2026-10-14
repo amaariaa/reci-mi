@@ -323,8 +323,8 @@ dialog.sheet input.switch:checked { background: var(--accent-text); }
 .planet-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
 .planet-dot { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--hero-ink); pointer-events: auto; display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
 .planet-dot:focus-visible { outline: 2px solid color-mix(in srgb, var(--hero-ink) 80%, transparent); outline-offset: 1px; }
-.planet-disc { position: relative; display: block; width: 12px; height: 12px; border-radius: 50%; opacity: var(--planet-opacity, .86); filter: brightness(var(--planet-brightness, 1)) drop-shadow(0 0 var(--planet-glow, 6px) rgba(var(--planet-glow-rgb, 255,255,255), var(--planet-glow-alpha, .38))); box-shadow: inset -1px -1px 2px rgba(0,0,0,.28), 0 0 1px rgba(0,0,0,.55); transition: transform .18s ease, opacity .25s ease, filter .25s ease; }
-.planet-dot:active .planet-disc { transform: scale(1.22); }
+.planet-disc { position: relative; display: block; width: 12px; height: 12px; border-radius: 50%; opacity: var(--planet-opacity, .86); transform: scale(var(--planet-scale, 1)); transform-origin: center center; filter: brightness(var(--planet-brightness, 1)) drop-shadow(0 0 var(--planet-glow, 6px) rgba(var(--planet-glow-rgb, 255,255,255), var(--planet-glow-alpha, .38))); box-shadow: inset -1px -1px 2px rgba(0,0,0,.28), 0 0 1px rgba(0,0,0,.55); transition: transform .18s ease, opacity .25s ease, filter .25s ease; }
+.planet-dot:active .planet-disc { transform: scale(calc(var(--planet-scale, 1) * 1.22)); }
 .planet-dot.dim .planet-disc { filter: brightness(calc(var(--planet-brightness, 1) * .92)) drop-shadow(0 0 min(4px, var(--planet-glow, 4px)) rgba(var(--planet-glow-rgb, 255,255,255), calc(var(--planet-glow-alpha, .25) * .55))); }
 .planet-mercury { --planet-glow-rgb: 220,226,232; }
 .planet-venus { --planet-glow-rgb: 255,241,196; }

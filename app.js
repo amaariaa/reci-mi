@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.8.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -329,6 +329,7 @@ function applySky(fromWeather = false) {
   placePlanets();
   updatePlaceClock();
   if (cloudFields.back) paintSkyClouds();
+  refreshOpenCelestialInfo();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', top);
 
@@ -918,7 +919,7 @@ function positionSkyInfoNear(btn) {
     info.style.top = `${pos.top}px`;
   });
 }
-function showSunInfo(btn) {
+function showSunInfo(btn, keepPos = false) {
   const wall = nowForSky(skyDayOffset);
   const instant = instantOfSky(wall);
   const p = sunSkyState(instant);
@@ -929,9 +930,9 @@ function showSunInfo(btn) {
   const altitude = p.alt >= 0 ? `${Math.round(p.alt)}° über Horizont` : `${Math.abs(Math.round(p.alt))}° unter Horizont`;
   const daylight = formatDaylightMinutes(set - rise);
   setSkyInfoContent(`<strong>Sonne</strong><span>${dir} · ${altitude}</span><span>Entfernung: ${formatDistanceKm(distKm)}</span><span>Aufgang ${minutesToClock(rise)} · Untergang ${minutesToClock(set)}</span><span>Tageslänge: ${daylight}</span>${infoLink(CELESTIAL_URLS.sun)}`, 'sun');
-  positionSkyInfoNear(btn);
+  if (!keepPos) positionSkyInfoNear(btn);
 }
-function showMoonInfo(btn) {
+function showMoonInfo(btn, keepPos = false) {
   const wall = nowForSky(skyDayOffset);
   const instant = instantOfSky(wall);
   const st = moonState(instant);
@@ -940,7 +941,14 @@ function showMoonInfo(btn) {
   const rise = els.moonriseLabel?.textContent || '--:--';
   const set = els.moonsetLabel?.textContent || '--:--';
   setSkyInfoContent(`<strong>Mond</strong><span>${moonPhaseName(st.age)} · ${Math.round(st.illum * 100)} % beleuchtet</span><span>${dir} · ${altitude}</span><span>Entfernung: ${formatDistanceKm(st.distKm)}</span><span>Aufgang ${rise} · Untergang ${set}</span>${infoLink(CELESTIAL_URLS.moon)}`, 'moon');
-  positionSkyInfoNear(btn);
+  if (!keepPos) positionSkyInfoNear(btn);
+}
+/* Offene Sonnen-/Mond-Infos immer auf den aktuellen Stand bringen (sonst bleibt ein alter Wert stehen). */
+function refreshOpenCelestialInfo() {
+  const info = $('planetInfo');
+  if (!info || info.classList.contains('hidden')) return;
+  if (activePlanetInfoKey === 'sun') showSunInfo(els.sunTap, true);
+  else if (activePlanetInfoKey === 'moon') showMoonInfo(els.moonTap, true);
 }
 function toggleCelestialInfo(key, btn) {
   const info = $('planetInfo');
@@ -1340,6 +1348,7 @@ function cloudPaletteNow() {
     shadow = mixHex(shadow, mixHex('#232834', '#4A5364', kMid * .7), dark * .85);
   }
   if (fx.storm) { lit = mixHex(lit, '#6A7384', .5); shadow = mixHex(shadow, '#161A24', .55); }
+  shadow = mixHex(shadow, lit, dark > .4 ? .18 : .38);
   return { lit: hexToRgb(lit), shadow: hexToRgb(shadow), night: 1 - kMid, key: lit + shadow + (fx.rain > 0 ? 'r' : '') };
 }
 
@@ -1354,7 +1363,7 @@ function paintCloudTile(name, field, cover, pal, opts) {
   const img = g.createImageData(W, H);
   const d = img.data;
   const ls = pal.lit, ss = pal.shadow;
-  const alphaMul = opts.alpha * (1 - pal.night * .24);
+  const alphaMul = opts.alpha * (1 - pal.night * .34);
   for (let i = 0; i < W * H; i++) {
     const r = field.raw[i];
     const rr = r + (field.det[i] - .5) * opts.erode;
@@ -1425,12 +1434,12 @@ function paintSkyClouds(force = false) {
   const heavy = fx.rain > .5 || fx.storm || fx.snow > .5;
   const ov = Math.max(0, Math.min(1, (cover - .7) / .25));
   const backTile = cover < .1 || !cloudFields.back ? null
-    : paintCloudTile('back', cloudFields.back, cover < .99 ? (cover > .8 ? cover : cover * (.62 + .45 * cover)) : 1, pal,
-        { soft: .05 + .07 * cover + .10 * ov, alpha: heavy ? 1 : .97, gain: 4.6 - 2.3 * ov, depth: (heavy ? .85 : .5) * (1 - .5 * ov), erode: .16 - .11 * ov, tex: .55 - .33 * ov });
+    : paintCloudTile('back', cloudFields.back, cover < .99 ? (cover > .8 ? cover : Math.pow(cover, 1.45) * .8) : 1, pal,
+        { soft: .09 + .06 * cover + .10 * ov, alpha: heavy ? 1 : .88, gain: 3.4 - 1.6 * ov, depth: (heavy ? .7 : .28) * (1 - .5 * ov), erode: .13 - .09 * ov, tex: .26 - .12 * ov });
   const frontCover = cover < .3 ? 0 : Math.min(.85, cover * .72);
   const frontTile = !frontCover || !cloudFields.front ? null
     : paintCloudTile('front', cloudFields.front, frontCover, pal,
-        { soft: .12, alpha: cover > .85 ? .5 : .38, gain: 3.0, depth: .4, erode: .12, tex: .3 });
+        { soft: .16, alpha: cover > .85 ? .45 : .30, gain: 2.4, depth: .3, erode: .10, tex: .18 });
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;
@@ -1454,8 +1463,8 @@ function renderSkyClouds() {
     clearTimeout(cloudGenTimer);
     // erst nach dem ersten Bild rechnen, damit die App sofort startet
     cloudGenTimer = setTimeout(() => {
-      cloudFields.back = genCloudField(11, { oct: 4, cx: 5, cy: 8, gain: .5, warpX: .09, warpY: .10, lx: 4, ly: -1.2 });
-      cloudFields.front = genCloudField(73, { oct: 3, cx: 3, cy: 10, gain: .5, warpX: .12, warpY: .10, lx: 5, ly: -1 });
+      cloudFields.back = genCloudField(11, { dx: 8, dy: 10, oct: 4, cx: 5, cy: 8, gain: .5, warpX: .09, warpY: .10, lx: 4, ly: -1.2 });
+      cloudFields.front = genCloudField(73, { dx: 6, dy: 8, oct: 3, cx: 3, cy: 10, gain: .5, warpX: .12, warpY: .10, lx: 5, ly: -1 });
       cloudFields.key = 'v1';
       paintSkyClouds(true);
     }, 30);
@@ -1519,289 +1528,211 @@ function scheduleFlash() {
   }, 5000 + Math.random() * 9000);
 }
 
-/* =====================================================================
-   V3.8 · Regen und Schnee mit echter Tiefe
-   Jedes Teilchen hat eine Entfernung (z). Nah = groß, schnell, kräftig,
-   fern = klein, langsam, zart. Dadurch wirkt es räumlich, und Größe,
-   Tempo und Helligkeit passen immer zusammen.
-   Regen: Leicht, Normal, Stark, Gewitter (mit Wind, Blitzen und Dunst).
-   Schnee: Leicht, Normal, Stark (Kristalle, die sich drehen und glitzern).
-   ===================================================================== */
+/* Regen und Schnee: unverändert aus V3.7.6 (Naturregen mit Tropfenform, Eiskristalle), von dir ausgewählt. */
+function makeWaterDropSprite() {
+  const sprite = document.createElement('canvas');
+  sprite.width = 56;
+  sprite.height = 112;
+  const g = sprite.getContext('2d');
+  if (!g) return sprite;
+
+  // Hintergrund bleibt vollständig transparent. Die Form hat eine sanfte,
+  // gebrochene Lichtkante, eine gläserne Mitte und eine leicht gerundete Basis.
+  g.beginPath();
+  g.moveTo(28, 7);
+  g.bezierCurveTo(25, 21, 13, 48, 11, 68);
+  g.bezierCurveTo(8, 88, 17, 103, 28, 104);
+  g.bezierCurveTo(40, 104, 48, 89, 45, 70);
+  g.bezierCurveTo(43, 49, 31, 19, 28, 7);
+  g.closePath();
+  const glass = g.createLinearGradient(8, 15, 47, 100);
+  glass.addColorStop(0, 'rgba(246,251,255,.10)');
+  glass.addColorStop(.19, 'rgba(220,237,252,.52)');
+  glass.addColorStop(.42, 'rgba(171,203,234,.12)');
+  glass.addColorStop(.75, 'rgba(204,228,252,.25)');
+  glass.addColorStop(1, 'rgba(244,251,255,.65)');
+  g.fillStyle = glass;
+  g.fill();
+  g.lineWidth = 2.5;
+  g.strokeStyle = 'rgba(235,247,255,.72)';
+  g.stroke();
+
+  const glint = g.createLinearGradient(15, 21, 26, 82);
+  glint.addColorStop(0, 'rgba(255,255,255,.82)');
+  glint.addColorStop(.45, 'rgba(255,255,255,.31)');
+  glint.addColorStop(1, 'rgba(255,255,255,0)');
+  g.strokeStyle = glint;
+  g.lineWidth = 3.8;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(24, 28);
+  g.bezierCurveTo(18, 45, 16, 63, 17, 80);
+  g.stroke();
+  const lowLight = g.createRadialGradient(32, 87, 1, 32, 88, 18);
+  lowLight.addColorStop(0, 'rgba(253,255,255,.42)');
+  lowLight.addColorStop(1, 'rgba(253,255,255,0)');
+  g.fillStyle = lowLight;
+  g.fillRect(11, 68, 34, 36);
+  return sprite;
+}
+
+const WATER_DROP_SPRITE = makeWaterDropSprite();
+
+/* Winterhimmel V3.7.3: gecachte Eiskristall-Sprites, zarte Brechungslichter.
+   Nicht jede Flocke ist perfekt sechseckig. Größere Kristalle zeigen Struktur,
+   entfernte Teilchen bleiben klein und weich. */
 function makeSnowCrystalSprite(variant = 0) {
-  const S = 128, c = S / 2;
   const surface = document.createElement('canvas');
-  surface.width = S; surface.height = S;
+  surface.width = 96;
+  surface.height = 96;
   const g = surface.getContext('2d');
   if (!g) return surface;
-  const arms = (width, color, extra) => {
-    g.save();
-    g.translate(c, c);
-    g.rotate(variant * Math.PI / 10);
-    g.lineCap = 'round';
-    g.strokeStyle = color;
-    for (let a = 0; a < 6; a++) {
-      g.save(); g.rotate(a * Math.PI / 3);
-      const len = (variant === 1 ? 40 : variant === 2 ? 34 : 37) * (a === 4 ? .93 : 1);
-      g.lineWidth = width + extra;
-      g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -len); g.stroke();
-      const branches = variant === 1 ? [16, 28] : [13, 24, 32];
-      for (const b of branches) {
-        if (b > len - 3) continue;
-        const arm = variant === 2 ? 8.5 : 7.5;
-        g.lineWidth = Math.max(1, width * .62 + extra);
-        g.beginPath(); g.moveTo(0, -b); g.lineTo(-arm, -b - arm * 1.05); g.moveTo(0, -b); g.lineTo(arm, -b - arm * 1.05); g.stroke();
-      }
-      g.restore();
+  const c = 48;
+  const halo = g.createRadialGradient(c,c,1,c,c,38);
+  halo.addColorStop(0,'rgba(242,251,255,.35)');
+  halo.addColorStop(.42,'rgba(210,236,255,.11)');
+  halo.addColorStop(1,'rgba(230,248,255,0)');
+  g.fillStyle = halo;
+  g.fillRect(0,0,96,96);
+  g.save();
+  g.translate(c,c);
+  g.rotate(variant * Math.PI/10);
+  g.lineCap = 'round';
+  // Kleine Asymmetrie verhindert die Wirkung eines immer gleichen Symbols.
+  for (let a=0; a<6; a++) {
+    g.save(); g.rotate(a*Math.PI/3);
+    const len = (variant===1 ? 30 : variant===2 ? 25 : 28) * (a===4 ? .92 : 1);
+    const edge = g.createLinearGradient(0,0,0,-len);
+    edge.addColorStop(0,'rgba(255,255,255,.94)');
+    edge.addColorStop(.6,'rgba(231,247,255,.83)');
+    edge.addColorStop(1,'rgba(205,232,255,.3)');
+    g.strokeStyle = edge; g.lineWidth=2.3;
+    g.beginPath();g.moveTo(0,0);g.lineTo(0,-len);g.stroke();
+    const branches = variant===1 ? [12,21] : [10,18,24];
+    for (const b of branches) {
+      if (b>len-2) continue;
+      const arm=variant===2 ? 6 : 5.5;
+      g.lineWidth=1.5;
+      g.beginPath();g.moveTo(0,-b);g.lineTo(-arm,-b-arm*1.05);
+      g.moveTo(0,-b);g.lineTo(arm,-b-arm*1.05);g.stroke();
     }
     g.restore();
-  };
-  // weiches Leuchten
-  const halo = g.createRadialGradient(c, c, 2, c, c, 52);
-  halo.addColorStop(0, 'rgba(246,252,255,.42)');
-  halo.addColorStop(.5, 'rgba(214,236,255,.10)');
-  halo.addColorStop(1, 'rgba(230,248,255,0)');
-  g.fillStyle = halo; g.fillRect(0, 0, S, S);
-  // zarter blaugrauer Rand, damit die Flocke auch vor hellem Himmel sichtbar bleibt
-  arms(2.4, 'rgba(120,150,195,.34)', 2.2);
-  g.shadowColor = 'rgba(210,235,255,.95)'; g.shadowBlur = 5;
-  arms(2.6, 'rgba(255,255,255,.96)', 0);
-  g.shadowBlur = 0;
-  g.fillStyle = 'rgba(255,255,255,.98)';
-  g.beginPath(); g.arc(c, c, 4.4, 0, Math.PI * 2); g.fill();
+  }
+  g.fillStyle='rgba(255,255,255,.96)';
+  g.beginPath();g.arc(0,0,3.4,0,Math.PI*2);g.fill();
+  g.restore();
   return surface;
 }
-const SNOW_CRYSTALS = [0, 1, 2].map(makeSnowCrystalSprite);
-const SNOW_DOT = (() => {
-  const s = document.createElement('canvas'); s.width = s.height = 48;
-  const g = s.getContext('2d');
-  if (!g) return s;
-  const r = g.createRadialGradient(24, 24, 0, 24, 24, 23);
-  r.addColorStop(0, 'rgba(255,255,255,.95)'); r.addColorStop(.35, 'rgba(248,252,255,.62)'); r.addColorStop(1, 'rgba(235,245,255,0)');
-  g.fillStyle = r; g.fillRect(0, 0, 48, 48);
-  return s;
-})();
+const SNOW_CRYSTALS = [0,1,2].map(makeSnowCrystalSprite);
 
 function makePrecip(canvas) {
-  const ctx = canvas.getContext('2d', { alpha: true });
+  const ctx = canvas.getContext('2d', { alpha:true });
   let drops = [];
-  let kind = 'none', amount = 0, storm = 0;
-  let bolt = null, mist = null;
-  const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const clamp01 = v => Math.max(0, Math.min(1, v));
-
+  let kind = 'none';
+  let amount = 0;
+  let motionReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const layer = {
-    canvas, w: 0, h: 0,
+    canvas,
+    w: 0,
+    h: 0,
     setup(fx) {
       const nextKind = fx.snow > 0 ? 'snow' : fx.rain > 0 ? 'rain' : 'none';
       const nextAmount = nextKind === 'snow' ? fx.snow : fx.rain;
-      const nextStorm = fx.storm ? 1 : 0;
-      const changed = nextKind !== kind || Math.abs(nextAmount - amount) > .04 || nextStorm !== storm;
-      kind = nextKind; amount = nextAmount; storm = nextStorm;
+      const changed = nextKind !== kind || Math.abs(nextAmount - amount) > .08;
+      kind = nextKind;
+      amount = nextAmount;
       this.resize();
       if (!changed && drops.length && kind !== 'none') return;
-      mist = null;
-      if (kind === 'none') { drops = []; bolt = null; ctx.clearRect(0, 0, this.w, this.h); return; }
-      const area = Math.max(.6, Math.min(1.7, (this.w * this.h) / (390 * 380)));
-      let count;
-      if (kind === 'rain') count = 16 + 290 * Math.pow(amount, 1.55) * (storm ? 1.15 : 1);
-      else count = 26 + 230 * Math.pow(amount, 1.2);
-      drops = Array.from({ length: Math.round(count * area) }, () => this.spawn(true));
+      if (kind === 'none') { drops = []; ctx.clearRect(0, 0, this.w, this.h); return; }
+      const areaScale = Math.max(.68, Math.min(1.55, Math.sqrt((this.w * this.h) / 195000)));
+      const count = Math.round((kind === 'snow' ? 19 + amount * 47 : 26 + amount * 108) * areaScale);
+      drops = Array.from({length:count}, () => this.spawn(true));
     },
     resize() {
       const r = canvas.getBoundingClientRect();
-      const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.max(1, Math.round(r.width));
+      const h = Math.max(1, Math.round(r.height));
+      const dpr = Math.min(1.8, window.devicePixelRatio || 1);
       if (this.w === w && this.h === h && this.dpr === dpr) return;
-      this.w = w; this.h = h; this.dpr = dpr;
+      this.w = w;
+      this.h = h;
+      this.dpr = dpr;
       canvas.width = Math.max(1, Math.round(w * dpr));
       canvas.height = Math.max(1, Math.round(h * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      mist = null;
     },
     spawn(anywhere = false) {
+      // z beschreibt die Entfernung. Größere Tropfen bewegen sich optisch
+      // schneller, kleine Tropfen bleiben zart im Hintergrund.
+      const roll = Math.random();
+      const depth = roll < .25 ? 0 : roll < .78 ? 1 : 2;
+      const jitter = .72 + Math.random() * .58;
       const snow = kind === 'snow';
-      // z: 0 = weit weg, 1 = direkt vor der Kamera. Viele ferne, wenige nahe Teilchen.
-      const z = Math.pow(Math.random(), snow ? 1.35 : 1.4);
-      const bin = z < .34 ? 0 : z < .6 ? 1 : z < .82 ? 2 : 3;
-      const o = {
-        z, bin,
-        x: Math.random() * (this.w + 120) - 60,
-        y: anywhere ? Math.random() * (this.h + 40) - 20 : -(20 + Math.random() * 80),
-        phase: Math.random() * 6.283, tilt: Math.random() * 6.283,
-        shimmer: .6 + Math.random() * .8, spin: (Math.random() - .5) * .9,
-        rot: Math.random() * 6.283, sprite: (Math.random() * 3) | 0
+      const size = snow ? [1.3, 3.1, 6.3][depth] * jitter : [1.25, 2.85, 5.35][depth] * jitter;
+      const speed = snow ? [17, 32, 52][depth] * jitter : [115, 195, 315][depth] * jitter;
+      return {
+        x: Math.random() * (this.w + 32) - 16,
+        y: anywhere ? Math.random() * this.h : -(12 + Math.random() * 42),
+        w: size, h: snow ? size : size * (2.1 + Math.random() * .65),
+        speed,
+        phase: Math.random() * Math.PI * 2,
+        depth,
+        opacity: snow ? [.13, .54, .83][depth] : [.32, .55, .84][depth],
+        sprite: Math.floor(Math.random()*SNOW_CRYSTALS.length),
+        rotation: Math.random()*Math.PI*2,
+        spin: (Math.random()-.5)*.6,
+        shimmer: .6 + Math.random()*.4,
+        drift: (Math.random() - .5) * (snow ? 18 : 23)
       };
-      if (snow) {
-        o.size = (3 + 31 * Math.pow(z, 1.45)) * (.85 + Math.random() * .3);
-        o.speed = (15 + 68 * z) * (.78 + .5 * amount) * (.9 + Math.random() * .2);
-        o.alpha = .30 + .62 * z;
-      } else {
-        o.len = (7 + 64 * Math.pow(z, 1.25)) * (.72 + .55 * amount) * (.9 + Math.random() * .2);
-        o.speed = (250 + 900 * z) * (.78 + .38 * amount) * (storm ? 1.12 : 1) * (.93 + Math.random() * .14);
-        o.alpha = .16 + .56 * z;
-      }
-      return o;
     },
-    active() { return kind !== 'none' && canvas.offsetParent !== null && this.w > 3 && this.h > 3; },
-
-    strike() {
-      if (kind !== 'rain' || !storm || !this.active()) return;
-      const pts = [];
-      let x = this.w * (.18 + Math.random() * .64), y = -6;
-      const endY = this.h * (.5 + Math.random() * .35);
-      while (y < endY) {
-        pts.push([x, y]);
-        y += 16 + Math.random() * 26;
-        x += (Math.random() - .5) * 38;
-      }
-      pts.push([x, y]);
-      const branches = [];
-      for (let b = 0; b < 2; b++) {
-        const i = 2 + ((Math.random() * (pts.length - 3)) | 0);
-        if (!pts[i]) continue;
-        let bx = pts[i][0], by = pts[i][1];
-        const dir = Math.random() < .5 ? -1 : 1, seg = [[bx, by]];
-        for (let k = 0; k < 3 + ((Math.random() * 3) | 0); k++) { bx += dir * (8 + Math.random() * 16); by += 10 + Math.random() * 16; seg.push([bx, by]); }
-        branches.push(seg);
-      }
-      bolt = { pts, branches, t0: performance.now(), dur: 520 };
+    active() {
+      return kind !== 'none' && canvas.offsetParent !== null && this.w > 3 && this.h > 3;
     },
-
     frame(dt, elapsed) {
-      const { w, h } = this;
+      const {w, h} = this;
       ctx.clearRect(0, 0, w, h);
-      const host = canvas.parentElement;
-      const night = host?.classList.contains('night');
-      if (kind === 'rain') this.drawRain(dt, elapsed, night);
-      else if (kind === 'snow') this.drawSnow(dt, elapsed, night);
-      if (bolt) this.drawBolt();
-      ctx.globalAlpha = 1;
-    },
-
-    drawRain(dt, elapsed, night) {
-      const { w, h } = this;
-      // Wind: gleichmäßige Neigung, bei Gewitter mit Böen. Alle Tropfen teilen sich dieselbe Richtung.
-      let slope = .07 + .20 * amount;
-      if (storm) slope += .10 + .16 * Math.pow(Math.max(0, Math.sin(elapsed * .31)), 2) + .04 * Math.sin(elapsed * 1.7);
-      const nl = Math.hypot(slope, 1), dx = -slope / nl, dy = 1 / nl;   // Blickrichtung des Streifens (Kopf unten links)
-      const tone = night ? '203,218,244' : '238,246,255';
-      const shade = night ? null : '70,92,128';
-      const BIN_W = [.7, 1.1, 1.7, 2.5];
-      const paths = [[], [], [], []];
-      for (const d of drops) {
-        const hx = d.x, hy = d.y;                   // Kopf
-        const tx = hx - dx * d.len, ty = hy - dy * d.len; // Schweif liegt oben rechts
-        paths[d.bin].push(hx, hy, tx, ty, d.alpha);
-        d.y += d.speed * dt * dy;
-        d.x += d.speed * dt * dx;
-        if (d.y - d.len > h + 8 || d.x < -70) Object.assign(d, this.spawn(false), { x: Math.random() * (w + 140) - 20 });
-      }
-      ctx.lineCap = 'round';
-      for (let b = 0; b < 4; b++) {
-        const arr = paths[b];
-        if (!arr.length) continue;
-        const lw = BIN_W[b];
-        // dezenter dunkler Unterrand: Regen ist vor hellem Himmel nie rein weiß
-        if (shade && b >= 1) {
-          ctx.lineWidth = lw + 1.0; ctx.strokeStyle = `rgba(${shade},${b === 3 ? .13 : .08})`; ctx.globalAlpha = 1;
-          ctx.beginPath();
-          for (let i = 0; i < arr.length; i += 5) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i + 2], arr[i + 3]); }
-          ctx.stroke();
+      const isNight = canvas.parentElement?.classList.contains('night');
+      if (kind === 'rain') {
+        for (const d of drops) {
+          // Jede Ebene hat eine eigene Lichtdurchlässigkeit. Dezente
+          // Highlights ersetzen die früheren auffälligen weißen Striche.
+          const twinkle = .94 + .06 * Math.sin(elapsed * 1.3 + d.phase);
+          ctx.globalAlpha = d.opacity * (isNight ? 1.12 : .92) * twinkle;
+          const drift = d.speed * .055 + d.drift;
+          ctx.drawImage(WATER_DROP_SPRITE,
+            d.x - d.w * .5, d.y - d.h * .48, d.w, d.h);
+          d.y += d.speed * dt;
+          d.x -= drift * dt;
+          if (d.y > h + 20 || d.x < -24) Object.assign(d, this.spawn(false));
         }
-        // Schweif (zart) und Kopf (heller) – wie ein echter Tropfen mit Bewegungsunschärfe
-        for (let pass = 0; pass < 2; pass++) {
-          ctx.lineWidth = pass ? lw : lw * .8;
-          const meanA = (b === 0 ? .50 : b === 1 ? .62 : b === 2 ? .74 : .86) * (night ? 1.05 : 1);
-          ctx.strokeStyle = `rgba(${tone},${(pass ? meanA : meanA * .42).toFixed(3)})`;
-          ctx.beginPath();
-          for (let i = 0; i < arr.length; i += 5) {
-            const hx = arr[i], hy = arr[i + 1], tx = arr[i + 2], ty = arr[i + 3];
-            if (pass) { ctx.moveTo(hx, hy); ctx.lineTo(hx + (tx - hx) * .42, hy + (ty - hy) * .42); }
-            else { ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); }
-          }
-          ctx.stroke();
-        }
-        // Nahe Tropfen: weiches Streulicht, so als wären sie leicht unscharf
-        if (b === 3) {
-          ctx.lineWidth = lw * 2.8; ctx.strokeStyle = `rgba(${tone},.10)`;
-          ctx.beginPath();
-          for (let i = 0; i < arr.length; i += 5) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i] + (arr[i + 2] - arr[i]) * .5, arr[i + 1] + (arr[i + 3] - arr[i + 1]) * .5); }
-          ctx.stroke();
-        }
-      }
-      // Dunst über dem Boden bei starkem Regen
-      if (amount > .6) {
-        if (!mist) {
-          mist = ctx.createLinearGradient(0, h * .55, 0, h);
-          mist.addColorStop(0, 'rgba(200,212,230,0)');
-          mist.addColorStop(1, `rgba(200,212,230,${(.10 + .10 * amount).toFixed(2)})`);
-        }
-        ctx.globalAlpha = night ? .6 : 1; ctx.fillStyle = mist; ctx.fillRect(0, h * .55, w, h * .45); ctx.globalAlpha = 1;
-      }
-    },
-
-    drawSnow(dt, elapsed, night) {
-      const { w, h } = this;
-      const blizzard = amount > .85;
-      const wind = (.35 + amount * .9) * (blizzard ? 1.5 : 1) + Math.sin(elapsed * .21) * .35;
-      for (const d of drops) {
-        const sway = Math.sin(d.phase) * (6 + 12 * d.z);
-        d.phase += dt * (.8 + d.z * .6);
-        d.tilt += dt * (.7 + d.shimmer);
-        d.rot += d.spin * dt;
-        d.y += d.speed * dt;
-        d.x += (wind * d.speed * .55 + sway * .6) * dt * (night ? 1 : 1);
-        const s = d.size;
-        // sanftes Funkeln: nur ab und zu, nur bei mittleren und nahen Flocken
-        const sparkle = d.z > .42 ? Math.pow(Math.max(0, Math.sin(elapsed * (1.1 + d.shimmer * .9) + d.phase * 3.1)), 22) : 0;
-        ctx.globalAlpha = Math.min(.97, d.alpha * (night ? .92 : .86) * (1 + sparkle * .25));
-        if (d.z < .3) {
-          // ferne Flocken: weiche Punkte, ohne Struktur
-          const sz = s * 2.1;
-          ctx.drawImage(SNOW_DOT, d.x - sz / 2, d.y - sz / 2, sz, sz);
-        } else {
+      } else if (kind === 'snow') {
+        for (const d of drops) {
+          const glow = (Math.sin(elapsed * .78 + d.phase * 4) + 1) * .5;
+          // Schimmer nur bei einzelnen Flocken, kein stroboskopisches Blinken.
+          const glint = d.depth === 2 ? (1 + glow * .13 * d.shimmer) : 1;
+          ctx.globalAlpha = Math.min(.95, d.opacity * (isNight ? .91 : .82) * glint);
           ctx.save();
-          ctx.translate(d.x, d.y);
-          ctx.rotate(d.rot);
-          // Taumeln: Flocke kippt in der Luft, dadurch wirkt sie dreidimensional
-          ctx.scale(1, .42 + .58 * Math.abs(Math.cos(d.tilt)));
-          const sz = s * 2.5;
-          ctx.drawImage(SNOW_CRYSTALS[d.sprite], -sz / 2, -sz / 2, sz, sz);
+          ctx.translate(d.x,d.y);
+          // Alle Schneepartikel haben eine Kristallform. Im Hintergrund
+          // transparent und klein, im Vordergrund detailreich mit Schimmer.
+          // Keine deckenden weißen Kreise mehr über dem Himmel.
+          ctx.rotate(d.rotation);
+          const size=d.w*(d.depth === 0 ? 5.5 : d.depth === 2 ? 3.5 : 2.8);
+          const crystal=SNOW_CRYSTALS[d.sprite];
+          ctx.drawImage(crystal,-size/2,-size/2,size,size);
           ctx.restore();
+          if (d.depth === 2 && glow > .93 && d.shimmer > .87) {
+            ctx.globalAlpha = d.opacity * (glow-.93) * 1.3;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(d.x,d.y,.9,0,Math.PI*2); ctx.fill();
+          }
+          d.y += d.speed * dt;
+          d.phase += dt * (1.0 + d.depth*.15);
+          d.rotation += d.spin*dt;
+          d.x += (d.drift + Math.sin(d.phase) * 11) * dt;
+          if (d.y > h + 18 || d.x < -28 || d.x > w + 28) Object.assign(d, this.spawn(false));
         }
-        if (sparkle > .25) {
-          ctx.globalAlpha = Math.min(1, sparkle * .95);
-          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = .9; ctx.lineCap = 'round';
-          const r = 2 + s * .55 * sparkle;
-          ctx.beginPath();
-          ctx.moveTo(d.x - r, d.y); ctx.lineTo(d.x + r, d.y);
-          ctx.moveTo(d.x, d.y - r); ctx.lineTo(d.x, d.y + r);
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(255,255,255,.95)';
-          ctx.beginPath(); ctx.arc(d.x, d.y, .9 + sparkle, 0, 6.283); ctx.fill();
-        }
-        if (d.y - s > h + 20 || d.x < -70 || d.x > w + 70) Object.assign(d, this.spawn(false), { x: Math.random() * (w + 140) - 70 });
       }
-    },
-
-    drawBolt() {
-      const t = performance.now() - bolt.t0;
-      if (t > bolt.dur) { bolt = null; return; }
-      // Zwei kurze Aufflackern, dann Nachglühen
-      const a = t < 90 ? 1 : t < 160 ? .35 : t < 260 ? 1 : Math.max(0, 1 - (t - 260) / 260) * .7;
-      const draw = (pts, width, alpha) => {
-        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-        ctx.lineWidth = width; ctx.globalAlpha = Math.min(1, alpha); ctx.stroke();
-      };
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgb(160,184,255)';
-      draw(bolt.pts, 14, a * .22);
-      draw(bolt.pts, 7, a * .35);
-      bolt.branches.forEach(b => draw(b, 5, a * .22));
-      ctx.strokeStyle = 'rgb(246,248,255)';
-      draw(bolt.pts, 3, a);
-      bolt.branches.forEach(b => draw(b, 1.8, a * .85));
       ctx.globalAlpha = 1;
     }
   };

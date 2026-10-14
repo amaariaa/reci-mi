@@ -795,9 +795,13 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
     color-mix(in srgb, var(--sun-halo, #FFE9AE) 18%, transparent) 56%,
     color-mix(in srgb, var(--sun-halo, #FFE9AE) 6%, transparent) 78%, transparent 100%); }
 .sun-rays { inset: -22%; opacity: .55; }
-.sky-rows { transform: translateY(3px); }
-.hero { padding-bottom: 64px; }
+
 
 /* Dünne Schrift braucht kräftigere Farbe, damit sie auch vor Regenwolken gut lesbar bleibt */
 .hero .sky-rows { color: color-mix(in srgb, var(--hero-ink) 86%, var(--hero-muted)); }
 .hero .sky-rows .sun-row, .hero .sky-rows .moon-row, .hero .sky-rows .place-row { color: inherit; }
+
+/* Textzeilen ganz unten im Himmel: nur eine Zeile Abstand zum unteren Rand */
+.sky-rows { transform: none; padding-top: 10px; }
+.hero { padding-bottom: 20px;
+  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) calc(100% - 58px), var(--sky-hor) calc(100% - 12px), var(--bg) 100%); }

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.2';
+const APP_VERSION = '3.8.3';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1348,14 +1348,16 @@ function cloudPaletteNow() {
     shadow = mixHex(shadow, mixHex('#232834', '#4A5364', kMid * .7), dark * .85);
   }
   if (fx.storm) { lit = mixHex(lit, '#6A7384', .5); shadow = mixHex(shadow, '#161A24', .55); }
-  shadow = mixHex(shadow, lit, dark > .4 ? .18 : .38);
+  const ovp = Math.max(0, Math.min(1, (fx.clouds - .7) / .25)) * (fx.storm ? .45 : 1);
+  shadow = mixHex(shadow, lit, (dark > .4 ? .18 : .38) + .45 * ovp);
   return { lit: hexToRgb(lit), shadow: hexToRgb(shadow), night: 1 - kMid, key: lit + shadow + (fx.rain > 0 ? 'r' : '') };
 }
 
 function paintCloudTile(name, field, cover, pal, opts) {
   if (!field) return null;
   const W = field.W, H = field.H;
-  const th = cloudThreshold(field, cover);
+  // Geschlossene Wolkendecke: keine Lücken, sonst scheint der dunkle Himmel als Flecken durch
+  const th = cover >= .97 ? -.4 : cloudThreshold(field, cover) - Math.max(0, cover - .8) * .35;
   const sf = opts.soft;
   let c = cloudTiles[name];
   if (!c) { c = cloudTiles[name] = document.createElement('canvas'); c.width = W; c.height = H; }
@@ -1375,6 +1377,7 @@ function paintCloudTile(name, field, cover, pal, opts) {
     let s = .52 + (r - field.lit[i]) * opts.gain + (field.det[i] - .5) * opts.tex;
     const core = Math.max(0, (r - th) / Math.max(.05, 1 - th));
     s -= core * .26 * opts.depth;
+    if (opts.flat) s = .55 + (s - .55) * (1 - .8 * opts.flat);
     s = s < 0 ? 0 : s > 1 ? 1 : s;
     // Dünne Ränder leuchten (Silberrand)
     s = s + (1 - dens) * .22 * (1 - s * .4);
@@ -1435,11 +1438,11 @@ function paintSkyClouds(force = false) {
   const ov = Math.max(0, Math.min(1, (cover - .7) / .25));
   const backTile = cover < .1 || !cloudFields.back ? null
     : paintCloudTile('back', cloudFields.back, cover < .99 ? (cover > .8 ? cover : Math.pow(cover, 1.45) * .8) : 1, pal,
-        { soft: .17 + .07 * cover + .06 * ov, alpha: heavy ? 1 : .66 + .22 * ov, gain: 2.6 - .8 * ov, depth: (heavy ? .6 : .15) * (1 - .5 * ov), erode: .07 - .03 * ov, tex: .13 - .03 * ov });
+        { soft: .17 + .07 * cover + .06 * ov, alpha: heavy ? 1 : .66 + .22 * ov, gain: 2.6 - .8 * ov, depth: (heavy ? .6 : .15) * (1 - .5 * ov), erode: .07 - .05 * ov, tex: .13 - .09 * ov, flat: ov * (fx.storm ? .45 : 1) });
   const frontCover = cover < .3 ? 0 : Math.min(.85, cover * .72);
   const frontTile = !frontCover || !cloudFields.front ? null
     : paintCloudTile('front', cloudFields.front, frontCover, pal,
-        { soft: .16, alpha: cover > .85 ? .45 : .30, gain: 2.4, depth: .3, erode: .10, tex: .18 });
+        { soft: .16, alpha: cover > .85 ? .30 : .30, gain: 2.0, depth: .2, erode: .08, tex: .12, flat: ov * .8 });
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;

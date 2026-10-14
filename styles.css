@@ -823,3 +823,6 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .sky-cloud { filter: blur(1.6px); }
 .sky-cloud.back { animation-duration: 260s; }
 .sky-cloud.front { animation-duration: 170s; }
+
+/* Eis/Frost: nur ein zarter heller Hauch an den Rändern statt weißer Ecken */
+.frost { opacity: calc(var(--ice, 0) * .30); }

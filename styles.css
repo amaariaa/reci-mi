@@ -757,3 +757,47 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 
 /* Unsichtbare Planeten dürfen keine unsichtbaren Tippflächen behalten. */
 .planet-dot[aria-hidden="true"] { pointer-events: none; }
+
+
+/* Reci mi V3.8 · Fotorealistischer Himmel, Wetter mit Tiefe, ruhigere Textzeilen */
+/* Die alten Wolkenflecken und die graue Wolkendecke werden durch das Wolkenbild ersetzt. */
+.weather-layer .clouds::before, .weather-layer .clouds::after { display: none !important; }
+.weather-layer .clouds { opacity: 1; }
+.sky-cloud {
+  position: absolute; left: 0; top: 0; width: 200%; height: auto;
+  aspect-ratio: 720 / 300; max-width: none; pointer-events: none;
+  will-change: transform;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.55) 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.55) 82%, transparent 100%);
+}
+.sky-cloud.back  { z-index: 0; animation: skyCloudDrift 190s linear infinite; }
+.sky-cloud.front { z-index: 0; animation: skyCloudDrift 120s linear infinite; }
+@keyframes skyCloudDrift { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+@media (prefers-reduced-motion: reduce) { .sky-cloud { animation: none !important; } }
+
+/* Die drei Zeilen unten im Himmel: eine Zeile höher, dünner, enger beieinander */
+.sky-rows { gap: 0; transform: translateY(-4px); padding-top: 14px; }
+.sun-row, .moon-row, .place-row { font-weight: 300; font-size: 13px; line-height: 1.2; gap: 8px; letter-spacing: .005em; }
+.sun-row, .moon-row { min-height: 18px; }
+.place-row { min-height: 0; }
+.weather-label { padding: 0; font-weight: 300; }
+.place-clock { font-weight: 300; line-height: 1.2; }
+.sun-time, .moon-time { font-weight: 300; gap: 4px; }
+.sun-time .ui-icon, .moon-time .ui-icon { width: 16px; height: 16px; stroke-width: 1.5; }
+.hero .sky-rows { text-shadow: 0 0 8px color-mix(in srgb, var(--sky-hor) 70%, transparent), 0 0 2px color-mix(in srgb, var(--sky-hor) 55%, transparent); }
+.hero { padding-bottom: 72px; }
+
+/* Sonne: kleine, helle Scheibe mit weichem Leuchten und feinen Strahlen (wie im Vorbild) */
+.sun-core { background: radial-gradient(circle closest-side, #FFFFFF 0 11%,
+    color-mix(in srgb, #FFFFFF 92%, var(--sun-core, #FFF6D8)) 17%,
+    color-mix(in srgb, var(--sun-core, #FFF6D8) 70%, transparent) 25%,
+    color-mix(in srgb, var(--sun-halo, #FFE9AE) 42%, transparent) 38%,
+    color-mix(in srgb, var(--sun-halo, #FFE9AE) 18%, transparent) 56%,
+    color-mix(in srgb, var(--sun-halo, #FFE9AE) 6%, transparent) 78%, transparent 100%); }
+.sun-rays { inset: -22%; opacity: .55; }
+.sky-rows { transform: translateY(3px); }
+.hero { padding-bottom: 64px; }
+
+/* Dünne Schrift braucht kräftigere Farbe, damit sie auch vor Regenwolken gut lesbar bleibt */
+.hero .sky-rows { color: color-mix(in srgb, var(--hero-ink) 86%, var(--hero-muted)); }
+.hero .sky-rows .sun-row, .hero .sky-rows .moon-row, .hero .sky-rows .place-row { color: inherit; }

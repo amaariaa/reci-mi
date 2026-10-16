@@ -1280,18 +1280,18 @@ let cloudSpriteLoading = false;
 let cloudSpriteImage = null;
 const cloudTiles = {};
 const CLOUD_ATLAS = Object.freeze({
-  cirrus1: [0, 0, 480, 206],
-  cirrus2: [497, 0, 735, 206],
-  alto:    [1248, 0, 512, 206],
-  cum1:    [0, 230, 380, 205],
-  cum2:    [390, 230, 390, 205],
-  cum3:    [794, 230, 400, 205],
-  cum4:    [1209, 230, 505, 205],
-  bank1:   [0, 465, 530, 236],
-  bank2:   [546, 465, 570, 236],
-  bank3:   [1131, 465, 610, 236],
-  storm1:  [0, 731, 730, 312],
-  storm2:  [743, 731, 615, 312]
+  cirrus1: [10, 10, 270, 190],
+  cirrus2: [300, 10, 270, 190],
+  alto:    [590, 10, 270, 190],
+  cum1:    [10, 250, 270, 210],
+  cum2:    [300, 250, 270, 210],
+  cum3:    [590, 250, 270, 210],
+  cum4:    [880, 250, 270, 210],
+  bank1:   [10, 500, 270, 220],
+  bank2:   [300, 500, 270, 220],
+  bank3:   [590, 500, 270, 220],
+  storm1:  [880, 500, 270, 220],
+  storm2:  [10, 500, 270, 220]
 });
 
 function cloudClamp(n) { return Math.max(0, Math.min(1, n)); }

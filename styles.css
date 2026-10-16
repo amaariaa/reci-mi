@@ -841,3 +841,31 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .sky-cloud.full { aspect-ratio: 720 / 300;
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.55) 82%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.55) 82%, transparent 100%); }
+
+/* V3.8.5 · Weiche, echte Wolken mit eigenständigen Tiefenebenen.
+   Alte CSS-Wolken und flächige Ersatzschleier werden nicht mehr verwendet. */
+.sky-cloud {
+  aspect-ratio: 1440 / 340;
+  filter: blur(.65px) saturate(.89);
+  transform-origin: left center;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 64%, rgba(0,0,0,.82) 81%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 64%, rgba(0,0,0,.82) 81%, transparent 100%);
+}
+.sky-cloud.full { aspect-ratio: 1440 / 340;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 76%, rgba(0,0,0,.75) 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 76%, rgba(0,0,0,.75) 88%, transparent 100%);
+}
+.sky-cloud.back { animation-duration: 325s; opacity: .90; }
+.sky-cloud.front { animation-duration: 216s; opacity: .96; }
+.weather-layer.night .sky-cloud.front, .weather-layer.night .sky-cloud.back { filter: blur(.85px) brightness(.50) saturate(.65); }
+.weather-layer.dark-clouds .sky-cloud.front, .weather-layer.dark-clouds .sky-cloud.back { filter: blur(.7px) brightness(.72) saturate(.62); }
+.weather-layer.night.dark-clouds .sky-cloud.front, .weather-layer.night.dark-clouds .sky-cloud.back { filter: blur(.85px) brightness(.40) saturate(.48); }
+@media (prefers-reduced-motion: reduce) { .sky-cloud { animation: none !important; } }
+
+/* Die hintere Ebene ist ein Geschwister des Wetter-Layers. */
+.sky:has(> .weather-layer.night) > .sky-cloud.back { filter: blur(.85px) brightness(.50) saturate(.65); }
+.sky:has(> .weather-layer.dark-clouds) > .sky-cloud.back { filter: blur(.7px) brightness(.72) saturate(.62); }
+.sky:has(> .weather-layer.night.dark-clouds) > .sky-cloud.back { filter: blur(.85px) brightness(.40) saturate(.48); }
+/* Himmelsausschnitt: am Sperrbildschirm haben Wolken mehr Raum als in der kompakten Startseite. */
+.lock-screen .sky-cloud { aspect-ratio: 1440 / 560; }
+.hero .sky-cloud { aspect-ratio: 1440 / 445; }

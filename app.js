@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.4';
+const APP_VERSION = '3.8.5';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1255,142 +1255,36 @@ function placePlanets() {
 }
 
 /* =====================================================================
-   V3.8 · Fotorealistische Wolken
-   Statt weicher Farbflecken wird ein echtes Wolkenbild berechnet:
-   Rauschen in mehreren Größen (wie bei Wolkenfotos), Licht von der Seite
-   der Sonne, helle Ränder, dunklere Unterseiten. Die Farben folgen der
-   Tageszeit (Gold am Abend, Blaugrau bei Regen, dunkles Blau nachts).
-   Das Bild wird einmal berechnet und driftet danach nur noch langsam.
+   V3.8.5 · Natürliche Wolken aus transparenten Bildmotiven
+   Originale Wolkenformen mit Licht und Schatten statt Zufallsrauschen.
+   Cirrus, Quellwolken, Schichtwolken und dunkle Regenwolken werden je
+   nach Wetter in zwei unterschiedlich schnell ziehenden Ebenen gemischt.
+   Wetterdaten entscheiden nur über Bedeckungsgrad und Niederschlag,
+   nicht über eine vermeintlich gemessene Wolken-Gattung.
    ===================================================================== */
-const CLOUD_TW = 360, CLOUD_TH = 300;
-const cloudFields = { back: null, front: null, key: '' };
-let skyPaletteState = null;
+const CLOUD_TW = 720, CLOUD_TH = 340;
+const cloudFields = { back: false, front: false };
 let cloudPaintKey = '';
-let cloudGenTimer = null;
+let cloudSpriteLoading = false;
+let cloudSpriteImage = null;
 const cloudTiles = {};
+const CLOUD_ATLAS = Object.freeze({
+  cirrus1: [0, 0, 480, 206],
+  cirrus2: [497, 0, 735, 206],
+  alto:    [1248, 0, 512, 206],
+  cum1:    [0, 230, 380, 205],
+  cum2:    [390, 230, 390, 205],
+  cum3:    [794, 230, 400, 205],
+  cum4:    [1209, 230, 505, 205],
+  bank1:   [0, 465, 530, 236],
+  bank2:   [546, 465, 570, 236],
+  bank3:   [1131, 465, 610, 236],
+  storm1:  [0, 731, 730, 312],
+  storm2:  [743, 731, 615, 312]
+});
 
-function cloudRng(seed) {
-  let a = seed | 0;
-  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-}
-function cloudLattice(seed, nx, ny) {
-  const r = cloudRng(seed), a = new Float32Array(nx * ny);
-  for (let i = 0; i < a.length; i++) a[i] = r();
-  return { a, nx, ny };
-}
-function cloudNoise(L, u, v) {
-  const x = u * L.nx, y = Math.min(1, Math.max(0, v)) * (L.ny - 1);
-  const xf = Math.floor(x), yi = Math.min(L.ny - 2, Math.max(0, Math.floor(y)));
-  let fx = x - xf, fy = y - yi;
-  fx = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
-  fy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
-  const x0 = ((xf % L.nx) + L.nx) % L.nx, x1 = (x0 + 1) % L.nx;
-  const r0 = yi * L.nx, r1 = (yi + 1) * L.nx;
-  const a = L.a[r0 + x0], b = L.a[r0 + x1], c = L.a[r1 + x0], d = L.a[r1 + x1];
-  return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
-}
-
-/* Erzeugt Dichte (0..1) und Licht (0..1) für ein nahtlos wiederholbares Wolkenfeld. */
-function genCloudField(seed, o) {
-  const W = CLOUD_TW, H = CLOUD_TH;
-  const lats = [];
-  for (let i = 0; i < o.oct; i++) lats.push(cloudLattice(seed + i * 101, o.cx << i, (o.cy << i) + 2));
-  const wA = cloudLattice(seed + 999, 3, 4), wB = cloudLattice(seed + 555, 4, 5);
-  const dets = [0, 1, 2].map(i => cloudLattice(seed + 313 + i * 17, (o.dx || 12) << i, ((o.dy || 14) << i) + 2));
-  const fbm = (u, v) => {
-    let s = 0, amp = 1, tot = 0;
-    for (let i = 0; i < lats.length; i++) { s += amp * cloudNoise(lats[i], u, v); tot += amp; amp *= o.gain; }
-    return s / tot;
-  };
-  const raw = new Float32Array(W * H), lit = new Float32Array(W * H), det = new Float32Array(W * H);
-  const lx = o.lx / W, ly = o.ly / H;
-  for (let y = 0; y < H; y++) {
-    const v = y / (H - 1);
-    for (let x = 0; x < W; x++) {
-      const u = x / W;
-      const wu = (cloudNoise(wA, u, v) - .5) * o.warpX;
-      const wv = (cloudNoise(wB, u, v) - .5) * o.warpY;
-      const uu = u + wu, vv = v + wv;
-      const i = y * W + x;
-      raw[i] = fbm(uu, vv);
-      lit[i] = fbm(uu + lx, vv + ly);
-      det[i] = (cloudNoise(dets[0], uu, vv) * .55 + cloudNoise(dets[1], uu, vv) * .3 + cloudNoise(dets[2], uu, vv) * .15);
-    }
-  }
-  // Wertebereich über ein Histogramm normieren, damit „Bewölkung 50 %“ auch wirklich etwa die halbe Fläche ist.
-  const BINS = 512, hist = new Uint32Array(BINS);
-  let mn = 1e9, mx = -1e9;
-  for (let i = 0; i < raw.length; i++) { if (raw[i] < mn) mn = raw[i]; if (raw[i] > mx) mx = raw[i]; }
-  const span = Math.max(1e-6, mx - mn);
-  for (let i = 0; i < raw.length; i++) { raw[i] = (raw[i] - mn) / span; lit[i] = (lit[i] - mn) / span; hist[Math.min(BINS - 1, (raw[i] * BINS) | 0)]++; }
-  return { raw, lit, det, hist, W, H, bins: BINS, o };
-}
-
-function cloudThreshold(field, coverage) {
-  // Schwelle, ab der genau der Anteil `coverage` der Fläche Wolke ist
-  const target = Math.max(0, Math.min(1, 1 - coverage)) * field.W * field.H;
-  let acc = 0;
-  for (let b = 0; b < field.bins; b++) { acc += field.hist[b]; if (acc >= target) return (b + 1) / field.bins; }
-  return 1;
-}
-
-function cloudPaletteNow() {
-  const p = skyPaletteState;
-  if (!p) return null;
-  const fx = currentFx();
-  const cl = (v, a, b) => Math.max(a, Math.min(b, v));
-  const kHor = cl((luminance(p.hor) - .10) / .38, 0, 1);
-  const kMid = cl(luminance(p.mid) / .30, 0, 1);
-  let lit = mixHex('#7B92DA', mixHex(p.hor, '#FFFFFF', .46), kHor);
-  let shadow = mixHex('#171C3A', mixHex(mixHex(p.top, p.mid, .5), '#5A668E', .50), kMid);
-  const dark = cl(Math.max(fx.rain * .85, fx.snow * .45, fx.storm ? 1 : 0), 0, 1);
-  if (dark > 0) {
-    lit = mixHex(lit, mixHex('#8F98A8', '#CBD2DC', kMid * .6), dark * .7);
-    shadow = mixHex(shadow, mixHex('#232834', '#4A5364', kMid * .7), dark * .85);
-  }
-  if (fx.storm) { lit = mixHex(lit, '#6A7384', .5); shadow = mixHex(shadow, '#161A24', .55); }
-  const ovp = Math.max(0, Math.min(1, (fx.clouds - .7) / .25)) * (fx.storm ? .45 : 1);
-  shadow = mixHex(shadow, lit, (dark > .4 ? .18 : .38) + .45 * ovp);
-  return { lit: hexToRgb(lit), shadow: hexToRgb(shadow), night: 1 - kMid, key: lit + shadow + (fx.rain > 0 ? 'r' : '') };
-}
-
-function paintCloudTile(name, field, cover, pal, opts) {
-  if (!field) return null;
-  const W = field.W, H = field.H;
-  // Geschlossene Wolkendecke: keine Lücken, sonst scheint der dunkle Himmel als Flecken durch
-  const th = cover >= .97 ? -.4 : cloudThreshold(field, cover) - Math.max(0, cover - .8) * .35;
-  const sf = opts.soft;
-  let c = cloudTiles[name];
-  if (!c) { c = cloudTiles[name] = document.createElement('canvas'); c.width = W; c.height = H; }
-  const g = c.getContext('2d');
-  const img = g.createImageData(W, H);
-  const d = img.data;
-  const ls = pal.lit, ss = pal.shadow;
-  const alphaMul = opts.alpha * (1 - pal.night * .34);
-  for (let i = 0; i < W * H; i++) {
-    const r = field.raw[i];
-    const rr = r + (field.det[i] - .5) * opts.erode;
-    let dens = (rr - th) / sf;
-    dens = dens <= 0 ? 0 : dens >= 1 ? 1 : dens * dens * (3 - 2 * dens);
-    const o = i * 4;
-    if (dens <= 0.03) { d[o + 3] = 0; continue; }
-    // Licht: Seite zur Sonne hell, abgewandte Seite dunkel; dicke Kerne etwas dunkler
-    let s = .52 + (r - field.lit[i]) * opts.gain + (field.det[i] - .5) * opts.tex;
-    const core = Math.max(0, (r - th) / Math.max(.05, 1 - th));
-    s -= core * .26 * opts.depth;
-    if (opts.flat) s = .55 + (s - .55) * (1 - .8 * opts.flat);
-    s = s < 0 ? 0 : s > 1 ? 1 : s;
-    // Dünne Ränder leuchten (Silberrand)
-    s = s + (1 - dens) * .22 * (1 - s * .4);
-    s = s > 1 ? 1 : s;
-    d[o] = ss[0] + (ls[0] - ss[0]) * s;
-    d[o + 1] = ss[1] + (ls[1] - ss[1]) * s;
-    d[o + 2] = ss[2] + (ls[2] - ss[2]) * s;
-    d[o + 3] = Math.min(255, 255 * Math.pow(dens, .85) * alphaMul);
-  }
-  g.putImageData(img, 0, 0);
-  return c;
-}
+function cloudClamp(n) { return Math.max(0, Math.min(1, n)); }
+function cloudRise(a, b, n) { const t = cloudClamp((n-a)/(b-a)); return t*t*(3-2*t); }
 
 function ensureCloudCanvases(layer) {
   const host = layer.parentElement;
@@ -1409,54 +1303,113 @@ function ensureCloudCanvases(layer) {
     front = document.createElement('canvas');
     front.className = 'sky-cloud front';
     front.setAttribute('aria-hidden', 'true');
-    box.innerHTML = '';
-    box.appendChild(front);
+    box.replaceChildren(front);
   }
   return { back, front };
+}
+
+/* Jede Wolke läuft nahtlos über den Rand der wiederholten Himmelsebene. */
+function cloudSprite(g, name, x, y, w, h, alpha = 1) {
+  const r = CLOUD_ATLAS[name];
+  if (!r || !cloudSpriteImage || alpha <= .005) return;
+  g.save();
+  g.globalAlpha = cloudClamp(alpha);
+  for (const shift of [-CLOUD_TW, 0, CLOUD_TW]) {
+    const xx = x + shift;
+    if (xx >= CLOUD_TW || xx + w <= 0) continue;
+    g.drawImage(cloudSpriteImage, ...r, xx, y, w, h);
+  }
+  g.restore();
+}
+
+function cloudCanvas(name) {
+  let c = cloudTiles[name];
+  if (!c) {
+    c = cloudTiles[name] = document.createElement('canvas');
+    c.width = CLOUD_TW; c.height = CLOUD_TH;
+  }
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  return { c, g };
 }
 
 function blitCloud(cv, tile) {
   if (!cv) return;
   if (!tile) { cv.style.display = 'none'; return; }
   cv.style.display = '';
-  if (cv.width !== CLOUD_TW * 2 || cv.height !== CLOUD_TH) { cv.width = CLOUD_TW * 2; cv.height = CLOUD_TH; }
+  if (cv.width !== CLOUD_TW * 2 || cv.height !== CLOUD_TH) {
+    cv.width = CLOUD_TW * 2; cv.height = CLOUD_TH;
+  }
   const g = cv.getContext('2d');
   g.clearRect(0, 0, cv.width, cv.height);
   g.drawImage(tile, 0, 0);
   g.drawImage(tile, CLOUD_TW, 0);
 }
 
-/* Färbt das Wolkenbild passend zur aktuellen Tageszeit und zum Wetter ein. */
 function paintSkyClouds(force = false) {
+  if (!cloudSpriteImage || !skyPaletteState) return;
   const fx = currentFx();
-  const pal = cloudPaletteNow();
-  if (!pal) return;
-  const cover = Math.max(0, Math.min(1, fx.clouds));
-  const paintKey = [pal.key, cover.toFixed(2), fx.rain.toFixed(1), fx.snow.toFixed(1), cloudFields.key].join('|');
-  if (!force && paintKey === cloudPaintKey) return;
-  cloudPaintKey = paintKey;
-  const heavy = fx.rain > .5 || fx.storm || fx.snow > .5;
-  const ov = Math.max(0, Math.min(1, (cover - .7) / .25));
-  const backTile = cover < .1 || !cloudFields.back ? null
-    : paintCloudTile('back', cloudFields.back, cover < .99 ? (cover > .8 ? cover : Math.pow(cover, 1.45) * .8) : 1, pal,
-        { soft: .17 + .07 * cover + .06 * ov, alpha: heavy ? 1 : .80 + .10 * ov, gain: 3.2 - 1.4 * ov, depth: (heavy ? .6 : .22) * (1 - .5 * ov), erode: .09 - .07 * ov, tex: .20 - .16 * ov, flat: ov * (fx.storm ? .45 : 1) });
-  const frontCover = cover < .3 ? 0 : Math.min(.85, cover * .72);
-  const frontTile = !frontCover || !cloudFields.front ? null
-    : paintCloudTile('front', cloudFields.front, frontCover, pal,
-        { soft: .16, alpha: cover > .85 ? .30 : .30, gain: 2.0, depth: .2, erode: .08, tex: .12, flat: ov * .8 });
+  const cover = cloudClamp(fx.clouds || 0);
+  const wet = cloudClamp(Math.max(fx.rain || 0, fx.snow || 0, (fx.storm || 0) * .9));
+  const p = skyPaletteState;
+  const key = [cover.toFixed(2), wet.toFixed(2), p.top, p.mid, p.hor].join('|');
+  if (!force && key === cloudPaintKey) return;
+  cloudPaintKey = key;
+  const thin = cloudRise(.09, .32, cover) * (1 - cloudRise(.65, .96, cover) * .55);
+  const puffs = cloudRise(.12, .65, cover);
+  const banks = cloudRise(.52, .92, cover);
+  const storm = Math.max(cloudRise(.77, 1, cover) * .5, wet);
+  const back = cloudCanvas('back'), front = cloudCanvas('front');
+  const b = back.g, f = front.g;
+
+  // Hohe faserige und fein gemusterte Wolken in der Ferne.
+  cloudSprite(b, 'cirrus1', -80, -5, 490, 150, thin * .62);
+  cloudSprite(b, 'cirrus2', 295, 6, 555, 145, thin * .55);
+  cloudSprite(b, 'alto', -80, 74, 535, 124, cloudRise(.36, .72, cover) * .33);
+  cloudSprite(b, 'alto', 405, 18, 410, 111, cloudRise(.49, .9, cover) * .30);
+
+  // Große Schichtwolken. Die leichte Hintergrundschicht wird erst bei
+  // dichtem Wetter sichtbar, sonst bleibt der Himmel durchsichtig.
+  cloudSprite(b, 'bank1', -170, 12, 540, 210, banks * .84);
+  cloudSprite(b, 'bank2', 270, 19, 615, 220, banks * .87);
+  if (banks > .01) {
+    b.save();
+    const grad = b.createLinearGradient(0, 0, 0, CLOUD_TH);
+    const rgb = wet > .35 ? [88, 98, 119] : [192, 204, 222];
+    grad.addColorStop(0, `rgba(${rgb.join(',')},${(.24 * banks).toFixed(3)})`);
+    grad.addColorStop(.63, `rgba(${rgb.join(',')},${(.1 * banks).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${rgb.join(',')},0)`);
+    b.fillStyle = grad;
+    b.fillRect(0, 0, CLOUD_TW, CLOUD_TH);
+    b.restore();
+  }
+
+  // Vordergrund mit plastischen Quellwolken (keine ovalen CSS-Flecken).
+  cloudSprite(f, 'cum1', -75, 88, 305, 183, (.33 + puffs * .58) * cloudRise(.08, .24, cover));
+  cloudSprite(f, 'cum3', 265, 102, 370, 176, puffs * .87);
+  cloudSprite(f, 'cum4', 555, 72, 265, 165, puffs * .70);
+  cloudSprite(f, 'cum2', 102, 166, 284, 155, puffs * .29);
+  cloudSprite(f, 'bank3', -95, 165, 620, 202, banks * (.50 + wet * .34));
+  cloudSprite(f, 'bank2', 420, 177, 516, 175, banks * (.40 + wet * .34));
+
+  // Regen- und Gewitterwolken sind dunkler, aber behalten echtes Relief.
+  if (storm > .04) {
+    cloudSprite(b, 'storm1', -200, -12, 625, 335, storm * .76);
+    cloudSprite(b, 'storm2', 260, -11, 625, 337, storm * .78);
+    cloudSprite(f, 'storm2', -225, 106, 565, 235, storm * .51);
+    cloudSprite(f, 'bank3', 315, 115, 560, 210, storm * .55);
+  }
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;
     [cvs.back, cvs.front].forEach(c => c && c.classList.toggle('full', cover >= .75));
-    blitCloud(cvs.back, backTile);
-    blitCloud(cvs.front, frontTile);
+    blitCloud(cvs.back, cover < .09 ? null : back.c);
+    blitCloud(cvs.front, cover < .09 ? null : front.c);
   });
 }
 
-/* Rechnet die Wolkenfelder nur dann neu, wenn es nötig ist (Form hängt kaum vom Wetter ab). */
 function renderSkyClouds() {
-  const fx = currentFx();
-  if (fx.clouds < .1) {
+  if (currentFx().clouds < .09) {
     document.querySelectorAll('.weather-layer').forEach(layer => {
       const cvs = ensureCloudCanvases(layer);
       if (cvs) { blitCloud(cvs.back, null); blitCloud(cvs.front, null); }
@@ -1464,15 +1417,18 @@ function renderSkyClouds() {
     cloudPaintKey = '';
     return;
   }
-  if (!cloudFields.back) {
-    clearTimeout(cloudGenTimer);
-    // erst nach dem ersten Bild rechnen, damit die App sofort startet
-    cloudGenTimer = setTimeout(() => {
-      cloudFields.back = genCloudField(11, { dx: 6, dy: 8, oct: 4, cx: 4, cy: 6, gain: .46, warpX: .09, warpY: .10, lx: 4, ly: -1.2 });
-      cloudFields.front = genCloudField(73, { dx: 6, dy: 8, oct: 3, cx: 3, cy: 10, gain: .5, warpX: .12, warpY: .10, lx: 5, ly: -1 });
-      cloudFields.key = 'v1';
+  if (!cloudSpriteImage) {
+    if (cloudSpriteLoading) return;
+    cloudSpriteLoading = true;
+    const image = new Image();
+    image.onload = () => {
+      cloudSpriteImage = image;
+      cloudFields.back = cloudFields.front = true;
+      cloudSpriteLoading = false;
       paintSkyClouds(true);
-    }, 30);
+    };
+    image.onerror = () => { cloudSpriteLoading = false; };
+    image.src = './clouds-realistic.webp';
     return;
   }
   paintSkyClouds();

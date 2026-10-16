@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.5';
+const APP_VERSION = '3.8.6';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1264,6 +1264,8 @@ function placePlanets() {
    ===================================================================== */
 const CLOUD_TW = 720, CLOUD_TH = 340;
 const cloudFields = { back: false, front: false };
+// Benötigt von applySky() beim ersten Start und von der Wolkendarstellung.
+let skyPaletteState = null;
 let cloudPaintKey = '';
 let cloudSpriteLoading = false;
 let cloudSpriteImage = null;

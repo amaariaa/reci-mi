@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.6';
+const APP_VERSION = '3.8.7';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -377,10 +377,10 @@ function describeWeather(code, cloud = 0, temp = 10) {
   const c = Number(code);
   const fx = { label: 'Klar', clouds: Math.min(1, (cloud || 0) / 100), rain: 0, snow: 0, fog: 0, ice: 0, storm: 0 };
   const set = (label, o) => Object.assign(fx, { label }, o);
-  if (c === 0) set('Klar', { clouds: Math.min(fx.clouds, .1) });
-  else if (c === 1) set('Überwiegend klar', { clouds: Math.max(fx.clouds, .2) });
-  else if (c === 2) set('Teilweise bewölkt', { clouds: Math.max(fx.clouds, .5) });
-  else if (c === 3) set('Bedeckt', { clouds: 1 });
+  if (c === 0) set('Klar', { clouds: Math.min(fx.clouds, .08) });
+  else if (c === 1) set('Überwiegend klar', { clouds: Math.max(fx.clouds, .14) });
+  else if (c === 2) set('Teilweise bewölkt', { clouds: Math.max(fx.clouds, .34) });
+  else if (c === 3) set('Bedeckt', { clouds: Math.max(fx.clouds, .74) });
   else if (c === 45) set('Nebel', { clouds: .6, fog: 1 });
   else if (c === 48) set('Nebel mit Raureif', { clouds: .6, fog: 1, ice: .8 });
   else if (c === 51 || c === 53 || c === 55) set(c === 51 ? 'Leichter Nieselregen' : c === 53 ? 'Nieselregen' : 'Starker Nieselregen', { clouds: .9, rain: c === 51 ? .25 : c === 53 ? .35 : .5 });
@@ -417,17 +417,25 @@ function skyWeatherVisibility(fx, object = 'sun') {
   const cover = Math.max(0, Math.min(1, fx.clouds || 0));
   const fog = Math.max(0, Math.min(1, fx.fog || 0));
   const precip = Math.max(fx.rain || 0, fx.snow || 0);
-  // Ein dichter, geschlossener Himmel muss die Scheiben wirklich verdecken.
-  if (cover >= .95 || fog >= .94 || (cover > .83 && precip >= .82)) return 0;
-  // Ab etwa 75 % zunehmend starke Verdeckung, bei 95 % vollständig.
-  const cloudFade = cover < .32 ? 1 - cover * .18
-    : cover < .72 ? .94 - (cover - .32) * 1.45
-    : Math.max(0, .36 * (1 - (cover - .72) / .23));
-  const fogFade = Math.pow(1 - fog, 3.1);
-  const rainFade = 1 - .42 * (fx.rain || 0);
-  const snowFade = 1 - .34 * (fx.snow || 0);
+  // Erst dichter Nebel und wirklich geschlossene Niederschlagsdecken löschen Sterne und Planeten ganz aus.
+  if (fog >= .96 || cover >= .985 || (cover > .90 && precip >= .88)) return 0;
+
+  let cloudFade;
+  if (object === 'stars') {
+    cloudFade = cover < .38 ? 1 - cover * .10
+      : cover < .74 ? .962 - (cover - .38) * 0.82
+      : Math.max(0, .68 * (1 - (cover - .74) / .245));
+  } else {
+    cloudFade = cover < .32 ? 1 - cover * .15
+      : cover < .78 ? .952 - (cover - .32) * 1.05
+      : Math.max(0, .50 * (1 - (cover - .78) / .205));
+  }
+
+  const fogFade = object === 'stars' ? Math.pow(1 - fog, 2.7) : Math.pow(1 - fog, 2.35);
+  const rainFade = 1 - (object === 'stars' ? .36 : .28) * (fx.rain || 0);
+  const snowFade = 1 - (object === 'stars' ? .30 : .22) * (fx.snow || 0);
   const level = Math.max(0, Math.min(1, cloudFade * fogFade * rainFade * snowFade));
-  return object === 'stars' ? Math.pow(level, 1.5) : level;
+  return object === 'stars' ? Math.pow(level, 1.18) : level;
 }
 
 function celestialWeatherOpacity(fx, offset = 0) {
@@ -1093,15 +1101,16 @@ function planetVisualLight(p, sunAlt) {
   const magLevel = Math.max(0.16, Math.min(1, (2.2 - mag) / 6.8));
   const altitudeLevel = Math.max(0.28, Math.min(1, (p.alt + 1) / 18));
   const fx = currentFx();
-  const weatherLevel = skyWeatherVisibility(fx, 'stars');
+  const weatherLevel = skyWeatherVisibility(fx);
   const skyLevel = sunAlt > 0 ? .20 : sunAlt > -4 ? .36 : sunAlt > -8 ? .66 : 1;
-  const visibleLevel = Math.max(.06, Math.min(1, magLevel * altitudeLevel * weatherLevel * skyLevel));
+  const visibleLevel = Math.max(.07, Math.min(1, magLevel * altitudeLevel * weatherLevel * skyLevel));
   const nightBoost = sunAlt <= -8 ? 1 : .88;
+  const minNightOpacity = sunAlt <= -8 ? .14 : sunAlt <= -4 ? .09 : .05;
   return {
-    opacity: weatherLevel < .025 ? 0 : Math.max(0, Math.min(1, visibleLevel * 1.18)),
-    glow: (2.5 + 13 * magLevel * skyLevel * nightBoost).toFixed(1),
-    glowAlpha: Math.max(.10, Math.min(.86, .12 + magLevel * skyLevel * .72)).toFixed(2),
-    brightness: Math.max(.82, Math.min(1.38, .90 + magLevel * .48)).toFixed(2)
+    opacity: weatherLevel < .025 ? 0 : Math.max(minNightOpacity, Math.min(1, visibleLevel * 1.24)),
+    glow: (3.0 + 14.5 * magLevel * skyLevel * nightBoost).toFixed(1),
+    glowAlpha: Math.max(.12, Math.min(.90, .16 + magLevel * skyLevel * .72)).toFixed(2),
+    brightness: Math.max(.86, Math.min(1.44, .94 + magLevel * .50)).toFixed(2)
   };
 }
 
@@ -1353,60 +1362,60 @@ function paintSkyClouds(force = false) {
   const fx = currentFx();
   const cover = cloudClamp(fx.clouds || 0);
   const wet = cloudClamp(Math.max(fx.rain || 0, fx.snow || 0, (fx.storm || 0) * .9));
+  const renderCover = cover < .76 ? cover * .60 : .46 + (cover - .76) / .24 * .54;
   const p = skyPaletteState;
   const key = [cover.toFixed(2), wet.toFixed(2), p.top, p.mid, p.hor].join('|');
   if (!force && key === cloudPaintKey) return;
   cloudPaintKey = key;
-  const thin = cloudRise(.09, .32, cover) * (1 - cloudRise(.65, .96, cover) * .55);
-  const puffs = cloudRise(.12, .65, cover);
-  const banks = cloudRise(.52, .92, cover);
-  const storm = Math.max(cloudRise(.77, 1, cover) * .5, wet);
+  const thin = cloudRise(.06, .24, renderCover) * (1 - cloudRise(.52, .86, renderCover) * .42);
+  const puffs = cloudRise(.18, .58, renderCover);
+  const banks = cloudRise(.68, .93, cover);
+  const storm = Math.max(cloudRise(.84, 1, cover) * .68, wet);
   const back = cloudCanvas('back'), front = cloudCanvas('front');
   const b = back.g, f = front.g;
 
-  // Hohe faserige und fein gemusterte Wolken in der Ferne.
-  cloudSprite(b, 'cirrus1', -80, -5, 490, 150, thin * .62);
-  cloudSprite(b, 'cirrus2', 295, 6, 555, 145, thin * .55);
-  cloudSprite(b, 'alto', -80, 74, 535, 124, cloudRise(.36, .72, cover) * .33);
-  cloudSprite(b, 'alto', 405, 18, 410, 111, cloudRise(.49, .9, cover) * .30);
+  // Hohe, lockere Schleierwolken – sichtbar, aber mit viel offenem Himmel dazwischen.
+  cloudSprite(b, 'cirrus1', -45, -16, 365, 108, thin * .46);
+  cloudSprite(b, 'cirrus2', 375, -8, 410, 106, thin * .42);
+  cloudSprite(b, 'alto', -58, 36, 350, 84, cloudRise(.34, .70, renderCover) * .18);
+  cloudSprite(b, 'alto', 420, 22, 300, 74, cloudRise(.46, .82, renderCover) * .16);
 
-  // Große Schichtwolken. Die leichte Hintergrundschicht wird erst bei
-  // dichtem Wetter sichtbar, sonst bleibt der Himmel durchsichtig.
-  cloudSprite(b, 'bank1', -170, 12, 540, 210, banks * .84);
-  cloudSprite(b, 'bank2', 270, 19, 615, 220, banks * .87);
+  // Mehr Masse erst bei wirklich dichter Bewölkung.
+  cloudSprite(b, 'bank1', -120, 10, 410, 142, banks * .46);
+  cloudSprite(b, 'bank2', 370, 14, 455, 148, banks * .48);
   if (banks > .01) {
     b.save();
     const grad = b.createLinearGradient(0, 0, 0, CLOUD_TH);
     const rgb = wet > .35 ? [88, 98, 119] : [192, 204, 222];
-    grad.addColorStop(0, `rgba(${rgb.join(',')},${(.24 * banks).toFixed(3)})`);
-    grad.addColorStop(.63, `rgba(${rgb.join(',')},${(.1 * banks).toFixed(3)})`);
+    grad.addColorStop(0, `rgba(${rgb.join(',')},${(.13 * banks).toFixed(3)})`);
+    grad.addColorStop(.52, `rgba(${rgb.join(',')},${(.05 * banks).toFixed(3)})`);
     grad.addColorStop(1, `rgba(${rgb.join(',')},0)`);
     b.fillStyle = grad;
     b.fillRect(0, 0, CLOUD_TW, CLOUD_TH);
     b.restore();
   }
 
-  // Vordergrund mit plastischen Quellwolken (keine ovalen CSS-Flecken).
-  cloudSprite(f, 'cum1', -75, 88, 305, 183, (.33 + puffs * .58) * cloudRise(.08, .24, cover));
-  cloudSprite(f, 'cum3', 265, 102, 370, 176, puffs * .87);
-  cloudSprite(f, 'cum4', 555, 72, 265, 165, puffs * .70);
-  cloudSprite(f, 'cum2', 102, 166, 284, 155, puffs * .29);
-  cloudSprite(f, 'bank3', -95, 165, 620, 202, banks * (.50 + wet * .34));
-  cloudSprite(f, 'bank2', 420, 177, 516, 175, banks * (.40 + wet * .34));
+  // Vordergrund: nur wenige lockere Wolken im oberen Bereich.
+  cloudSprite(f, 'cum1', -40, 74, 220, 126, (.16 + puffs * .34) * cloudRise(.10, .28, renderCover));
+  cloudSprite(f, 'cum3', 295, 82, 258, 126, puffs * .40);
+  cloudSprite(f, 'cum4', 575, 62, 188, 118, puffs * .32);
+  cloudSprite(f, 'cum2', 120, 108, 210, 108, puffs * .12);
+  cloudSprite(f, 'bank3', -60, 98, 470, 140, banks * (.22 + wet * .22));
+  cloudSprite(f, 'bank2', 420, 104, 360, 126, banks * (.18 + wet * .22));
 
-  // Regen- und Gewitterwolken sind dunkler, aber behalten echtes Relief.
+  // Regen- und Gewitterwolken dürfen dichter und dunkler werden.
   if (storm > .04) {
-    cloudSprite(b, 'storm1', -200, -12, 625, 335, storm * .76);
-    cloudSprite(b, 'storm2', 260, -11, 625, 337, storm * .78);
-    cloudSprite(f, 'storm2', -225, 106, 565, 235, storm * .51);
-    cloudSprite(f, 'bank3', 315, 115, 560, 210, storm * .55);
+    cloudSprite(b, 'storm1', -150, -16, 560, 230, storm * .54);
+    cloudSprite(b, 'storm2', 270, -12, 525, 220, storm * .56);
+    cloudSprite(f, 'storm2', -145, 70, 445, 170, storm * .34);
+    cloudSprite(f, 'bank3', 320, 86, 430, 150, storm * .36);
   }
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;
-    [cvs.back, cvs.front].forEach(c => c && c.classList.toggle('full', cover >= .75));
-    blitCloud(cvs.back, cover < .09 ? null : back.c);
-    blitCloud(cvs.front, cover < .09 ? null : front.c);
+    [cvs.back, cvs.front].forEach(c => c && c.classList.toggle('full', cover >= .84 || wet > .35));
+    blitCloud(cvs.back, cover < .06 ? null : back.c);
+    blitCloud(cvs.front, cover < .08 ? null : front.c);
   });
 }
 
@@ -1441,16 +1450,16 @@ function applyWeatherFx() {
   const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const coverage = Math.max(0, Math.min(1, fx.clouds));
-    // Gemisch aus einzelnen Wolken und der geschlossenen Decke.
-    const deck = coverage < .33 ? 0 : Math.pow((coverage - .33) / .67, 1.75);
-    layer.style.setProperty('--cloud-op', (0.24 + coverage * .54).toFixed(2));
+    // Einzelne ziehende Wolken stehen im Vordergrund; eine geschlossene Decke nur bei echtem Schlechtwetter.
+    const deck = coverage < .68 ? 0 : Math.pow((coverage - .68) / .32, 1.7);
+    layer.style.setProperty('--cloud-op', (0.14 + coverage * .34 + Math.max(fx.rain || 0, fx.snow || 0) * .08).toFixed(2));
     layer.style.setProperty('--deck-opacity', deck.toFixed(3));
-    layer.style.setProperty('--texture-opacity', (deck * .63).toFixed(3));
+    layer.style.setProperty('--texture-opacity', (deck * .42).toFixed(3));
     layer.style.setProperty('--fog', fx.fog.toFixed(2));
     layer.style.setProperty('--ice', fx.ice.toFixed(2));
     layer.classList.toggle('night', night);
-    layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || fx.clouds > .9);
-    layer.classList.toggle('overcast', fx.clouds >= .88);
+    layer.classList.toggle('dark-clouds', fx.rain > .3 || fx.storm > 0 || fx.clouds > .92);
+    layer.classList.toggle('overcast', fx.clouds >= .9);
     layer.classList.toggle('snowing', fx.snow > .12);
     layer.classList.toggle('rainy', fx.rain > .12);
   });

@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.8';
+const APP_VERSION = '3.8.9';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1375,14 +1375,14 @@ function paintSkyClouds(force = false) {
   const b = back.g, f = front.g;
 
   // Hohe, lockere Schleierwolken – sichtbar, aber mit viel offenem Himmel dazwischen.
-  cloudSprite(b, 'cirrus1', -45, -16, 365, 108, thin * .46);
-  cloudSprite(b, 'cirrus2', 375, -8, 410, 106, thin * .42);
-  cloudSprite(b, 'alto', -58, 36, 350, 84, cloudRise(.34, .70, renderCover) * .18);
-  cloudSprite(b, 'alto', 420, 22, 300, 74, cloudRise(.46, .82, renderCover) * .16);
+  cloudSprite(b, 'cirrus1', -50, 72, 420, 124, thin * .52);
+  cloudSprite(b, 'cirrus2', 332, 82, 470, 122, thin * .48);
+  cloudSprite(b, 'alto', -40, 118, 395, 96, cloudRise(.34, .70, renderCover) * .24);
+  cloudSprite(b, 'alto', 396, 108, 342, 86, cloudRise(.46, .82, renderCover) * .22);
 
   // Mehr Masse erst bei wirklich dichter Bewölkung.
-  cloudSprite(b, 'bank1', -120, 10, 410, 142, banks * .46);
-  cloudSprite(b, 'bank2', 370, 14, 455, 148, banks * .48);
+  cloudSprite(b, 'bank1', -98, 108, 468, 164, banks * .56);
+  cloudSprite(b, 'bank2', 330, 114, 506, 170, banks * .58);
   if (banks > .01) {
     b.save();
     const grad = b.createLinearGradient(0, 0, 0, CLOUD_TH);
@@ -1396,19 +1396,19 @@ function paintSkyClouds(force = false) {
   }
 
   // Vordergrund: nur wenige lockere Wolken im oberen Bereich.
-  cloudSprite(f, 'cum1', -40, 74, 220, 126, (.16 + puffs * .34) * cloudRise(.10, .28, renderCover));
-  cloudSprite(f, 'cum3', 295, 82, 258, 126, puffs * .40);
-  cloudSprite(f, 'cum4', 575, 62, 188, 118, puffs * .32);
-  cloudSprite(f, 'cum2', 120, 108, 210, 108, puffs * .12);
-  cloudSprite(f, 'bank3', -60, 98, 470, 140, banks * (.22 + wet * .22));
-  cloudSprite(f, 'bank2', 420, 104, 360, 126, banks * (.18 + wet * .22));
+  cloudSprite(f, 'cum1', -20, 156, 265, 152, (.20 + puffs * .42) * cloudRise(.10, .28, renderCover));
+  cloudSprite(f, 'cum3', 256, 168, 304, 148, puffs * .49);
+  cloudSprite(f, 'cum4', 548, 148, 232, 138, puffs * .40);
+  cloudSprite(f, 'cum2', 102, 178, 236, 118, puffs * .16);
+  cloudSprite(f, 'bank3', -30, 176, 520, 158, banks * (.30 + wet * .25));
+  cloudSprite(f, 'bank2', 392, 178, 402, 142, banks * (.24 + wet * .25));
 
   // Regen- und Gewitterwolken dürfen dichter und dunkler werden.
   if (storm > .04) {
-    cloudSprite(b, 'storm1', -150, -16, 560, 230, storm * .54);
-    cloudSprite(b, 'storm2', 270, -12, 525, 220, storm * .56);
-    cloudSprite(f, 'storm2', -145, 70, 445, 170, storm * .34);
-    cloudSprite(f, 'bank3', 320, 86, 430, 150, storm * .36);
+    cloudSprite(b, 'storm1', -130, 82, 600, 252, storm * .60);
+    cloudSprite(b, 'storm2', 236, 84, 560, 240, storm * .62);
+    cloudSprite(f, 'storm2', -122, 156, 480, 188, storm * .40);
+    cloudSprite(f, 'bank3', 288, 162, 468, 162, storm * .42);
   }
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);

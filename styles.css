@@ -828,7 +828,7 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .frost { opacity: calc(var(--ice, 0) * .30); }
 
 /* V3.8.4 · Sterne drehen sich schneller (eine Runde in 7 Minuten) und funkeln einzeln */
-.stars { animation: starTurn 420s linear infinite; }
+.stars { animation: starTurn 285s linear infinite; }
 @keyframes starTurn { to { transform: rotate(-360deg); } }
 .stars i.tw { position: absolute; border-radius: 50%; animation: starGlint 4s ease-in-out infinite; }
 .stars i.tw.big { animation-name: starGlintBig; }
@@ -855,8 +855,8 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,.70) 79%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,.70) 79%, transparent 100%);
 }
-.sky-cloud.back { animation-duration: 410s; opacity: .62; }
-.sky-cloud.front { animation-duration: 285s; opacity: .72; }
+.sky-cloud.back { animation-duration: 500s; opacity: .62; }
+.sky-cloud.front { animation-duration: 420s; opacity: .72; }
 .weather-layer.night .sky-cloud.front, .weather-layer.night .sky-cloud.back { filter: blur(.65px) brightness(.56) saturate(.72); }
 .weather-layer.dark-clouds .sky-cloud.front, .weather-layer.dark-clouds .sky-cloud.back { filter: blur(.55px) brightness(.76) saturate(.66); }
 .weather-layer.night.dark-clouds .sky-cloud.front, .weather-layer.night.dark-clouds .sky-cloud.back { filter: blur(.7px) brightness(.46) saturate(.52); }

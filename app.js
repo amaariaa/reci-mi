@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.9.1';
+const APP_VERSION = '3.9.2';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -400,7 +400,7 @@ function describeWeather(code, cloud = 0, temp = 10) {
 function previewWeather() {
   const m = /[?&]wetter=([a-zäöü]+)/i.exec(location.search);
   if (!m) return null;
-  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, regen: 63, starkregen: 65, schnee: 73, leichtschnee: 71, starkschnee: 75, eis: 67, frost: 0, gewitter: 95 };
+  const map = { sonnig: 0, klar: 0, wolkig: 2, bewoelkt: 3, bedeckt: 3, nebel: 45, niesel: 53, leichtregen: 61, regen: 63, starkregen: 65, schauer: 80, schnee: 73, leichtschnee: 71, starkschnee: 75, eis: 67, frost: 0, gewitter: 95 };
   const code = map[m[1].toLowerCase()];
   if (code === undefined) return null;
   return { code, cloud: code === 2 ? 55 : code === 0 ? 5 : 100, temp: m[1] === 'frost' || m[1] === 'eis' || m[1].includes('schnee') ? -4 : 12, name: 'Vorschau' };
@@ -1355,9 +1355,63 @@ function cloudCanvas(name) {
     c = cloudTiles[name] = document.createElement('canvas');
     c.width = CLOUD_TW; c.height = CLOUD_TH;
   }
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', { willReadFrequently: true });
   g.clearRect(0, 0, c.width, c.height);
   return { c, g };
+}
+
+/* Alles, was früher der Browser per CSS (Filter, Maske, Deckkraft) auf den großen, ziehenden
+   Wolkenebenen gerechnet hat, steckt jetzt fest im Bild. Das ist auf Handys deutlich stabiler:
+   keine Zwischenebenen, keine Kacheln, keine eckigen Kanten mehr. */
+function finishCloudTile(tile, o) {
+  const W = tile.width, H = tile.height;
+  const g = tile.getContext('2d', { willReadFrequently: true });
+  let img;
+  try { img = g.getImageData(0, 0, W, H); }
+  catch (e) {
+    // Falls der Browser das Auslesen verbietet (z. B. Datei lokal geöffnet): Abdunkeln und Ausblenden per Zeichenbefehl
+    g.save();
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = `rgba(0,0,0,${(1 - o.bright).toFixed(3)})`; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'destination-in';
+    const gr = g.createLinearGradient(0, 0, 0, H);
+    const st = o.full ? [[0, 1], [.76, 1], [.90, .78], [1, 0]] : [[0, 1], [.64, 1], [.84, .72], [1, 0]];
+    st.forEach(([t, v]) => gr.addColorStop(t, `rgba(0,0,0,${(v * o.opacity).toFixed(3)})`));
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    g.restore();
+    return;
+  }
+  const d = img.data;
+  // weiche Ausblendung nach unten (wie vorher die CSS-Maske)
+  const stops = o.full ? [[0, 1], [.76, 1], [.90, .78], [1, 0]] : [[0, 1], [.64, 1], [.84, .72], [1, 0]];
+  const fade = new Float32Array(H);
+  for (let y = 0; y < H; y++) {
+    const t = y / (H - 1);
+    let v = 0;
+    for (let k = 0; k < stops.length - 1; k++) {
+      if (t >= stops[k][0] && t <= stops[k + 1][0]) {
+        const u = (t - stops[k][0]) / (stops[k + 1][0] - stops[k][0]);
+        v = stops[k][1] + (stops[k + 1][1] - stops[k][1]) * u;
+        break;
+      }
+    }
+    fade[y] = v;
+  }
+  const bright = o.bright, sat = o.sat, op = o.opacity;
+  for (let y = 0; y < H; y++) {
+    const f = fade[y] * op;
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, a = d[i + 3];
+      if (!a) continue;
+      const r = d[i], gr = d[i + 1], b = d[i + 2];
+      const l = .299 * r + .587 * gr + .114 * b;
+      d[i] = Math.max(0, Math.min(255, (l + (r - l) * sat) * bright));
+      d[i + 1] = Math.max(0, Math.min(255, (l + (gr - l) * sat) * bright));
+      d[i + 2] = Math.max(0, Math.min(255, (l + (b - l) * sat) * bright));
+      d[i + 3] = a * f;
+    }
+  }
+  g.putImageData(img, 0, 0);
 }
 
 function blitCloud(cv, tile) {
@@ -1369,8 +1423,10 @@ function blitCloud(cv, tile) {
   }
   const g = cv.getContext('2d');
   g.clearRect(0, 0, cv.width, cv.height);
+  try { if ('filter' in g) g.filter = 'blur(.6px)'; } catch (e) {}
   g.drawImage(tile, 0, 0);
   g.drawImage(tile, CLOUD_TW, 0);
+  try { if ('filter' in g) g.filter = 'none'; } catch (e) {}
 }
 
 function paintSkyClouds(force = false) {
@@ -1380,7 +1436,10 @@ function paintSkyClouds(force = false) {
   const wet = cloudClamp(Math.max(fx.rain || 0, fx.snow || 0, (fx.storm || 0) * .9));
   const renderCover = cover < .76 ? cover * .60 : .46 + (cover - .76) / .24 * .54;
   const p = skyPaletteState;
-  const key = [cover.toFixed(2), wet.toFixed(2), p.top, p.mid, p.hor].join('|');
+  const nightLook = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
+  const darkLook = fx.rain > .3 || fx.storm > 0 || fx.clouds > .92;
+  const isFull = cover >= .84 || wet > .35;
+  const key = [cover.toFixed(2), wet.toFixed(2), nightLook ? 'n' : 'd', darkLook ? 'k' : 'h'].join('|');
   if (!force && key === cloudPaintKey) return;
   cloudPaintKey = key;
   const thin = cloudRise(.06, .24, renderCover) * (1 - cloudRise(.52, .86, renderCover) * .42);
@@ -1401,7 +1460,8 @@ function paintSkyClouds(force = false) {
     b.save();
     const grad = b.createLinearGradient(0, 0, 0, CLOUD_TH);
     const rgb = wet > .35 ? [88, 98, 119] : [192, 204, 222];
-    grad.addColorStop(0, `rgba(${rgb.join(',')},${(.13 * banks).toFixed(3)})`);
+    grad.addColorStop(0, `rgba(${rgb.join(',')},0)`);
+    grad.addColorStop(.16, `rgba(${rgb.join(',')},${(.13 * banks).toFixed(3)})`);
     grad.addColorStop(.52, `rgba(${rgb.join(',')},${(.05 * banks).toFixed(3)})`);
     grad.addColorStop(1, `rgba(${rgb.join(',')},0)`);
     b.fillStyle = grad;
@@ -1424,10 +1484,13 @@ function paintSkyClouds(force = false) {
     cloudSprite(f, 'storm2', -122, 156, 480, 188, storm * .40);
     cloudSprite(f, 'bank3', 288, 162, 468, 162, storm * .42);
   }
+  const look = nightLook && darkLook ? { bright: .46, sat: .52 } : nightLook ? { bright: .56, sat: .72 } : darkLook ? { bright: .76, sat: .66 } : { bright: 1, sat: .90 };
+  finishCloudTile(back.c, { ...look, opacity: .70, full: isFull });
+  finishCloudTile(front.c, { ...look, opacity: .82, full: isFull });
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;
-    [cvs.back, cvs.front].forEach(c => c && c.classList.toggle('full', cover >= .84 || wet > .35));
+    [cvs.back, cvs.front].forEach(c => c && c.classList.toggle('full', isFull));
     blitCloud(cvs.back, cover < .06 ? null : back.c);
     blitCloud(cvs.front, cover < .08 ? null : front.c);
   });
@@ -2181,6 +2244,15 @@ function buildStarSky(force = false) {
       const H = astroRad(lst - s.ra), r = (90 - s.dec) * SC;
       return { x: R - r * Math.sin(H), y: R - r * Math.cos(H), r };
     };
+    // Milchstraße: weiches Band, direkt ins Bild gezeichnet (kein Browser-Filter auf der drehenden Fläche)
+    {
+      const L = R * 2 * 1.30, ang = 112 * Math.PI / 180, ux = Math.sin(ang), uy = -Math.cos(ang);
+      const mw = g.createLinearGradient(R - ux * L / 2, R - uy * L / 2, R + ux * L / 2, R + uy * L / 2);
+      mw.addColorStop(.38, 'rgba(170,190,255,0)'); mw.addColorStop(.47, 'rgba(170,190,255,.050)');
+      mw.addColorStop(.52, 'rgba(200,214,255,.078)'); mw.addColorStop(.58, 'rgba(170,190,255,.040)');
+      mw.addColorStop(.66, 'rgba(170,190,255,0)');
+      g.fillStyle = mw; g.fillRect(0, 0, R * 2, R * 2);
+    }
     // Sternbild-Linien
     g.lineWidth = 1; g.strokeStyle = 'rgba(170,190,255,.20)'; g.lineJoin = 'round';
     for (const line of SKY_LINE_DATA) {

@@ -869,3 +869,17 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 /* Himmelsausschnitt: am Sperrbildschirm haben Wolken mehr Raum als in der kompakten Startseite. */
 .lock-screen .sky-cloud { top: 9%; aspect-ratio: 1440 / 430; }
 .hero .sky-cloud { top: 16%; aspect-ratio: 1440 / 360; }
+
+
+/* V3.9.2 · Wolken und Sterne ohne Browser-Filter, -Masken und -Deckkraft.
+   Weichzeichnen, Abdunkeln, Ausblenden und Deckkraft sind im Bild selbst eingerechnet.
+   So entstehen auf Handys keine eckigen Kacheln oder Kanten mehr. */
+.sky-cloud, .sky-cloud.back, .sky-cloud.front, .sky-cloud.full,
+.weather-layer .sky-cloud, .weather-layer.night .sky-cloud, .weather-layer.dark-clouds .sky-cloud, .weather-layer.night.dark-clouds .sky-cloud,
+.sky:has(> .weather-layer.night) > .sky-cloud.back, .sky:has(> .weather-layer.dark-clouds) > .sky-cloud.back, .sky:has(> .weather-layer.night.dark-clouds) > .sky-cloud.back {
+  filter: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  opacity: 1 !important;
+}
+.stars::before { display: none !important; }

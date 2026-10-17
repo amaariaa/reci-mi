@@ -1280,18 +1280,18 @@ let cloudSpriteLoading = false;
 let cloudSpriteImage = null;
 const cloudTiles = {};
 const CLOUD_ATLAS = Object.freeze({
-  cirrus1: [10, 10, 270, 190],
-  cirrus2: [300, 10, 270, 190],
-  alto:    [590, 10, 270, 190],
-  cum1:    [10, 250, 270, 210],
-  cum2:    [300, 250, 270, 210],
-  cum3:    [590, 250, 270, 210],
-  cum4:    [880, 250, 270, 210],
-  bank1:   [10, 500, 270, 220],
-  bank2:   [300, 500, 270, 220],
-  bank3:   [590, 500, 270, 220],
-  storm1:  [880, 500, 270, 220],
-  storm2:  [10, 500, 270, 220]
+  cirrus1: [20, 15, 250, 230],
+  cirrus2: [310, 15, 250, 230],
+  alto:    [600, 15, 250, 230],
+  cum1:    [20, 275, 250, 230],
+  cum2:    [310, 275, 250, 230],
+  cum3:    [600, 275, 250, 230],
+  cum4:    [890, 275, 250, 230],
+  bank1:   [20, 530, 250, 230],
+  bank2:   [310, 530, 250, 230],
+  bank3:   [600, 530, 250, 230],
+  storm1:  [890, 530, 250, 230],
+  storm2:  [20, 530, 250, 230]
 });
 
 function cloudClamp(n) { return Math.max(0, Math.min(1, n)); }
@@ -1374,42 +1374,31 @@ function paintSkyClouds(force = false) {
   const back = cloudCanvas('back'), front = cloudCanvas('front');
   const b = back.g, f = front.g;
 
-  // Hohe, lockere Schleierwolken – sichtbar, aber mit viel offenem Himmel dazwischen.
-  cloudSprite(b, 'cirrus1', -50, 72, 420, 124, thin * .52);
-  cloudSprite(b, 'cirrus2', 332, 82, 470, 122, thin * .48);
-  cloudSprite(b, 'alto', -40, 118, 395, 96, cloudRise(.34, .70, renderCover) * .24);
-  cloudSprite(b, 'alto', 396, 108, 342, 86, cloudRise(.46, .82, renderCover) * .22);
+  // Einheitliche weiche Wolken – keine unterschiedlichen Muster mehr.
+  // Weniger Überlagerungen, ähnliche Größen, damit es ruhig und zusammenhängend wirkt.
+  const soft = Math.max(thin, puffs * .7, banks * .45);
 
-  // Mehr Masse erst bei wirklich dichter Bewölkung.
-  cloudSprite(b, 'bank1', -98, 108, 468, 164, banks * .56);
-  cloudSprite(b, 'bank2', 330, 114, 506, 170, banks * .58);
-  if (banks > .01) {
-    b.save();
-    const grad = b.createLinearGradient(0, 0, 0, CLOUD_TH);
-    const rgb = wet > .35 ? [88, 98, 119] : [192, 204, 222];
-    grad.addColorStop(0, `rgba(${rgb.join(',')},${(.13 * banks).toFixed(3)})`);
-    grad.addColorStop(.52, `rgba(${rgb.join(',')},${(.05 * banks).toFixed(3)})`);
-    grad.addColorStop(1, `rgba(${rgb.join(',')},0)`);
-    b.fillStyle = grad;
-    b.fillRect(0, 0, CLOUD_TW, CLOUD_TH);
-    b.restore();
-  }
+  // Hintergrund-Ebene: wenige, ähnlich große weiche Wolken
+  cloudSprite(b, 'cum1', -40, 90, 380, 160, soft * .38);
+  cloudSprite(b, 'cum2', 300, 100, 400, 155, soft * .36);
+  cloudSprite(b, 'cum3', 620, 88, 360, 150, soft * .32);
+  cloudSprite(b, 'bank1', -20, 120, 450, 170, banks * .42);
+  cloudSprite(b, 'bank2', 340, 125, 420, 165, banks * .40);
 
-  // Vordergrund: nur wenige lockere Wolken im oberen Bereich.
-  cloudSprite(f, 'cum1', -20, 156, 265, 152, (.20 + puffs * .42) * cloudRise(.10, .28, renderCover));
-  cloudSprite(f, 'cum3', 256, 168, 304, 148, puffs * .49);
-  cloudSprite(f, 'cum4', 548, 148, 232, 138, puffs * .40);
-  cloudSprite(f, 'cum2', 102, 178, 236, 118, puffs * .16);
-  cloudSprite(f, 'bank3', -30, 176, 520, 158, banks * (.30 + wet * .25));
-  cloudSprite(f, 'bank2', 392, 178, 402, 142, banks * (.24 + wet * .25));
+  // Vordergrund: ebenfalls nur weiche, gleichmäßige Wolken
+  cloudSprite(f, 'cum1', -30, 150, 320, 145, (.15 + puffs * .35) * .55);
+  cloudSprite(f, 'cum2', 220, 160, 340, 140, puffs * .42);
+  cloudSprite(f, 'cum3', 480, 148, 310, 135, puffs * .36);
+  cloudSprite(f, 'bank3', -10, 170, 480, 150, banks * .32);
+  cloudSprite(f, 'bank2', 360, 175, 400, 140, banks * .28);
 
-  // Regen- und Gewitterwolken dürfen dichter und dunkler werden.
+  // Bei Regen/Gewitter etwas dichter, aber weiterhin im gleichen Stil
   if (storm > .04) {
-    cloudSprite(b, 'storm1', -130, 82, 600, 252, storm * .60);
-    cloudSprite(b, 'storm2', 236, 84, 560, 240, storm * .62);
-    cloudSprite(f, 'storm2', -122, 156, 480, 188, storm * .40);
-    cloudSprite(f, 'bank3', 288, 162, 468, 162, storm * .42);
+    cloudSprite(b, 'bank1', -60, 95, 520, 180, storm * .45);
+    cloudSprite(b, 'bank2', 280, 100, 500, 175, storm * .42);
+    cloudSprite(f, 'bank3', -40, 155, 460, 155, storm * .32);
   }
+
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;

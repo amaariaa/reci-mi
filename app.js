@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.9.0';
+const APP_VERSION = '3.9.1';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1330,14 +1330,15 @@ function cloudSprite(g, name, x, y, w, h, alpha = 1) {
   t.globalCompositeOperation = 'source-over';
   t.clearRect(0, 0, tw, th);
   t.drawImage(cloudSpriteImage, ...r, 0, 0, tw, th);
-  // Ränder des Bildes ausblenden, damit nie eine Kastenkante sichtbar wird
+  // Rand des Bildes oval ausblenden: Ecken und Kanten des Bildrechtecks verschwinden komplett
   t.globalCompositeOperation = 'destination-in';
-  const gx = t.createLinearGradient(0, 0, tw, 0);
-  gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(.14, 'rgba(0,0,0,1)'); gx.addColorStop(.86, 'rgba(0,0,0,1)'); gx.addColorStop(1, 'rgba(0,0,0,0)');
-  t.fillStyle = gx; t.fillRect(0, 0, tw, th);
-  const gy = t.createLinearGradient(0, 0, 0, th);
-  gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(.16, 'rgba(0,0,0,1)'); gy.addColorStop(.84, 'rgba(0,0,0,1)'); gy.addColorStop(1, 'rgba(0,0,0,0)');
-  t.fillStyle = gy; t.fillRect(0, 0, tw, th);
+  t.save();
+  t.translate(tw / 2, th / 2);
+  t.scale(tw / 2, th / 2);
+  const rg = t.createRadialGradient(0, 0, 0, 0, 0, 1);
+  rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(.58, 'rgba(0,0,0,1)'); rg.addColorStop(.82, 'rgba(0,0,0,.45)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+  t.fillStyle = rg; t.fillRect(-1, -1, 2, 2);
+  t.restore();
   g.save();
   g.globalAlpha = cloudClamp(alpha);
   for (const shift of [-CLOUD_TW, 0, CLOUD_TW]) {
@@ -1446,7 +1447,22 @@ function renderSkyClouds() {
     cloudSpriteLoading = true;
     const image = new Image();
     image.onload = () => {
-      cloudSpriteImage = image;
+      cloudSpriteImage = (() => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = image.naturalWidth; c.height = image.naturalHeight;
+          const x = c.getContext('2d', { willReadFrequently: true });
+          x.drawImage(image, 0, 0);
+          const d = x.getImageData(0, 0, c.width, c.height), px = d.data;
+          for (let i = 3; i < px.length; i += 4) {
+            const a = px[i] / 255;
+            const k = a <= .16 ? 0 : a >= .42 ? 1 : (a - .16) / .26;
+            px[i] = Math.round(255 * a * (k * k * (3 - 2 * k)) / Math.max(a, .001) * Math.min(1, a * 1) );
+          }
+          x.putImageData(d, 0, 0);
+          return c;
+        } catch (e) { return image; }
+      })();
       cloudFields.back = cloudFields.front = true;
       cloudSpriteLoading = false;
       paintSkyClouds(true);

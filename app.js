@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.9.2';
+const APP_VERSION = '3.9.3';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1705,25 +1705,37 @@ function makePrecip(canvas) {
       const changed = nextKind !== kind || Math.abs(nextAmount - amount) > .08;
       kind = nextKind;
       amount = nextAmount;
-      this.resize();
-      if (!changed && drops.length && kind !== 'none') return;
+      const grew = this.resize();
+      if (!changed && !grew && drops.length && kind !== 'none') return;
       if (kind === 'none') { drops = []; ctx.clearRect(0, 0, this.w, this.h); return; }
+      this.fill();
+    },
+    // Tropfen bzw. Flocken passend zur aktuellen Fläche verteilen (Menge und Look wie bisher).
+    fill() {
       const areaScale = Math.max(.68, Math.min(1.55, Math.sqrt((this.w * this.h) / 195000)));
       const count = Math.round((kind === 'snow' ? 19 + amount * 47 : 26 + amount * 108) * areaScale);
       drops = Array.from({length:count}, () => this.spawn(true));
     },
+    // Misst die Fläche neu. Gibt true zurück, wenn sie erst jetzt eine echte Größe hat
+    // (z. B. die Startseite nach dem Entsperren: vorher war sie versteckt und damit 0 px groß).
     resize() {
       const r = canvas.getBoundingClientRect();
       const w = Math.max(1, Math.round(r.width));
       const h = Math.max(1, Math.round(r.height));
       const dpr = Math.min(1.8, window.devicePixelRatio || 1);
-      if (this.w === w && this.h === h && this.dpr === dpr) return;
+      if (this.w === w && this.h === h && this.dpr === dpr) return false;
+      const wasUnsized = this.w <= 3 || this.h <= 3;
       this.w = w;
       this.h = h;
       this.dpr = dpr;
       canvas.width = Math.max(1, Math.round(w * dpr));
       canvas.height = Math.max(1, Math.round(h * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return wasUnsized && w > 3 && h > 3;
+    },
+    // Wird aufgerufen, sobald die Fläche sichtbar wird oder ihre Größe ändert.
+    refit() {
+      if (this.resize() && kind !== 'none') this.fill();
     },
     spawn(anywhere = false) {
       // z beschreibt die Entfernung. Größere Tropfen bewegen sich optisch
@@ -1882,8 +1894,21 @@ function initSkyExtras() {
   if (els.moonTap && !els.moonTap.dataset.infoReady) { els.moonTap.dataset.infoReady = '1'; els.moonTap.addEventListener('click', () => { if (!skySwipeJustHappened) toggleCelestialInfo('moon', els.moonTap); }); }
   if (hero && 'ResizeObserver' in window) new ResizeObserver(() => { placeSun(); placeMoon(); placePlanets(); fitGreeting(); }).observe(hero);
   if (document.fonts) { document.fonts.ready.then(fitGreeting); document.fonts.addEventListener?.('loadingdone', fitGreeting); }
-  document.querySelectorAll('.weather-layer canvas').forEach(c => precipLayers.push(makePrecip(c)));
-  window.addEventListener('resize', () => { precipLayers.forEach(p => p.resize()); placeSun(); placeMoon(); placePlanets(); });
+  // Nur die Regen-/Schneefläche bekommt die Niederschlags-Zeichnung. Früher wurde hier jede Zeichenfläche
+  // im Wetter-Layer erfasst, auch die vordere Wolkenebene. Der Regen löschte dann ein Rechteck der Wolken
+  // und ließ Tropfen an dessen Rändern stehen.
+  document.querySelectorAll('.weather-layer canvas.precip').forEach(c => precipLayers.push(makePrecip(c)));
+  // Sperrbildschirm und Startseite sind abwechselnd versteckt (0 px). Sobald eine Fläche sichtbar wird, misst sie sich
+  // selbst neu und der Regen läuft dort an – sonst fehlte der Regen nach dem Entsperren, bis irgendwann ein Resize kam.
+  if ('ResizeObserver' in window) {
+    precipLayers.forEach(p => new ResizeObserver(entries => {
+      const r = entries[entries.length - 1].contentRect;
+      if (r.width < 4 || r.height < 4) return;
+      p.refit();
+      startPrecip();
+    }).observe(p.canvas));
+  }
+  window.addEventListener('resize', () => { precipLayers.forEach(p => p.refit()); placeSun(); placeMoon(); placePlanets(); });
   applyPlaceGeo();
   refreshWeather();
   setInterval(() => { if (!document.hidden) refreshWeather(); }, 10 * 60 * 1000);

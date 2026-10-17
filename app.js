@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.9.3';
+const APP_VERSION = '3.9.4';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1557,7 +1557,7 @@ function applyWeatherFx() {
   });
   precipLayers.forEach(p => p.setup(fx));
   clearTimeout(flashTimer);
-  if (fx.storm) scheduleFlash();
+  if (fx.storm) scheduleFlash(); else stopLightning();
   // Text unten im Himmel
   const label = $('weatherLabel');
   if (label) {
@@ -1584,12 +1584,344 @@ function applyWeatherFx() {
   startPrecip();
 }
 
-function scheduleFlash() {
+/* =====================================================================
+   V3.9.4 · Gewitterleuchten in den Wolken
+   Keine sichtbaren Blitzlinien: An einer Stelle in der Wolke geht es plötzlich hell an, wie ein
+   Licht mitten in den Wolken, flackert ein-, zwei-, dreimal und wandert in einer Richtung weiter
+   (die nächste Serie läuft in die andere Richtung). Das Licht liegt zwischen der hinteren und der
+   vorderen Wolkenebene: Die vorderen Wolken schatten es ab und lassen es nur durch dünne Stellen
+   scheinen. Alles ist örtlich begrenzt (kein Vollbild-Blitzen) und entfällt bei „Bewegung reduzieren“.
+   ===================================================================== */
+let lightningLayers = null;
+let lightningRun = null;
+let lightningDir = 1;                                  // Wanderrichtung der Leuchtstelle, wechselt mit jeder Serie
+const LIGHTNING_TUNE = { bright: 1, size: 1, rate: 1 };  // Standardwerte; nur die Vorschau ändert sie
+
+function lightningRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Je Wetter-Layer (Sperrbildschirm, Startseite) eine eigene Zeichenfläche: zwischen hinterer und vorderer Wolkenebene. */
+function getLightningLayers() {
+  if (!lightningLayers) lightningLayers = [];
+  document.querySelectorAll('.weather-layer').forEach(layer => {
+    if (lightningLayers.some(l => l.layer === layer)) return;
+    const cv = document.createElement('canvas');
+    cv.className = 'lightning';
+    cv.setAttribute('aria-hidden', 'true');
+    layer.insertBefore(cv, layer.querySelector(':scope > .clouds') || layer.firstChild);
+    lightningLayers.push({ layer, cv, g: cv.getContext('2d'), w: 0, h: 0, dpr: 1 });
+  });
+  return lightningLayers;
+}
+
+/* Ablauf einer Serie: mehrere Aufleuchten hintereinander („pium pium pium“), jedes mit eigenem Flackern. */
+function planLightning(rand) {
+  const events = [];
+  const count = 2 + Math.floor(rand() * 4);                // 2 bis 5 Aufleuchten
+  let t = 0;
+  for (let i = 0; i < count; i++) {
+    const wide = i > 0 && rand() < .18;                    // ab und zu ein großes, mattes Aufhellen
+    const strokes = [];
+    const n = wide ? 1 : 1 + Math.floor(rand() * 3);      // 1 bis 3 Flackerer
+    let tt = 0;
+    for (let k = 0; k < n; k++) {
+      strokes.push({ t: tt, peak: wide ? .55 + rand() * .2 : k ? .4 + rand() * .45 : .86 + rand() * .14, decay: (wide ? 120 : 48) + rand() * 55 });
+      tt += 38 + rand() * 72;
+    }
+    events.push({ t, strokes, wide });
+    t += tt + 100 + rand() * 280;
+  }
+  let end = 0;
+  events.forEach(e => { const s = e.strokes[e.strokes.length - 1]; end = Math.max(end, e.t + s.t + s.decay * 6); });
+  return { events, end };
+}
+
+function strokeLevel(s, tt) {
+  const d = tt - s.t;
+  if (d < 0) return 0;
+  if (d < 10) return s.peak * d / 10;
+  const u = d - 10;
+  return s.peak * (.8 * Math.exp(-u / s.decay) + .2 * Math.exp(-u / (s.decay * 3.4)));
+}
+
+/* Ein Aufleuchten: unregelmäßige Lichtwolke aus mehreren weichen Flecken, dazu das echte hintere Wolkenbild
+   an dieser Stelle heller und kühl getönt, damit die Wolkenstruktur im Licht sichtbar bleibt. */
+function makeLightSpot(compBack, compAll, W, H, cx, cy, rx, ry, night, rand) {
+  const ex = 1.75;
+  const x0 = Math.max(0, Math.floor(cx - rx * ex)), y0 = Math.max(0, Math.floor(cy - ry * ex));
+  const x1 = Math.min(W, Math.ceil(cx + rx * ex)), y1 = Math.min(H, Math.ceil(cy + ry * ex));
+  const bw = x1 - x0, bh = y1 - y0;
+  if (bw < 24 || bh < 16) return null;
+  const v = rand() * .5;                                   // ein Hauch Violett, mal mehr, mal weniger
+  const col = night ? [208 + v * 22, 222 - v * 14, 255] : [234 + v * 8, 240 - v * 8, 255];
+  const c = col.map(Math.round).join(',');
+  const glow = document.createElement('canvas');
+  glow.width = bw; glow.height = bh;
+  const gg = glow.getContext('2d', { willReadFrequently: true });
+  gg.globalCompositeOperation = 'lighter';
+  const blobs = 6 + Math.floor(rand() * 4);
+  for (let b = 0; b < blobs; b++) {
+    const main = b < 2;
+    const bx = cx - x0 + (main ? (b ? (rand() - .5) * rx * .5 : 0) : (rand() - .5) * rx * 1.3);
+    const by = cy - y0 + (main ? 0 : (rand() - .5) * ry * 1.1);
+    const sz = main ? (b ? .85 : 1) : .3 + rand() * .55;
+    const a = main ? (b ? .5 : .66) : .16 + rand() * .28;
+    gg.save(); gg.translate(bx, by); gg.scale(rx * sz, ry * sz);
+    const rg = gg.createRadialGradient(0, 0, 0, 0, 0, 1);
+    rg.addColorStop(0, `rgba(${c},${a})`); rg.addColorStop(.35, `rgba(${c},${a * .6})`);
+    rg.addColorStop(.7, `rgba(${c},${a * .2})`); rg.addColorStop(1, `rgba(${c},0)`);
+    gg.fillStyle = rg; gg.fillRect(-1, -1, 2, 2); gg.restore();
+  }
+  // kleiner, heller Kern: hier geht das Licht „an“
+  gg.save(); gg.translate(cx - x0, cy - y0); gg.scale(rx * .3, ry * .34);
+  const kg = gg.createRadialGradient(0, 0, 0, 0, 0, 1);
+  kg.addColorStop(0, `rgba(${c},.8)`); kg.addColorStop(.5, `rgba(${c},.35)`); kg.addColorStop(1, `rgba(${c},0)`);
+  gg.fillStyle = kg; gg.fillRect(-1, -1, 2, 2); gg.restore();
+  // Das Licht gehört in die Wolken: außerhalb der Wolken bleibt nur ein schwacher Schein.
+  // Dazu die Wolkenfläche stark weichzeichnen (klein malen, in zwei Schritten wieder groß).
+  const sm1 = document.createElement('canvas'); sm1.width = Math.max(4, Math.round(bw / 12)); sm1.height = Math.max(4, Math.round(bh / 12));
+  sm1.getContext('2d').drawImage(compAll, x0, y0, bw, bh, 0, 0, sm1.width, sm1.height);
+  const sm2 = document.createElement('canvas'); sm2.width = Math.max(8, Math.round(bw / 4)); sm2.height = Math.max(8, Math.round(bh / 4));
+  sm2.getContext('2d').drawImage(sm1, 0, 0, sm2.width, sm2.height);
+  const sm3 = document.createElement('canvas'); sm3.width = bw; sm3.height = bh;
+  const s3 = sm3.getContext('2d', { willReadFrequently: true });
+  s3.drawImage(sm2, 0, 0, bw, bh);
+  const pres = s3.getImageData(0, 0, bw, bh).data;
+  const gimg = gg.getImageData(0, 0, bw, bh);
+  const light = gimg.data;                                  // Alpha = Lichtmenge
+  for (let i = 0; i < light.length; i += 4) { const q = Math.min(1, pres[i + 3] / 255 * 1.6); light[i + 3] *= .12 + .88 * q * q; }
+  gg.putImageData(gimg, 0, 0);
+  const img = compBack.getContext('2d').getImageData(x0, y0, bw, bh);
+  const d = img.data;
+  let sum = 0, n = 0;
+  for (let y = 0; y < bh; y += 2) for (let x = 0; x < bw; x += 2) {
+    const i = (y * bw + x) * 4;
+    if (d[i + 3] > 80 && light[i + 3] > 40) { sum += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
+  }
+  const mean = Math.max(24, n ? sum / n : 60);
+  const kk = -Math.log(1 - (night ? .78 : .86)) * 255 / mean;
+  const tk = night ? .30 : .20;
+  const lut = col.map(t => { const a = new Uint8ClampedArray(256); for (let k = 0; k < 256; k++) a[k] = 255 * (1 - Math.exp(-kk * k / 255)) * (1 - tk) + t * tk; return a; });
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3], m = light[i + 3] / 255;
+    if (!a || m < .02) { d[i + 3] = 0; continue; }
+    d[i] = lut[0][d[i]]; d[i + 1] = lut[1][d[i + 1]]; d[i + 2] = lut[2][d[i + 2]];
+    d[i + 3] = Math.min(255, a * Math.min(1, m * 1.3) * 1.5);
+  }
+  const tex = document.createElement('canvas');
+  tex.width = bw; tex.height = bh;
+  tex.getContext('2d').putImageData(img, 0, 0);
+  gg.globalCompositeOperation = 'source-over';
+  gg.drawImage(tex, 0, 0);
+  return { cv: glow, x: x0, y: y0, w: bw, h: bh };
+}
+
+/* sanfter Lichtschein weit um das Aufleuchten. Er bleibt an den Wolken hängen: in der freien Luft daneben
+   ist er nur noch ein Hauch, damit unter der Wolke kein heller Fleck entsteht. */
+function makeLightHalo(compAll, W, H, cx, cy, rx, ry, night) {
+  const w = Math.ceil(rx * 3.4), h = Math.ceil(ry * 3.2);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const g = cv.getContext('2d');
+  g.save();
+  g.translate(w / 2, h / 2); g.scale(w / 2, h / 2);
+  const rg = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+  const c = night ? '168,188,255' : '214,224,255';
+  rg.addColorStop(0, `rgba(${c},.40)`); rg.addColorStop(.45, `rgba(${c},.15)`); rg.addColorStop(1, `rgba(${c},0)`);
+  g.fillStyle = rg; g.fillRect(-1, -1, 2, 2);
+  g.restore();
+  // Wolkenfläche stark weichgezeichnet als Maske: über Wolken voll, in freier Luft nur ein Drittel
+  const x0 = Math.round(cx - w / 2), y0 = Math.round(cy - h / 2);
+  const sx0 = Math.max(0, x0), sy0 = Math.max(0, y0), sx1 = Math.min(W, x0 + w), sy1 = Math.min(H, y0 + h);
+  if (sx1 > sx0 + 2 && sy1 > sy0 + 2) {
+    const k = 1 / 14;
+    const sm = document.createElement('canvas');
+    sm.width = Math.max(4, Math.round(w * k)); sm.height = Math.max(4, Math.round(h * k));
+    sm.getContext('2d').drawImage(compAll, sx0, sy0, sx1 - sx0, sy1 - sy0,
+      (sx0 - x0) * sm.width / w, (sy0 - y0) * sm.height / h, (sx1 - sx0) * sm.width / w, (sy1 - sy0) * sm.height / h);
+    const mask = document.createElement('canvas');
+    mask.width = w; mask.height = h;
+    const mg = mask.getContext('2d');
+    mg.fillStyle = 'rgba(0,0,0,.32)'; mg.fillRect(0, 0, w, h);
+    mg.globalAlpha = .68;
+    mg.drawImage(sm, 0, 0, w, h);
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(mask, 0, 0);
+  }
+  return { cv, w, h };
+}
+
+/* Wo stehen die Wolken gerade? Wolkenebenen so zusammensetzen, wie sie jetzt auf dem Bildschirm stehen,
+   und die Leuchtstellen festlegen (das Bild dazu entsteht erst kurz vor dem jeweiligen Aufleuchten). */
+function prepLightning(L, plan, rand, night, dir) {
+  const r = L.cv.getBoundingClientRect();
+  const w = Math.round(r.width), h = Math.round(r.height);
+  if (w < 60 || h < 60) return null;
+  const dpr = Math.min(1.6, window.devicePixelRatio || 1);
+  if (L.w !== w || L.h !== h || L.dpr !== dpr) {
+    L.w = w; L.h = h; L.dpr = dpr;
+    L.cv.width = Math.round(w * dpr); L.cv.height = Math.round(h * dpr);
+  }
+  const mk = key => {
+    const c = L[key] || (L[key] = document.createElement('canvas'));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.clearRect(0, 0, w, h);
+    return { c, g };
+  };
+  const back = mk('compBack'), all = mk('compAll');
+  const srcs = [
+    [L.layer.parentElement && L.layer.parentElement.querySelector(':scope > canvas.sky-cloud.back'), true],
+    [L.layer.querySelector('canvas.sky-cloud.front'), false]
+  ];
+  let any = false;
+  srcs.forEach(([c, isBack]) => {
+    if (!c || c.style.display === 'none') return;
+    const cr = c.getBoundingClientRect();
+    if (cr.width < 2 || cr.height < 2) return;
+    const args = [c, cr.left - r.left, cr.top - r.top, cr.width, cr.height];
+    all.g.drawImage(...args);
+    if (isBack) back.g.drawImage(...args);
+    any = true;
+  });
+  if (!any) return null;
+  const gs = 4, gw = Math.ceil(w / gs), gh = Math.ceil(h / gs);
+  const sm = L.small || (L.small = document.createElement('canvas'));
+  if (sm.width !== gw || sm.height !== gh) { sm.width = gw; sm.height = gh; }
+  const sg = sm.getContext('2d', { willReadFrequently: true });
+  sg.clearRect(0, 0, gw, gh);
+  sg.drawImage(all.c, 0, 0, gw, gh);
+  const px = sg.getImageData(0, 0, gw, gh).data;
+  const cells = [];
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    if (px[(y * gw + x) * 4 + 3] >= 150) cells.push([x * gs + gs / 2, y * gs + gs / 2]);
+  }
+  if (cells.length < 12) return null;
+  const sc = w / 390;
+  // Die Leuchtstelle wandert von einer Seite zur anderen; jedes Aufleuchten sitzt auf einer echten Wolkenstelle.
+  let x = (dir > 0 ? .14 + rand() * .22 : .64 + rand() * .22) * w;
+  const snap = px0 => {
+    for (let reach = 26; reach <= 120; reach += 30) {
+      const near = cells.filter(c => Math.abs(c[0] - px0) < reach * sc);
+      if (near.length > 5) return near[Math.floor(rand() * near.length)];
+    }
+    return cells[Math.floor(rand() * cells.length)];
+  };
+  const slots = plan.events.map((e, i) => {
+    if (i) x += dir * (40 + rand() * 62) * sc;
+    x = Math.max(w * .1, Math.min(w * .9, x));
+    const [cx, cy] = snap(x);
+    const grow = (e.wide ? 1.5 : 1) * LIGHTNING_TUNE.size;
+    return { cx, cy, rx: (82 + rand() * 48) * sc * grow, ry: (40 + rand() * 22) * sc * grow, seed: Math.floor(rand() * 4294967295) };
+  });
+  return { back: back.c, all: all.c, w, h, dpr, night, slots, spots: new Array(slots.length).fill(undefined) };
+}
+
+function ensureSpot(prep, plan, i) {
+  if (prep.spots[i] !== undefined) return prep.spots[i];
+  const sl = prep.slots[i];
+  const rand = lightningRng(sl.seed);
+  const lit = makeLightSpot(prep.back, prep.all, prep.w, prep.h, sl.cx, sl.cy, sl.rx, sl.ry, prep.night, rand);
+  prep.spots[i] = lit ? { lit, halo: makeLightHalo(prep.all, prep.w, prep.h, sl.cx, sl.cy, sl.rx, sl.ry, prep.night), cx: sl.cx, cy: sl.cy } : null;
+  return prep.spots[i];
+}
+
+function drawLightning(L, prep, plan, now) {
+  const g = L.g;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, L.cv.width, L.cv.height);
+  g.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+  for (let i = 0; i < prep.slots.length; i++) {
+    const e = plan.events[i];
+    const tt = now - e.t;
+    if (tt < -140) continue;
+    const s = ensureSpot(prep, plan, i);
+    if (!s || tt < 0) continue;
+    let lit = 0;
+    for (const k of e.strokes) lit += strokeLevel(k, tt);
+    lit = Math.min(1, lit);
+    if (lit <= .01) continue;
+    const gain = lit * LIGHTNING_TUNE.bright * (prep.night ? 1 : 1.5);   // vor hellen Tageswolken braucht das Licht mehr Kraft
+    g.globalAlpha = Math.min(1, gain);
+    g.drawImage(s.halo.cv, s.cx - s.halo.w / 2, s.cy - s.halo.h / 2, s.halo.w, s.halo.h);
+    g.drawImage(s.lit.cv, s.lit.x, s.lit.y, s.lit.w, s.lit.h);
+    if (gain > 1) {                                        // heller als voll: das Licht ein zweites Mal darüberlegen
+      g.globalAlpha = Math.min(1, gain - 1);
+      g.drawImage(s.lit.cv, s.lit.x, s.lit.y, s.lit.w, s.lit.h);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+function clearLightning(L) {
+  L.g.setTransform(1, 0, 0, 1, 0, 0);
+  L.g.clearRect(0, 0, L.cv.width, L.cv.height);
+}
+
+function stepLightning(ts) {
+  const run = lightningRun;
+  if (!run) return;
+  if (!run.start) run.start = ts;
+  const now = ts - run.start;
+  run.preps.forEach(({ L, prep }) => drawLightning(L, prep, run.plan, now));
+  if (now >= run.plan.end || document.hidden) {
+    run.preps.forEach(({ L }) => clearLightning(L));
+    lightningRun = null;
+    return;
+  }
+  run.raf = requestAnimationFrame(stepLightning);
+}
+
+function stopLightning() {
+  if (!lightningRun) return;
+  cancelAnimationFrame(lightningRun.raf);
+  lightningRun.preps.forEach(({ L }) => clearLightning(L));
+  lightningRun = null;
+}
+
+/* Eine Serie auslösen. Gibt die Dauer in ms zurück (0 = nichts gezeigt). */
+function fireLightning(opts = {}) {
+  try {
+    if (lightningRun) return 0;
+    if (!opts.force && (document.hidden || !currentFx().storm)) return 0;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 0;
+    const rand = opts.seed != null ? lightningRng(opts.seed) : Math.random;
+    const plan = opts.plan || planLightning(rand);
+    const night = ['nacht', 'abend', 'abenddaemmerung', 'daemmerung'].includes(document.documentElement.dataset.phase);
+    const dir = opts.dir || lightningDir;
+    const preps = [];
+    getLightningLayers().forEach(L => {
+      if (L.cv.offsetParent === null) return;
+      const prep = prepLightning(L, plan, rand, night, dir);
+      if (prep) preps.push({ L, prep });
+    });
+    if (!preps.length) return 0;
+    lightningDir = -dir;
+    lightningRun = { start: 0, plan, preps, raf: 0 };
+    lightningRun.raf = requestAnimationFrame(stepLightning);
+    return plan.end;
+  } catch (e) {
+    lightningRun = null;
+    return 0;
+  }
+}
+
+/* Bei Gewitter regelmäßig Serien: mal kurz hintereinander, mal mit längerer Pause. */
+function scheduleFlash(first = true) {
+  clearTimeout(flashTimer);
+  const gap = first ? 700 + Math.random() * 1100 : (Math.random() < .55 ? 900 + Math.random() * 2000 : 3600 + Math.random() * 4200);
   flashTimer = setTimeout(() => {
-    document.querySelectorAll('.weather-layer .flash').forEach(f => { f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); });
-    precipLayers.forEach(p => p.strike && p.strike());
-    scheduleFlash();
-  }, 5000 + Math.random() * 9000);
+    if (!currentFx().storm) return;
+    const dur = fireLightning();
+    flashTimer = setTimeout(() => scheduleFlash(false), dur);
+  }, gap / LIGHTNING_TUNE.rate);
 }
 
 /* Regen und Schnee: unverändert aus V3.7.6 (Naturregen mit Tropfenform, Eiskristalle), von dir ausgewählt. */

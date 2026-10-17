@@ -883,3 +883,6 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
   opacity: 1 !important;
 }
 .stars::before { display: none !important; }
+
+/* V3.9.4 · Gewitterleuchten: eigene Zeichenfläche zwischen hinterer und vorderer Wolkenebene */
+.weather-layer canvas.lightning { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }

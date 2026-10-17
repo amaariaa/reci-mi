@@ -828,7 +828,7 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 .frost { opacity: calc(var(--ice, 0) * .30); }
 
 /* V3.8.4 · Sterne drehen sich schneller (eine Runde in 7 Minuten) und funkeln einzeln */
-.stars { animation: starTurn 380s linear infinite; }
+.stars { animation: starTurn 800s linear infinite; }
 @keyframes starTurn { to { transform: rotate(-360deg); } }
 .stars i.tw { position: absolute; border-radius: 50%; animation: starGlint 4s ease-in-out infinite; }
 .stars i.tw.big { animation-name: starGlintBig; }
@@ -846,7 +846,7 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
    Alte CSS-Wolken und flächige Ersatzschleier werden nicht mehr verwendet. */
 .sky-cloud {
   aspect-ratio: 1440 / 340;
-  filter: blur(1.8px) saturate(.92);
+  filter: blur(.36px) saturate(.90);
   transform-origin: left center;
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 64%, rgba(0,0,0,.72) 84%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 0%, #000 64%, rgba(0,0,0,.72) 84%, transparent 100%);
@@ -857,15 +857,15 @@ html[data-phase="daemmerung"] .mic, html[data-phase="morgen"] .mic { box-shadow:
 }
 .sky-cloud.back { animation-duration: 260s; opacity: .70; }
 .sky-cloud.front { animation-duration: 180s; opacity: .82; }
-.weather-layer.night .sky-cloud.front, .weather-layer.night .sky-cloud.back { filter: blur(2.2px) brightness(.68) saturate(.85); }
-.weather-layer.dark-clouds .sky-cloud.front, .weather-layer.dark-clouds .sky-cloud.back { filter: blur(2.0px) brightness(.82) saturate(.7); }
-.weather-layer.night.dark-clouds .sky-cloud.front, .weather-layer.night.dark-clouds .sky-cloud.back { filter: blur(2.4px) brightness(.52) saturate(.6); }
+.weather-layer.night .sky-cloud.front, .weather-layer.night .sky-cloud.back { filter: blur(.65px) brightness(.56) saturate(.72); }
+.weather-layer.dark-clouds .sky-cloud.front, .weather-layer.dark-clouds .sky-cloud.back { filter: blur(.55px) brightness(.76) saturate(.66); }
+.weather-layer.night.dark-clouds .sky-cloud.front, .weather-layer.night.dark-clouds .sky-cloud.back { filter: blur(.7px) brightness(.46) saturate(.52); }
 @media (prefers-reduced-motion: reduce) { .sky-cloud { animation: none !important; } }
 
 /* Die hintere Ebene ist ein Geschwister des Wetter-Layers. */
-.sky:has(> .weather-layer.night) > .sky-cloud.back { filter: blur(2.2px) brightness(.68) saturate(.85); }
-.sky:has(> .weather-layer.dark-clouds) > .sky-cloud.back { filter: blur(2.0px) brightness(.82) saturate(.7); }
-.sky:has(> .weather-layer.night.dark-clouds) > .sky-cloud.back { filter: blur(2.4px) brightness(.52) saturate(.6); }
+.sky:has(> .weather-layer.night) > .sky-cloud.back { filter: blur(.65px) brightness(.56) saturate(.72); }
+.sky:has(> .weather-layer.dark-clouds) > .sky-cloud.back { filter: blur(.55px) brightness(.76) saturate(.66); }
+.sky:has(> .weather-layer.night.dark-clouds) > .sky-cloud.back { filter: blur(.7px) brightness(.46) saturate(.52); }
 /* Himmelsausschnitt: am Sperrbildschirm haben Wolken mehr Raum als in der kompakten Startseite. */
 .lock-screen .sky-cloud { top: 9%; aspect-ratio: 1440 / 430; }
 .hero .sky-cloud { top: 16%; aspect-ratio: 1440 / 360; }

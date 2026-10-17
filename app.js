@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.8.9';
+const APP_VERSION = '3.9.0';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -1280,18 +1280,18 @@ let cloudSpriteLoading = false;
 let cloudSpriteImage = null;
 const cloudTiles = {};
 const CLOUD_ATLAS = Object.freeze({
-  cirrus1: [20, 15, 250, 230],
-  cirrus2: [310, 15, 250, 230],
-  alto:    [600, 15, 250, 230],
-  cum1:    [20, 275, 250, 230],
-  cum2:    [310, 275, 250, 230],
-  cum3:    [600, 275, 250, 230],
-  cum4:    [890, 275, 250, 230],
-  bank1:   [20, 530, 250, 230],
-  bank2:   [310, 530, 250, 230],
-  bank3:   [600, 530, 250, 230],
-  storm1:  [890, 530, 250, 230],
-  storm2:  [20, 530, 250, 230]
+  cirrus1: [0, 0, 480, 206],
+  cirrus2: [497, 0, 735, 206],
+  alto:    [1248, 0, 512, 206],
+  cum1:    [0, 282, 380, 153],
+  cum2:    [390, 282, 390, 153],
+  cum3:    [794, 282, 400, 153],
+  cum4:    [1209, 282, 505, 153],
+  bank1:   [0, 465, 530, 236],
+  bank2:   [546, 465, 570, 236],
+  bank3:   [1131, 465, 610, 236],
+  storm1:  [0, 731, 730, 312],
+  storm2:  [743, 731, 615, 312]
 });
 
 function cloudClamp(n) { return Math.max(0, Math.min(1, n)); }
@@ -1320,15 +1320,30 @@ function ensureCloudCanvases(layer) {
 }
 
 /* Jede Wolke läuft nahtlos über den Rand der wiederholten Himmelsebene. */
+const cloudEdgeTmp = document.createElement('canvas');
 function cloudSprite(g, name, x, y, w, h, alpha = 1) {
   const r = CLOUD_ATLAS[name];
   if (!r || !cloudSpriteImage || alpha <= .005) return;
+  const tw = Math.max(1, Math.round(w)), th = Math.max(1, Math.round(h));
+  if (cloudEdgeTmp.width !== tw || cloudEdgeTmp.height !== th) { cloudEdgeTmp.width = tw; cloudEdgeTmp.height = th; }
+  const t = cloudEdgeTmp.getContext('2d');
+  t.globalCompositeOperation = 'source-over';
+  t.clearRect(0, 0, tw, th);
+  t.drawImage(cloudSpriteImage, ...r, 0, 0, tw, th);
+  // Ränder des Bildes ausblenden, damit nie eine Kastenkante sichtbar wird
+  t.globalCompositeOperation = 'destination-in';
+  const gx = t.createLinearGradient(0, 0, tw, 0);
+  gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(.14, 'rgba(0,0,0,1)'); gx.addColorStop(.86, 'rgba(0,0,0,1)'); gx.addColorStop(1, 'rgba(0,0,0,0)');
+  t.fillStyle = gx; t.fillRect(0, 0, tw, th);
+  const gy = t.createLinearGradient(0, 0, 0, th);
+  gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(.16, 'rgba(0,0,0,1)'); gy.addColorStop(.84, 'rgba(0,0,0,1)'); gy.addColorStop(1, 'rgba(0,0,0,0)');
+  t.fillStyle = gy; t.fillRect(0, 0, tw, th);
   g.save();
   g.globalAlpha = cloudClamp(alpha);
   for (const shift of [-CLOUD_TW, 0, CLOUD_TW]) {
     const xx = x + shift;
     if (xx >= CLOUD_TW || xx + w <= 0) continue;
-    g.drawImage(cloudSpriteImage, ...r, xx, y, w, h);
+    g.drawImage(cloudEdgeTmp, xx, y, w, h);
   }
   g.restore();
 }
@@ -1374,31 +1389,40 @@ function paintSkyClouds(force = false) {
   const back = cloudCanvas('back'), front = cloudCanvas('front');
   const b = back.g, f = front.g;
 
-  // Einheitliche weiche Wolken – keine unterschiedlichen Muster mehr.
-  // Weniger Überlagerungen, ähnliche Größen, damit es ruhig und zusammenhängend wirkt.
-  const soft = Math.max(thin, puffs * .7, banks * .45);
+  // Nur noch ruhige, einheitliche Haufenwolken – keine zackigen Federwolken mehr.
+  cloudSprite(b, 'cum2', -30, 104, 340, 112, thin * .62);
+  cloudSprite(b, 'cum4', 360, 100, 360, 109, thin * .56);
 
-  // Hintergrund-Ebene: wenige, ähnlich große weiche Wolken
-  cloudSprite(b, 'cum1', -40, 90, 380, 160, soft * .38);
-  cloudSprite(b, 'cum2', 300, 100, 400, 155, soft * .36);
-  cloudSprite(b, 'cum3', 620, 88, 360, 150, soft * .32);
-  cloudSprite(b, 'bank1', -20, 120, 450, 170, banks * .42);
-  cloudSprite(b, 'bank2', 340, 125, 420, 165, banks * .40);
-
-  // Vordergrund: ebenfalls nur weiche, gleichmäßige Wolken
-  cloudSprite(f, 'cum1', -30, 150, 320, 145, (.15 + puffs * .35) * .55);
-  cloudSprite(f, 'cum2', 220, 160, 340, 140, puffs * .42);
-  cloudSprite(f, 'cum3', 480, 148, 310, 135, puffs * .36);
-  cloudSprite(f, 'bank3', -10, 170, 480, 150, banks * .32);
-  cloudSprite(f, 'bank2', 360, 175, 400, 140, banks * .28);
-
-  // Bei Regen/Gewitter etwas dichter, aber weiterhin im gleichen Stil
-  if (storm > .04) {
-    cloudSprite(b, 'bank1', -60, 95, 520, 180, storm * .45);
-    cloudSprite(b, 'bank2', 280, 100, 500, 175, storm * .42);
-    cloudSprite(f, 'bank3', -40, 155, 460, 155, storm * .32);
+  // Mehr Masse erst bei wirklich dichter Bewölkung.
+  cloudSprite(b, 'bank1', -98, 108, 468, 164, banks * .56);
+  cloudSprite(b, 'bank2', 330, 114, 506, 170, banks * .58);
+  if (banks > .01) {
+    b.save();
+    const grad = b.createLinearGradient(0, 0, 0, CLOUD_TH);
+    const rgb = wet > .35 ? [88, 98, 119] : [192, 204, 222];
+    grad.addColorStop(0, `rgba(${rgb.join(',')},${(.13 * banks).toFixed(3)})`);
+    grad.addColorStop(.52, `rgba(${rgb.join(',')},${(.05 * banks).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${rgb.join(',')},0)`);
+    b.fillStyle = grad;
+    b.fillRect(0, 0, CLOUD_TW, CLOUD_TH);
+    b.restore();
   }
 
+  // Vordergrund: nur wenige lockere Wolken im oberen Bereich.
+  cloudSprite(f, 'cum1', -20, 156, 265, 113, (.20 + puffs * .42) * cloudRise(.10, .28, renderCover));
+  cloudSprite(f, 'cum3', 256, 168, 304, 110, puffs * .49);
+  cloudSprite(f, 'cum4', 548, 148, 232, 103, puffs * .40);
+  cloudSprite(f, 'cum2', 102, 178, 236, 88, puffs * .16);
+  cloudSprite(f, 'bank3', -30, 176, 520, 158, banks * (.30 + wet * .25));
+  cloudSprite(f, 'bank2', 392, 178, 402, 142, banks * (.24 + wet * .25));
+
+  // Regen- und Gewitterwolken dürfen dichter und dunkler werden.
+  if (storm > .04) {
+    cloudSprite(b, 'storm1', -130, 82, 600, 252, storm * .60);
+    cloudSprite(b, 'storm2', 236, 84, 560, 240, storm * .62);
+    cloudSprite(f, 'storm2', -122, 156, 480, 188, storm * .40);
+    cloudSprite(f, 'bank3', 288, 162, 468, 162, storm * .42);
+  }
   document.querySelectorAll('.weather-layer').forEach(layer => {
     const cvs = ensureCloudCanvases(layer);
     if (!cvs) return;

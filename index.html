@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#141A36" />
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <meta name="description" content="Reci mi – dein verschlüsseltes Gedanken- und Projektgedächtnis." />
-  <link rel="manifest" href="manifest.webmanifest?v=3.9.4" />
+  <link rel="manifest" href="manifest.webmanifest?v=3.9.5" />
   <link rel="icon" href="mond-192.png" />
   <link rel="apple-touch-icon" href="mond-192.png" />
   <link rel="preload" href="moon.webp" as="image" />
   <link rel="preload" href="clouds-realistic.webp" as="image" />
   <link rel="preload" href="lora.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="inter-regular.woff" as="font" type="font/woff" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=3.9.4" />
+  <link rel="stylesheet" href="styles.css?v=3.9.5" />
   <title>Reci mi</title>
 </head>
 <body>
@@ -34,6 +34,8 @@
         <p id="lockSubtitle" class="lock-text">Erzähl mir, was dich bewegt.</p>
 
         <form id="pinForm" class="pin-form" autocomplete="off">
+          <label id="setupNameLabel" for="setupName" class="hidden">Wie soll ich dich nennen?</label>
+          <input id="setupName" class="hidden" type="text" maxlength="30" placeholder="Dein Name" autocomplete="nickname" autocapitalize="words" enterkeyhint="next" />
           <label id="pinLabel" for="pinInput">PIN</label>
           <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="Deine PIN" autocomplete="new-password" required />
           <input id="pinConfirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="6" placeholder="PIN wiederholen" autocomplete="new-password" />
@@ -391,7 +393,7 @@
         <button type="button" id="lockBtn" class="sheet-item">Jetzt sperren</button>
       </div>
       <p class="sheet-note">Notizen und Gedanken liegen verschlüsselt auf diesem Gerät. Bei eingeschalteter KI werden Nachricht und freigegebener Kontext an den angeschlossenen KI-Dienst übertragen. Spracheingabe und Vorlesen können je nach Handy weitere Sprachdienste verwenden.</p>
-      <p class="sheet-note version">Version 3.9.4</p>
+      <p class="sheet-note version">Version 3.9.5</p>
     </dialog>
 
     <!-- Blatt: Archiv -->
@@ -594,6 +596,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=3.9.4" defer></script>
+  <script src="app.js?v=3.9.5" defer></script>
 </body>
 </html>

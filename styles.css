@@ -87,6 +87,11 @@ button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .pin-form input::placeholder { letter-spacing: 0; font-size: 16px; color: var(--hero-muted); }
 .pin-form input:focus { border-color: var(--moon-lit); }
 .pin-form .btn { margin-top: 6px; }
+/* Erste Einrichtung: Namensfeld kommt dazu. Etwas kompakter, damit alles ohne Scrollen auf den Bildschirm passt. */
+.pin-form #setupName { font-size: 18px; letter-spacing: 0; }
+.lock-screen.setup { padding-top: calc(var(--safe-top) + 48px); padding-bottom: calc(var(--safe-bottom) + 84px); }
+.lock-screen.setup .wordmark { margin-top: 56px; }
+.lock-screen.setup .pin-form { margin-top: 22px; }
 #showPinBtn { margin-top: 40px; color: var(--hero-ink); }
 .hint { margin: 16px 0 0; font-size: 13px; line-height: 1.5; color: var(--hero-muted); min-height: 1em; }
 .lock-phase { position: absolute; left: 24px; right: 24px; bottom: calc(var(--safe-bottom) + 26px); text-align: center; margin: 0; font-size: 13px; line-height: 1.5; color: var(--hor-ink); white-space: pre-line; }

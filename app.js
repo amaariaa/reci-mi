@@ -3,7 +3,7 @@
 /* Reci mi 1.4 – „Mondlicht“
    Gleiche Speicherung wie 1.0–1.3: vorhandene Notizen, PIN und Sicherungen bleiben gültig. */
 
-const APP_VERSION = '3.9.4';
+const APP_VERSION = '3.9.5';
 const DB_NAME = 'reci-mi-db';
 const STORE_NAME = 'secure-store';
 const VAULT_KEY = 'vault';
@@ -44,7 +44,7 @@ let sheetSilentClose = false;
 const $ = id => document.getElementById(id);
 const els = {};
 ['lockScreen', 'homeScreen', 'editorScreen', 'trashScreen',
- 'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
+ 'moonBtn', 'lockMoon', 'fpBadge', 'lockSubtitle', 'pinForm', 'setupNameLabel', 'setupName', 'pinLabel', 'pinInput', 'pinConfirm', 'pinSubmit', 'showPinBtn', 'lockHint', 'lockPhase',
  'menuBtn', 'quickLockHomeBtn', 'greeting', 'heroMoon', 'dailyQuote', 'moonLine', 'sunTap', 'moonOrb', 'moonTap', 'moonriseLabel', 'moonsetLabel', 'moonPhaseLabel', 'searchInput', 'filterRow', 'bioCard', 'bioCardLater', 'bioCardSetup',
  'topicList', 'emptyState', 'noResults', 'newTopicBtn',
  'backBtn', 'editorHomeBtn', 'editorMenuBtn', 'editorTitle', 'editorTag', 'dateLine', 'textModeBtn', 'listModeBtn', 'textPane', 'topicText', 'checklistPane', 'checklistForm', 'checklistInput', 'checklistAddBtn', 'checklistList', 'checklistEmpty', 'saveState', 'undoBtn', 'redoBtn', 'endBtn',
@@ -2513,7 +2513,7 @@ function quoteOfDay(date) {
 
 function userName() {
   const n = state?.settings?.name;
-  return (typeof n === 'string' && n.trim()) ? n.trim() : DEFAULT_NAME;
+  return (typeof n === 'string') ? n.trim() : '';
 }
 
 // Begrüßung immer in einer Zeile: notfalls etwas kleiner
@@ -2544,7 +2544,8 @@ function renderLockMoon(date = nowForSky()) {
 function renderDailyBits(date = nowForSky(), phase = document.documentElement.dataset.phase || 'nacht') {
   renderLockMoon(date);
   els.heroMoon.innerHTML = moonSvg(new Date());
-  els.greeting.textContent = `${GREETING[phase] || 'Hallo'}, ${userName()}`;
+  const who = userName();
+  els.greeting.textContent = `${GREETING[phase] || 'Hallo'}${who ? ', ' + who : ''}`;
   requestAnimationFrame(fitGreeting);
   els.dailyQuote.textContent = quoteOfDay(new Date());
   const line = moonLineText(new Date());
@@ -2750,18 +2751,20 @@ async function decryptValue(payload, key = cryptoKey) {
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
-function initialState() {
-  return { version: APP_VERSION, createdAt: new Date().toISOString(), settings: { name: DEFAULT_NAME, customCategories: [] }, topics: [] };
+// Neue Tresore tragen den Namen ein, den die Person bei der Einrichtung nennt. Ihre Gedankenwelt startet mit einer neutralen Projektliste.
+function initialState(name) {
+  const own = typeof name === 'string' ? name.trim().replace(/\s+/g, ' ').slice(0, 30) : '';
+  return { version: APP_VERSION, createdAt: new Date().toISOString(), settings: { name: own, customCategories: [], thoughtProjects: THOUGHT_PROJECTS_NEUTRAL.slice() }, topics: [] };
 }
 function hasVaultConfig() {
   return Boolean(localStorage.getItem(CONFIG_SALT) && localStorage.getItem(CONFIG_VERIFIER));
 }
 
-async function setupVault(pin) {
+async function setupVault(pin, name) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await deriveKey(pin, salt);
   const verifier = await encryptValue({ ok: true, marker: 'reci-mi' }, key);
-  const fresh = initialState();
+  const fresh = initialState(name);
   const encryptedVault = await encryptValue(fresh, key);
   localStorage.setItem(CONFIG_SALT, bytesToBase64(salt));
   localStorage.setItem(CONFIG_VERIFIER, JSON.stringify(verifier));
@@ -2787,7 +2790,7 @@ async function loadVaultWithKey(key) {
   state.settings = { ...(state.settings || {}) };
   delete state.settings.autoLockMinutes;
   delete state.settings.lockMode;
-  if (!state.settings.name) state.settings.name = DEFAULT_NAME;
+  if (typeof state.settings.name !== 'string' || !state.settings.name.trim()) state.settings.name = DEFAULT_NAME;
   if (!Array.isArray(state.settings.customCategories)) state.settings.customCategories = [];
   state.topics.forEach(t => { if (!Array.isArray(t.checklist)) t.checklist = []; });
 }
@@ -3093,6 +3096,12 @@ function configureLockScreen() {
   els.pinConfirm.value = '';
   els.pinConfirm.classList.toggle('hidden', !firstRun);
   els.pinConfirm.required = firstRun;
+  // Erste Einrichtung: zusätzlich nach dem Namen fragen (jede Person richtet ihr eigenes Gerät selbst ein)
+  els.lockScreen.classList.toggle('setup', firstRun);
+  els.setupName.classList.toggle('hidden', !firstRun);
+  els.setupNameLabel.classList.toggle('hidden', !firstRun);
+  els.setupName.required = firstRun;
+  if (!firstRun) els.setupName.value = '';
   els.pinLabel.textContent = firstRun ? 'Neue PIN festlegen (6 Ziffern)' : 'PIN';
   els.pinInput.placeholder = firstRun ? '6 Ziffern' : 'Deine PIN';
   els.pinSubmit.textContent = firstRun ? 'Reci mi einrichten' : 'Entsperren';
@@ -3100,7 +3109,7 @@ function configureLockScreen() {
   els.showPinBtn.classList.toggle('hidden', !bio);
   updateBiometricUi();
   els.lockSubtitle.textContent = firstRun
-    ? 'Leg eine PIN fest. Damit schützt du deine Gedanken.'
+    ? 'Deine Gedanken, nur für dich.'
     : (bio ? 'Tippe auf den Mond und leg deinen Finger auf.' : 'Erzähl mir, was dich bewegt.');
   els.lockHint.textContent = firstRun
     ? 'Merk dir die PIN gut. Ohne sie lassen sich die verschlüsselten Notizen nicht wiederherstellen.'
@@ -5518,18 +5527,21 @@ function wireEvents() {
     e.preventDefault();
     const pin = els.pinInput.value.trim();
     const firstSetup = !hasVaultConfig();
+    const setupName = els.setupName.value.trim().replace(/\s+/g, ' ');
+    if (firstSetup && !setupName) { els.lockHint.textContent = 'Sag mir bitte, wie ich dich nennen soll.'; els.setupName.focus(); return; }
     if (firstSetup ? !/^\d{6}$/.test(pin) : !/^\d{4,6}$/.test(pin)) { els.lockHint.textContent = firstSetup ? 'Die neue PIN braucht genau 6 Ziffern.' : 'Bitte deine PIN eingeben (4 bis 6 Ziffern).'; return; }
     els.pinSubmit.disabled = true;
     els.lockHint.textContent = '';
     try {
       if (!hasVaultConfig()) {
         if (pin !== els.pinConfirm.value.trim()) throw new Error('Die beiden PINs sind nicht gleich.');
-        await setupVault(pin);
+        await setupVault(pin, setupName);
       } else {
         await unlockVault(pin);
       }
       els.pinInput.value = '';
       els.pinConfirm.value = '';
+      els.setupName.value = '';
       els.pinInput.blur();
       await startSession();
       showUnlocked(readResume());
@@ -5681,7 +5693,8 @@ function wireEvents() {
   els.nameMenuBtn.addEventListener('click', () => { els.nameInput.value = userName(); openSheet(els.nameSheet); setTimeout(() => els.nameInput.focus(), 80); });
   els.nameForm.addEventListener('submit', async e => {
     e.preventDefault();
-    state.settings.name = els.nameInput.value.trim() || DEFAULT_NAME;
+    const newName = els.nameInput.value.trim().replace(/\s+/g, ' ');
+    if (newName) state.settings.name = newName;   // leer gelassen: der bisherige Name bleibt
     closeSheet(els.nameSheet);
     await persistState(true);
     renderDailyBits();
@@ -5801,6 +5814,13 @@ const THOUGHT_HINTS = [
   ['Valora',/valora|vaelora|liora|aren\s*sar/i],
   ['Bibel',/bibel|jesus|matthäus|evangelium|gebet|gleichnis/i]
 ];
+// Gedankenwelt: Tresore ohne eigene Liste (die bisherigen) behalten die eingebauten Projekte samt Stichwörtern.
+// Neue Tresore bekommen bei der Einrichtung eine neutrale Liste und sehen keine fremden Projektnamen.
+const THOUGHT_PROJECTS_NEUTRAL = ['Weitere Ideen','Allgemein'];
+function thoughtOwnProjects() {
+  const list = state?.settings?.thoughtProjects;
+  return Array.isArray(list) ? list : null;
+}
 const THOUGHT_STOPWORDS = new Set('ich du wir ihr sie er es das der die den dem ein eine einen einem einer mein meine mit für und oder aber auch noch mal so wie was wer wo wann warum wieviel habe hast hat haben hatte wollte will möchte möchte zu zum zur von vor nach über bei beim ins im ist sind war waren werden wäre wäre das dir mir mich dich uns das diese dieser diesen diese dies welche welcher etwas dann jetzt schon doch ja nein bitte können kann könntest'.split(' '));
 
 function ensureThoughtMemory() {
@@ -5823,9 +5843,10 @@ function thoughtKeywords(s) {
 }
 function thoughtProject(text) {
   const value = String(text||'');
-  for (const [name,re] of THOUGHT_HINTS) if (re.test(value)) return name;
+  const own = thoughtOwnProjects();
+  if (!own) for (const [name,re] of THOUGHT_HINTS) if (re.test(value)) return name;
   const normal = thoughtNorm(value);
-  for (const name of THOUGHT_PROJECTS) {
+  for (const name of (own || THOUGHT_PROJECTS)) {
     if (name !== 'Allgemein' && name !== 'Weitere Ideen' && normal.includes(thoughtNorm(name))) return name;
   }
   for (const t of (state?.topics || [])) {
@@ -6091,7 +6112,7 @@ async function thoughtSend(e) {
 }
 
 function thoughtAllProjects() {
-  return [...new Set([...THOUGHT_PROJECTS,...(state?.memory?.entries||[]).map(e=>e.project),...(state?.topics||[]).filter(t=>!t.deletedAt).map(t=>t.title)].filter(Boolean))];
+  return [...new Set([...(thoughtOwnProjects() || THOUGHT_PROJECTS),...(state?.memory?.entries||[]).map(e=>e.project),...(state?.topics||[]).filter(t=>!t.deletedAt).map(t=>t.title)].filter(Boolean))];
 }
 function thoughtRenderEntries() {
   const entries=(state?.memory?.entries||[]).slice().reverse();
@@ -6105,7 +6126,7 @@ function thoughtRenderEntries() {
 }
 function thoughtRenderSearch() {
   const q=$('thoughtSearchInput').value.trim();
-  if (!q) { $('thoughtSearchResults').innerHTML='<p class="thought-blank">Zum Beispiel: „Litterum“, „Kleiderschrank“ oder „Bibel“.</p>'; return; }
+  if (!q) { $('thoughtSearchResults').innerHTML=thoughtOwnProjects() ? '<p class="thought-blank">Zum Beispiel ein Name, ein Ort oder ein Stichwort aus deinen Gedanken.</p>' : '<p class="thought-blank">Zum Beispiel: „Litterum“, „Kleiderschrank“ oder „Bibel“.</p>'; return; }
   const results=thoughtFind(q,50);
   $('thoughtSearchResults').innerHTML=results.length ? results.map(r=>`<button class="thought-result" type="button" data-kind="${escapeHtml(r.type)}" data-id="${escapeHtml(r.id)}"><span>${r.type==='notiz'?'BESTEHENDE NOTIZ':r.type==='gespraech'?'GESPRÄCH':'GESPEICHERTER GEDANKE'} · ${escapeHtml(r.project)}</span><strong>${escapeHtml(r.title)}</strong><small>${r.locked?'Extra geschützt, Text wird nicht angezeigt':escapeHtml(excerpt(r.text,250))}</small></button>`).join('') : '<p class="thought-blank">Dazu ist noch nichts gespeichert.</p>';
 }
